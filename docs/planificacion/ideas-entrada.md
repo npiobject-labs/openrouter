@@ -137,3 +137,110 @@ Consecuencias que arrastra esa decisión (a resolver en planificación):
   en que otras apps consumirán esto.
 - **Estabilidad por encima de funcionalidad.** Si una app depende del servicio, un cambio
   incompatible rompe a terceros; toca disciplina de versiones desde el principio.
+
+## Entrada 04 — 2026-09-11 — Segundo análisis (a petición del usuario, con otro modelo)
+
+Petición: repetir el análisis buscando funcionalidades que no estén ya en la entrada 02.
+Solo se listan las nuevas o las que cambian de forma sustancial. Siguen siendo propuestas.
+
+### La sugerencia grande: exponer una API compatible con OpenAI
+
+- El servicio publica `/v1/chat/completions` (y `/v1/models`) con el mismo contrato que
+  la API de OpenAI, que es también el que usa OpenRouter.
+- Consecuencia: **no hace falta escribir ningún cliente**. Cualquier SDK existente
+  (Python, JS, Rust, Go…) funciona cambiando solo la URL base y la clave. La adopción en
+  una app nueva es una línea.
+- Lo propio del servicio (alias, etiqueta de app, presupuesto, política) va en cabeceras
+  `X-...` o en campos extra del cuerpo, que los SDK dejan pasar.
+- El «cliente mínimo» de la entrada 02 queda reducido a un envoltorio opcional de
+  comodidad, no a una pieza necesaria.
+- Publicar además la especificación OpenAPI del contrato completo, para generar clientes
+  de los endpoints propios (consumo, presupuesto, catálogo).
+
+### Dinero: hacer que OpenRouter aplique el presupuesto por nosotros
+
+- OpenRouter permite **crear claves hijas por programa con límite de crédito**
+  (provisioning keys). [SUPUESTO] disponible en la cuenta del usuario; plan B: aplicar
+  el presupuesto en el propio servicio como ya estaba previsto.
+- Una clave hija por app consumidora: el tope lo aplica OpenRouter aunque el servicio
+  tenga un fallo, y el consumo por app sale directamente de su panel.
+- Modo **BYOK**: una app puede traer su propia clave de OpenRouter y el servicio solo
+  mide y enruta. Dos modos de operación: clave central o clave por app.
+- **Simulador «qué pasaría si»**: con el histórico de uso propio, calcular qué habría
+  costado el mes pasado si el alias «redactor» apuntara a otro modelo. Convierte el
+  cambio de modelo en una decisión con número delante.
+- **Histórico de precios del catálogo**: snapshot diario para ver la evolución y
+  detectar subidas antes de que duelan.
+- **Cortacircuitos por bucle**: la misma app repitiendo el mismo prompt muchas veces en
+  poco tiempo casi siempre es un bug; cortar y avisar antes de que se vacíe el crédito.
+  Complementa al presupuesto: el presupuesto protege del gasto legítimo excesivo, esto
+  protege del gasto accidental.
+- **Detección de anomalías** de gasto por app frente a su media.
+
+### Trazabilidad: coste por operación de negocio, no solo por llamada
+
+- **Identificador de operación** que la app propaga: una operación de negocio (procesar
+  un documento, atender a un cliente) puede implicar varias llamadas. Sin esto solo se
+  sabe cuánto cuesta una llamada, no cuánto cuesta «un documento».
+- **Identificador de usuario final** de la app destino, para saber qué clientes cuestan
+  más. OpenRouter ya acepta un campo `user` que se puede aprovechar.
+- **Clave de idempotencia** por llamada: si la app reintenta por un corte de red, no
+  paga dos veces. Distinto de la caché por huella: la caché es por contenido y opcional;
+  la idempotencia es por clave del cliente y siempre activa.
+- **Modo simulación (dry-run)**: la llamada devuelve modelo resuelto, política aplicada
+  y coste estimado sin ejecutar nada. Sirve para probar integraciones sin gastar.
+- **Metadatos libres** por llamada y búsqueda facetada sobre ellos.
+
+### Alias con despliegue progresivo
+
+- **Canario por alias**: enrutar un porcentaje del tráfico del alias al modelo
+  candidato y comparar coste, latencia y errores antes de cambiar del todo.
+- **Conjunto de pruebas dorado por alias**: prompts con respuesta esperada; al cambiar
+  el modelo detrás de un alias se ejecuta el conjunto y se comparan resultados. Hace
+  seguro lo que la entrada 02 proponía (alias semánticos).
+- **Estrategia por alias**: más barato, más rápido o equilibrado. OpenRouter permite
+  ordenar proveedores por precio o latencia para un mismo modelo; el alias fija la
+  estrategia y el servicio la aplica.
+- **Perfil = alias + parámetros por defecto + prompt de sistema.** Unifica alias y
+  plantillas de prompt en una sola cosa registrable.
+
+### Robustez del servicio
+
+- **Salida estructurada garantizada**: la app registra un esquema JSON; el servicio
+  valida la respuesta y reintenta o repara automáticamente si no cumple. La app recibe
+  siempre algo tipado o un error claro, nunca texto a medio parsear.
+- **Trabajos diferidos**: la app manda un lote, recibe un identificador, consulta o
+  recibe webhook. Concurrencia controlada y prioridades. Para procesar cientos de
+  documentos sin que la app gestione la cola.
+- **Cuota de peticiones por app** (por minuto), independiente del presupuesto en dinero.
+- **Estado de proveedores**: OpenRouter publica disponibilidad por proveedor; el
+  servicio puede consultarla y evitar enrutar a uno caído.
+- **Último respaldo fuera de OpenRouter**: la cadena de respaldo puede terminar en un
+  endpoint local (Ollama u otro) para que la app no se quede muda si OpenRouter cae.
+- **Versión exacta de modelo y proveedor** registrada por llamada, para reproducir.
+
+### Datos y cumplimiento
+
+- **Política de proveedores por app**: solo proveedores sin retención de datos (ZDR),
+  solo región concreta, o excluir proveedores concretos. OpenRouter lo soporta por
+  petición; el servicio lo fija por app o por alias.
+- **Retención configurable y purga** por app: días que se guarda cada cosa, y un
+  endpoint de borrado.
+- **Registro de qué proveedor procesó cada llamada**, imprescindible si un cliente
+  pregunta dónde acabaron sus datos.
+
+### Crítica a la entrada 02 con ojos nuevos
+
+- **Sobra ambición para una primera versión hecha por una persona.** Modo torneo,
+  evaluación a ciegas, plantillas de prompt versionadas y comparador visual son buenos,
+  pero son capas superiores. El núcleo defendible es: proxy compatible con OpenAI +
+  medición por llamada + alias + presupuesto por app. Todo lo demás se cuelga de ahí.
+- **La caché por huella es peligrosa por defecto.** Dos apps distintas con el mismo
+  prompt no deberían compartir respuesta salvo que lo pidan; y con temperatura alta la
+  caché cambia el comportamiento esperado. Debe ser opt-in por app y por llamada.
+- **«Estimación previa» necesita un tokenizador local.** [SUPUESTO] OpenRouter no
+  ofrece un endpoint de conteo de tokens; plan B: aproximar con un tokenizador tipo
+  tiktoken y marcar el resultado como estimado.
+- **Medir en streaming no es gratis.** Para devolver coste al terminar hay que
+  interceptar el flujo completo, contar y esperar el bloque final de `usage`. Hay que
+  diseñarlo desde el principio, no añadirlo después.
