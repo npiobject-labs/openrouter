@@ -1,0 +1,44 @@
+{
+  "fecha": "2026-09-11T14:52:00+02:00",
+  "titulo": "Drive apuntando a la cuenta activa",
+  "objetivo": "Dejar las copias de planificacion apuntando a una carpeta de Drive que el conector pueda leer y escribir, despues del cambio de cuenta de Google.",
+  "prompts": [
+    {
+      "texto": "Drive lo has abierto en una cuenta de Google y quiero que lo cambies a la otra.",
+      "nota": "Resumido: el prompt original nombraba las dos direcciones de correo."
+    },
+    {
+      "texto": "haz merge del PR"
+    },
+    {
+      "texto": "cierra la sesion"
+    }
+  ],
+  "cambios": [
+    "CLAUDE.md: la fila Carpeta de Drive (id) de la seccion Parametros pasa a la carpeta nueva; la anterior era de la cuenta vieja y el conector devolvia Requested entity was not found.",
+    "Drive: carpeta openrouter creada en Mi unidad de la cuenta activa y verificada subiendo docs/planificacion/README.md como text/markdown sin conversion.",
+    "docs/planificacion/sesiones/20260911-1452.md: resumen de la sesion."
+  ],
+  "sha": "32b9b8d",
+  "sha_completo": "32b9b8dac612314e85c903ddb56c60130f2931ea",
+  "run": "34600617641",
+  "mock": null,
+  "build": null,
+  "pagina": "index.html",
+  "fly": null,
+  "pendiente": [
+    "Las copias que hubiera en la carpeta de Drive antigua siguen en la cuenta vieja y el conector no las alcanza",
+    "Decidir si la carpeta preexistente 08 Openrouter, que cuelga de otro proyecto en Drive, tiene algo que rescatar"
+  ],
+  "enlaces": [
+    {
+      "texto": "Pull request del cambio",
+      "url": "https://github.com/npiobject-labs/openrouter/pull/1"
+    },
+    {
+      "texto": "Carpeta de Drive del proyecto",
+      "url": "https://drive.google.com/drive/folders/1PHZR1t8BjYHhIqvCzrzA2US6S1SVRDEj"
+    }
+  ],
+  "notas": "Sesion corta: los prompts son fieles salvo el primero, resumido porque nombraba dos direcciones de correo y docs/ es publico. No hubo mock nuevo, asi que mock y build van a null."
+}
