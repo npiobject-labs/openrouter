@@ -20,14 +20,13 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
-RUN useradd --system --create-home --uid 10001 desdemovil
-USER desdemovil
+RUN useradd --system --create-home --uid 10001 openrouter
+USER openrouter
 WORKDIR /app
 
-# PLANTILLA: "desdemovil-backend" es el "name" del paquete en app/Cargo.toml.
-COPY --from=builder /src/target/release/desdemovil-backend /usr/local/bin/desdemovil-backend
+COPY --from=builder /src/target/release/openrouter-backend /usr/local/bin/openrouter-backend
 
 ENV PUERTO=8080
 EXPOSE 8080
 
-CMD ["/usr/local/bin/desdemovil-backend"]
+CMD ["/usr/local/bin/openrouter-backend"]

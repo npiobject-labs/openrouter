@@ -1,4 +1,4 @@
-# DesdeMovil
+# openrouter
 
 Plantilla del método "PC arranca, móvil continúa":
 

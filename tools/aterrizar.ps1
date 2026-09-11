@@ -3,7 +3,7 @@
 #      pwsh -File tools\aterrizar.ps1 -Proyecto MiProyecto -Owner miusuario
 #      pwsh -File tools\aterrizar.ps1 -Root 'D:\dev\MiProyecto'
 param(
-  [string]$Proyecto = 'DesdeMovil',
+  [string]$Proyecto = 'openrouter',
   [string]$Owner    = 'npiobject-labs',
 
   [string]$Remote   = "https://github.com/$Owner/$Proyecto.git",

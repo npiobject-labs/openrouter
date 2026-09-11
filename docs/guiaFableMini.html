@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="build" content="DM-B3-20260909-009">
-<title>Arranque DesdeMovil</title>
+<meta name="build" content="OP-B1-20260909-009">
+<title>Arranque openrouter</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Sans+Condensed:wght@700&family=IBM+Plex+Mono:wght@400;500&display=swap">
 <style>
 :root{--bg:#F6F7F4;--bg2:#FFFFFF;--ink:#1B2430;--ink2:#4B5563;--mute:#8A93A0;--line:#D9DED8;--acc:#0B6E7A;--acc2:#0B6E7A1A;--warn:#B85C1E;--warn2:#B85C1E14;--code:#EEF1EC;
@@ -75,11 +75,11 @@ footer{margin-top:2rem;font-size:.8rem;color:var(--mute)}
 <ul class="mini" style="list-style:none;padding:0;margin:0">
 <li><b>Fly (backend):</b> nada que activar. <code>FLY_API_TOKEN</code> es secreto de la organización <code>npiobject-labs</code> y lo heredan sus repos <b>públicos</b>: el siguiente push que toque <code>app/**</code> despliega (o Actions → <i>Desplegar backend en Fly.io</i> → Run workflow). URL: <code>https://<span class="Pl">miproyecto</span>-npiobject-labs.fly.dev/salud</code>.</li>
 <li><b>Drive (copias):</b> carpeta normal en Mi unidad → id de la URL → pedir a la sesión: "pon este id en Parámetros de CLAUDE.md".</li>
-<li><b>Aterrizar en el PC:</b> PowerShell → <code>&amp; ([scriptblock]::Create((irm https://raw.githubusercontent.com/npiobject-labs/DesdeMovil/main/tools/aterrizar.ps1))) -Proyecto <span class="P">MiProyecto</span></code>. Deja <code>C - Desarrollo\<span class="P">MiProyecto</span>\repo</code>. No editar ahí.</li>
+<li><b>Aterrizar en el PC:</b> PowerShell → <code>&amp; ([scriptblock]::Create((irm https://raw.githubusercontent.com/npiobject-labs/openrouter/main/tools/aterrizar.ps1))) -Proyecto <span class="P">MiProyecto</span></code>. Deja <code>C - Desarrollo\<span class="P">MiProyecto</span>\repo</code>. No editar ahí.</li>
 <li><b>Borrar el proyecto:</b> Fly (solo la app; el token es de la organización y no se revoca) → GitHub (Settings → Danger Zone) → carpeta de Drive → sesiones de Code y carpeta del PC.</li>
 </ul>
 
-<footer>Guía completa con explicaciones: <code>docs/guiaNew.html</code> en <a href="https://github.com/npiobject-labs/DesdeMovil" target="_blank" rel="noopener">npiobject-labs/DesdeMovil</a>. Las casillas se guardan en este navegador.</footer>
+<footer>Guía completa con explicaciones: <code>docs/guiaNew.html</code> en <a href="https://github.com/npiobject-labs/DesdeMovil" target="_blank" rel="noopener">npiobject-labs/openrouter</a>. Las casillas se guardan en este navegador.</footer>
 </div>
 <script>
 (function(){

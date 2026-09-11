@@ -30,13 +30,13 @@ Al final hace `grep` de todo lo que huela a plantilla fuera de `docs/plantilla/`
 
 No se borra a sí mismo porque no puede: `GITHUB_TOKEN` no tiene permiso para modificar nada bajo `.github/workflows/`, y un commit que lo intente hace que GitHub **rechace el push entero**. Por eso el workflow no toca ningún fichero de ahí y se apaga por la API en su lugar. Queda en el repo, deshabilitado e inerte —sin el marcador no haría nada aunque se relanzara—; bórralo a mano si te molesta.
 
-Resultado: https://npiobject-labs.github.io/DesdeMovil/ sirviendo el mock de `docs/`.
+Resultado: https://npiobject-labs.github.io/openrouter/ sirviendo el mock de `docs/`.
 
 ## Trabajo diario: la bitácora
 
 Cada sesión de Code termina con una entrada nueva en `docs/bitacora/AAAAMMDD-HHMM.json` y queda publicada, sin cuenta de Claude ni de GitHub, en:
 
-https://npiobject-labs.github.io/DesdeMovil/bitacora.html
+https://npiobject-labs.github.io/openrouter/bitacora.html
 
 Sesiones en orden inverso, con buscador: lo que se pidió (con botón de copiar), qué cambió, y enlaces al commit, al run que lo publicó, al mock archivado de ese día y al servidor si estaba activo. El índice lo genera `pages.yml`; nadie edita la página a mano. Formato en [`docs/bitacora/README.md`](docs/bitacora/README.md). Prompt de cierre:
 
@@ -59,7 +59,7 @@ Opcional: define la variable de repositorio (**Settings → Secrets and variable
 
 El **nombre de app es único en todo Fly.io**, no solo en tu cuenta. Si el que toca ya está cogido por otra cuenta, `flyctl apps create` no protesta —el workflow lo ignora con `|| true`— y el fallo aparece más tarde, en el paso de `deploy`, con un mensaje que no apunta a la causa. El nombre derivado lleva el owner de sufijo justamente para que eso no pase; si aun así choca, define `FLY_APP`.
 
-Queda `https://<APP>.fly.dev/` (texto plano), `https://<APP>.fly.dev/salud` devolviendo `{"ok":true,"build":"<SHA>"}` y `https://<APP>.fly.dev/holamundo` devolviendo `holamundo`. La prueba de que **frontend y backend hablan entre sí** es https://npiobject-labs.github.io/DesdeMovil/holamundo.html: Pages llama a las dos rutas desde el navegador y muestra la respuesta y el build desplegado. La verificación no la haces tú: el propio workflow hace `curl` a `/salud` y falla el run si la respuesta no contiene el SHA del commit desplegado.
+Queda `https://<APP>.fly.dev/` (texto plano), `https://<APP>.fly.dev/salud` devolviendo `{"ok":true,"build":"<SHA>"}` y `https://<APP>.fly.dev/holamundo` devolviendo `holamundo`. La prueba de que **frontend y backend hablan entre sí** es https://npiobject-labs.github.io/openrouter/holamundo.html: Pages llama a las dos rutas desde el navegador y muestra la respuesta y el build desplegado. La verificación no la haces tú: el propio workflow hace `curl` a `/salud` y falla el run si la respuesta no contiene el SHA del commit desplegado.
 
 ## Si quieres copias en Drive
 
@@ -70,10 +70,10 @@ Crea una carpeta normal en **Mi unidad** (no un "Proyecto" de Drive: el conector
 En PowerShell:
 
 ```powershell
-& ([scriptblock]::Create((irm https://raw.githubusercontent.com/npiobject-labs/DesdeMovil/main/tools/aterrizar.ps1)))
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/npiobject-labs/openrouter/main/tools/aterrizar.ps1)))
 ```
 
-Crea `%USERPROFILE%\C - Desarrollo\DesdeMovil\repo` con un clon de `main`. Es idempotente y **sobrescribe** la copia local sin preguntar (`reset --hard` + `clean -fdx`): el PC es un espejo de solo lectura. Para saber si estás al día, `tools\estado.ps1`.
+Crea `%USERPROFILE%\C - Desarrollo\openrouter\repo` con un clon de `main`. Es idempotente y **sobrescribe** la copia local sin preguntar (`reset --hard` + `clean -fdx`): el PC es un espejo de solo lectura. Para saber si estás al día, `tools\estado.ps1`.
 
 Sirve igual la primera vez y las siguientes: no hace falta tener el repo para bajarlo, porque el comando se descarga el script suelto y este hace el clon.
 

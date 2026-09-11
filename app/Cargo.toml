@@ -1,7 +1,5 @@
 [package]
-# PLANTILLA: si cambias este nombre, cambia tambien la ruta del binario en
-# app/Dockerfile (COPY --from=builder .../desdemovil-backend).
-name = "desdemovil-backend"
+name = "openrouter-backend"
 version = "0.1.0"
 edition = "2021"
 

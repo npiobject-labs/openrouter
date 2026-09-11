@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="build" content="DM-B3-20260909-010">
-<title>DesdeMovil · guía revisada</title>
+<meta name="build" content="OP-B1-20260909-010">
+<title>openrouter · guía revisada</title>
 <style>
   :root { color-scheme: light dark; --bg:#fafafa; --fg:#1a1a1a; --mut:#5b5b5b; --bd:#e0e0e0; --card:#fff; --acc:#0b6bcb; --ok:#1a7f37; --ko:#b42318; }
   @media (prefers-color-scheme: dark) {
@@ -35,7 +35,7 @@
 <body>
 <main>
 
-<h1>DesdeMovil · guía revisada</h1>
+<h1>openrouter · guía revisada</h1>
 <p class="sub">El método «PC arranca, móvil continúa», después de probarlo de verdad. Arranque rápido en <a href="https://github.com/npiobject-labs/DesdeMovil/blob/main/ARRANQUE.md">ARRANQUE.md</a>.</p>
 
 <nav><ul>
@@ -196,8 +196,8 @@ por el run del workflow antes de avisar. Cierra con el resumen de cinco líneas.
 </ul>
 
 <h2 id="pc">Aterrizar en el PC</h2>
-<pre><code>&amp; ([scriptblock]::Create((irm https://raw.githubusercontent.com/npiobject-labs/DesdeMovil/main/tools/aterrizar.ps1)))</code></pre>
-<p>Crea <code>%USERPROFILE%\C - Desarrollo\DesdeMovil\repo</code> con un clon de <code>main</code>. Es idempotente y sobrescribe sin preguntar (<code>reset --hard</code> + <code>clean -fdx</code>): la copia local es un espejo de solo lectura. Si <code>repo\</code> existe con ficheros y no es un clon, no toca nada, lista lo que hay y termina con error. <code>tools\estado.ps1</code> responde a «¿estoy al día?». Ambos aceptan <code>-Proyecto</code>, <code>-Owner</code>, <code>-Remote</code>, <code>-Root</code> y <code>-Rama</code>.</p>
+<pre><code>&amp; ([scriptblock]::Create((irm https://raw.githubusercontent.com/npiobject-labs/openrouter/main/tools/aterrizar.ps1)))</code></pre>
+<p>Crea <code>%USERPROFILE%\C - Desarrollo\openrouter\repo</code> con un clon de <code>main</code>. Es idempotente y sobrescribe sin preguntar (<code>reset --hard</code> + <code>clean -fdx</code>): la copia local es un espejo de solo lectura. Si <code>repo\</code> existe con ficheros y no es un clon, no toca nada, lista lo que hay y termina con error. <code>tools\estado.ps1</code> responde a «¿estoy al día?». Ambos aceptan <code>-Proyecto</code>, <code>-Owner</code>, <code>-Remote</code>, <code>-Root</code> y <code>-Rama</code>.</p>
 
 <h2 id="errores">Errores frecuentes</h2>
 <table>
@@ -221,7 +221,7 @@ por el run del workflow antes de avisar. Cierra con el resumen de cinco líneas.
 <p>Todo lo de arriba se probó, y lo que falló está contado con sus runs: <a href="https://github.com/npiobject-labs/DesdeMovil/blob/main/docs/planificacion/portado-hijos.md">portado-hijos.md</a> (lo que se aprendió de los dos primeros proyectos generados), <a href="https://github.com/npiobject-labs/DesdeMovil/blob/main/docs/planificacion/prueba-init.md">prueba-init.md</a> (la primera inicialización real y el fallo del push) y los resúmenes de <code>docs/planificacion/sesiones/</code>.</p>
 
 <footer>
-  <a href="https://github.com/npiobject-labs/DesdeMovil">npiobject-labs/DesdeMovil</a> ·
+  <a href="https://github.com/npiobject-labs/DesdeMovil">npiobject-labs/openrouter</a> ·
   <a href="index.html">mock</a> ·
   <a href="guiaNew.html">guía paso a paso</a> ·
   <a href="https://github.com/npiobject-labs/DesdeMovil/blob/main/CLAUDE.md">CLAUDE.md</a>

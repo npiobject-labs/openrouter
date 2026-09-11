@@ -10,7 +10,7 @@ fn puerto() -> u16 {
 }
 
 async fn raiz() -> &'static str {
-    "DesdeMovil backend"
+    "openrouter backend"
 }
 
 // Prueba "hola mundo" consumida desde Pages (otro origen): CORS abierto.
@@ -36,7 +36,7 @@ async fn main() {
         .await
         .unwrap_or_else(|e| panic!("no se pudo abrir {direccion}: {e}"));
 
-    println!("DesdeMovil backend escuchando en {direccion}");
+    println!("openrouter backend escuchando en {direccion}");
 
     axum::serve(listener, app)
         .with_graceful_shutdown(async {

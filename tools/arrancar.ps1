@@ -38,7 +38,7 @@ if ($LASTEXITCODE -ne 0) {
   exit 1
 }
 
-$binario = Join-Path $App "target\$perfil\desdemovil-backend.exe"
+$binario = Join-Path $App "target\$perfil\openrouter-backend.exe"
 if (-not (Test-Path $binario)) {
   Write-Host "arrancar : ERROR - no encuentro el binario en $binario." -ForegroundColor Red
   exit 1

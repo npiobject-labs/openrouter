@@ -5,7 +5,7 @@
 #      pwsh -File tools\eliminar.ps1 -Confirmar
 #      pwsh -File tools\eliminar.ps1 -Confirmar -SinLocal
 param(
-  [string]$Proyecto = 'DesdeMovil',
+  [string]$Proyecto = 'openrouter',
   [string]$Owner    = 'npiobject-labs',
 
   [string]$FlyApp   = '',
