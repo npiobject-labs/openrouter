@@ -9,7 +9,7 @@ Flujo "PC arranca, móvil continúa": el desarrollo, la revisión y las pruebas 
 | Proyecto | `openrouter` |
 | Owner de GitHub | `npiobject-labs` |
 | App de Fly.io | `openrouter-npiobject-labs` |
-| Carpeta de Drive (id) | `1FVreHb0ANCsTDt8O0rhS4bMoEToLgq1H` |
+| Carpeta de Drive (id) | `1PHZR1t8BjYHhIqvCzrzA2US6S1SVRDEj` |
 
 Esta tabla la rellena sola `.github/workflows/init-plantilla.yml` en el primer push de un repo creado desde la plantilla; no hay nada que tocar a mano salvo el id de Drive.
 
