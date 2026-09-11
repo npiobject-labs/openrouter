@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="es">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Bitácora del proyecto</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Sans+Condensed:wght@600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+:root{
+  --bg:#F6F7F4; --bg2:#FFFFFF; --ink:#1B2430; --ink2:#4B5563; --mute:#8A93A0;
+  --line:#D9DED8; --acc:#0B6E7A; --acc2:#0B6E7A1A; --warn:#B85C1E; --warn2:#B85C1E14;
+  --ok:#2E7D4F; --ok2:#2E7D4F14; --code:#EEF1EC; --shadow:0 1px 2px rgba(27,36,48,.06);
+  --sans:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  --cond:"IBM Plex Sans Condensed","Arial Narrow",var(--sans);
+  --mono:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#131A20; --bg2:#1B232B; --ink:#E6EAE7; --ink2:#B7C0C7; --mute:#7F8A94;
+    --line:#2C3740; --acc:#4FB3BF; --acc2:#4FB3BF22; --warn:#E08A4C; --warn2:#E08A4C1F;
+    --ok:#5FBF87; --ok2:#5FBF871F; --code:#0F151A; --shadow:none;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#131A20; --bg2:#1B232B; --ink:#E6EAE7; --ink2:#B7C0C7; --mute:#7F8A94;
+  --line:#2C3740; --acc:#4FB3BF; --acc2:#4FB3BF22; --warn:#E08A4C; --warn2:#E08A4C1F;
+  --ok:#5FBF87; --ok2:#5FBF871F; --code:#0F151A; --shadow:none;
+}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.55 var(--sans)}
+a{color:var(--acc);text-decoration-thickness:1px;text-underline-offset:2px}
+a:focus-visible,button:focus-visible,input:focus-visible,summary:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
+.wrap{max-width:46rem;margin:0 auto;padding:0 1.1rem 5rem}
+h1,h2,h3{font-family:var(--cond);line-height:1.15;text-wrap:balance;margin:0}
+h1{font-size:2.1rem;font-weight:700;letter-spacing:-.01em}
+h2{font-size:1.3rem;font-weight:700}
+h3{font-size:.95rem;font-weight:600;color:var(--ink2)}
+p{margin:.6rem 0}
+.lede{font-size:1.04rem;color:var(--ink2);max-width:38rem}
+code{font-family:var(--mono);font-size:.9em;background:var(--code);padding:.1em .35em;border-radius:3px}
+pre{font-family:var(--mono);font-size:.82rem;line-height:1.5;background:var(--code);border:1px solid var(--line);border-radius:6px;padding:.85rem 1rem;overflow-x:auto;margin:0;white-space:pre-wrap;word-break:break-word}
+.block{position:relative;margin:.55rem 0}
+.block .copy{position:absolute;top:.45rem;right:.45rem}
+.block pre{padding-right:5.5rem}
+.btn{font:500 .78rem var(--sans);color:var(--acc);background:var(--bg2);border:1px solid var(--line);border-radius:4px;padding:.28rem .55rem;cursor:pointer}
+.btn:hover{border-color:var(--acc)}
+
+.topbar{position:sticky;top:0;z-index:20;background:var(--bg);border-bottom:1px solid var(--line)}
+.topbar .in{max-width:46rem;margin:0 auto;padding:.5rem 1.1rem;display:flex;align-items:center;gap:.6rem}
+.brand{font-family:var(--cond);font-weight:700;font-size:1.05rem;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ibtn{display:inline-flex;align-items:center;justify-content:center;width:2.4rem;height:2.4rem;border:1px solid var(--line);border-radius:8px;background:var(--bg2);color:var(--ink);cursor:pointer;padding:0}
+.ibtn:hover{border-color:var(--acc);color:var(--acc)}
+.ibtn svg{width:1.2rem;height:1.2rem;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+[hidden]{display:none!important}
+
+header{padding:2.1rem 0 1.2rem;border-bottom:1px solid var(--line)}
+.meta{display:flex;flex-wrap:wrap;gap:.4rem 1.2rem;margin-top:.9rem;font-size:.86rem;color:var(--ink2)}
+.filtro{margin:1.1rem 0 .3rem}
+.filtro input{width:100%;font:1rem var(--sans);padding:.6rem .75rem;border:1px solid var(--line);border-radius:8px;background:var(--bg2);color:var(--ink)}
+.filtro small{color:var(--mute);display:block;margin-top:.4rem}
+
+.entrada{padding:1.7rem 0 1.2rem;border-bottom:1px solid var(--line);scroll-margin-top:4.5rem}
+.cabe{display:flex;flex-wrap:wrap;gap:.35rem .8rem;align-items:baseline;margin-bottom:.35rem}
+.fecha{font-family:var(--mono);font-size:.76rem;color:var(--acc);border:1px solid var(--acc);border-radius:999px;padding:.1rem .55rem;white-space:nowrap}
+.objetivo{color:var(--ink2);margin:.4rem 0 .8rem}
+.seccion{margin:1rem 0 .2rem}
+.cambios{margin:.3rem 0 0;padding-left:1.15rem}
+.cambios li{margin:.28rem 0}
+.pend{margin:.7rem 0 0;padding:.55rem .8rem;border-left:3px solid var(--warn);background:var(--warn2);font-size:.92rem;border-radius:0 6px 6px 0}
+.pend b{color:var(--warn)}
+.enlaces{display:flex;flex-wrap:wrap;gap:.45rem;margin:.9rem 0 0}
+.enlaces a{display:inline-flex;align-items:center;gap:.35rem;font-size:.82rem;text-decoration:none;color:var(--ink);background:var(--bg2);border:1px solid var(--line);border-radius:999px;padding:.3rem .7rem}
+.enlaces a:hover{border-color:var(--acc);color:var(--acc)}
+.enlaces a span{font-family:var(--mono);font-size:.75rem;color:var(--mute)}
+.aviso{margin:.7rem 0 0;font-size:.82rem;color:var(--mute)}
+.estado{padding:2.5rem 0;color:var(--ink2)}
+.estado h2{margin-bottom:.5rem}
+footer{padding:2rem 0 0;font-size:.84rem;color:var(--mute)}
+@media (max-width:520px){h1{font-size:1.8rem}.wrap{padding:0 .9rem 4rem}.brand{font-size:.95rem}}
+</style>
+
+<div class="topbar">
+  <div class="in">
+    <span class="brand" id="brand">Bitácora</span>
+    <button class="ibtn" id="theme" type="button" aria-label="Cambiar tema" title="Tema: automático">
+      <svg id="ico-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+      <svg id="ico-moon" viewBox="0 0 24 24" hidden><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
+      <svg id="ico-auto" viewBox="0 0 24 24" hidden><circle cx="12" cy="12" r="9"/><path d="M12 3a9 9 0 0 1 0 18z" fill="currentColor" stroke="none"/></svg>
+    </button>
+  </div>
+</div>
+
+<div class="wrap">
+<header>
+  <h1 id="titulo">Bitácora del proyecto</h1>
+  <p class="lede">Cada sesión de trabajo, en orden inverso: qué se pidió, qué cambió y dónde verlo. Las páginas enlazadas son las que se publicaron ese día, así que se puede recorrer la evolución del proyecto paso a paso.</p>
+  <div class="meta" id="meta"></div>
+  <div class="filtro">
+    <input id="q" type="search" placeholder="Buscar en prompts, cambios y títulos" autocomplete="off">
+    <small id="conteo"></small>
+  </div>
+</header>
+
+<div id="lista"></div>
+
+<div class="estado" id="estado" hidden></div>
+
+<footer>
+  <p id="pie"></p>
+</footer>
+</div>
+
+<script>
+(function(){
+  var lista=document.getElementById('lista'), estado=document.getElementById('estado');
+  var q=document.getElementById('q'), conteo=document.getElementById('conteo');
+  var datos=null;
+
+  // tema
+  var root=document.documentElement, tbtn=document.getElementById('theme');
+  var icons={auto:'ico-auto',light:'ico-sun',dark:'ico-moon'}, labels={auto:'automático',light:'claro',dark:'oscuro'};
+  var modo='auto';
+  try{modo=localStorage.getItem('bitacora-tema')||'auto'}catch(e){}
+  function setTheme(m){
+    modo=m; try{localStorage.setItem('bitacora-tema',m)}catch(e){}
+    if(m==='auto'){root.removeAttribute('data-theme')}else{root.setAttribute('data-theme',m)}
+    Object.keys(icons).forEach(function(k){document.getElementById(icons[k]).hidden=(k!==m)});
+    tbtn.title='Tema: '+labels[m];
+  }
+  setTheme(modo);
+  tbtn.addEventListener('click',function(){var o=['auto','light','dark'];setTheme(o[(o.indexOf(modo)+1)%3])});
+
+  function el(t,cls,txt){var n=document.createElement(t); if(cls)n.className=cls; if(txt!=null)n.textContent=txt; return n}
+  function fecha(iso){
+    var d=new Date(iso);
+    if(isNaN(d)) return iso||'';
+    return d.toLocaleDateString('es-ES',{day:'2-digit',month:'short',year:'numeric'})+' · '+
+           d.toLocaleTimeString('es-ES',{hour:'2-digit',minute:'2-digit'});
+  }
+  function pastilla(href,texto,detalle){
+    var a=el('a',null); a.href=href; a.target='_blank'; a.rel='noopener';
+    a.appendChild(document.createTextNode(texto));
+    if(detalle) a.appendChild(el('span',null,detalle));
+    return a;
+  }
+
+  function pinta(entradas){
+    lista.textContent='';
+    entradas.forEach(function(e,i){
+      var art=el('article','entrada');
+      art.id='s'+(e.fecha||i).toString().replace(/[^0-9]/g,'').slice(0,12);
+
+      var cabe=el('div','cabe');
+      cabe.appendChild(el('span','fecha',fecha(e.fecha)));
+      cabe.appendChild(el('h2',null,e.titulo||'Sesión sin título'));
+      art.appendChild(cabe);
+
+      if(e.objetivo) art.appendChild(el('p','objetivo',e.objetivo));
+
+      if(e.prompts && e.prompts.length){
+        art.appendChild(el('h3','seccion','Lo que se pidió'));
+        e.prompts.forEach(function(p,j){
+          var texto=(typeof p==='string')?p:(p.texto||'');
+          var wrap=el('div','block');
+          var pre=el('pre',null,texto); pre.id='p'+i+'_'+j;
+          var b=el('button','btn copy','Copiar');
+          b.addEventListener('click',function(){
+            function ok(){b.textContent='Copiado';setTimeout(function(){b.textContent='Copiar'},1500)}
+            if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(texto).then(ok,function(){})}
+            else{var ta=document.createElement('textarea');ta.value=texto;document.body.appendChild(ta);ta.select();try{document.execCommand('copy');ok()}catch(err){}document.body.removeChild(ta)}
+          });
+          wrap.appendChild(pre); wrap.appendChild(b);
+          art.appendChild(wrap);
+          if(p && p.nota) art.appendChild(el('p','aviso',p.nota));
+        });
+      }
+
+      if(e.cambios && e.cambios.length){
+        art.appendChild(el('h3','seccion','Qué cambió'));
+        var ul=el('ul','cambios');
+        e.cambios.forEach(function(c){ul.appendChild(el('li',null,c))});
+        art.appendChild(ul);
+      }
+
+      var enl=el('div','enlaces');
+      var repo=datos.repo||'';
+      if(e.sha && repo) enl.appendChild(pastilla('https://github.com/'+repo+'/commit/'+(e.sha_completo||e.sha),'Commit',e.sha.slice(0,7)));
+      if(e.run && repo) enl.appendChild(pastilla('https://github.com/'+repo+'/actions/runs/'+e.run,'Publicación',null));
+      if(e.mock) enl.appendChild(pastilla(e.mock,'Pantalla de ese día',e.build||null));
+      if(e.pagina) enl.appendChild(pastilla(e.pagina,'Página',null));
+      if(e.fly) enl.appendChild(pastilla(e.fly,'Servidor',null));
+      (e.enlaces||[]).forEach(function(x){if(x&&x.url)enl.appendChild(pastilla(x.url,x.texto||x.url,null))});
+      if(enl.children.length) art.appendChild(enl);
+
+      if(e.pendiente && e.pendiente.length){
+        var p=el('div','pend');
+        p.appendChild(el('b',null,'Queda pendiente: '));
+        p.appendChild(document.createTextNode(e.pendiente.join(' · ')));
+        art.appendChild(p);
+      }
+      if(e.notas) art.appendChild(el('p','aviso',e.notas));
+
+      lista.appendChild(art);
+    });
+  }
+
+  function filtra(){
+    if(!datos) return;
+    var t=(q.value||'').trim().toLowerCase();
+    var todas=datos.entradas||[];
+    var vis=!t?todas:todas.filter(function(e){
+      var blob=[e.titulo,e.objetivo,(e.cambios||[]).join(' '),
+        (e.prompts||[]).map(function(p){return typeof p==='string'?p:(p.texto||'')}).join(' ')
+      ].join(' ').toLowerCase();
+      return blob.indexOf(t)>=0;
+    });
+    pinta(vis);
+    conteo.textContent = t
+      ? vis.length+' de '+todas.length+' sesiones coinciden'
+      : todas.length+(todas.length===1?' sesión registrada':' sesiones registradas');
+    estado.hidden = vis.length>0 || todas.length===0;
+    if(!estado.hidden){
+      estado.textContent='';
+      estado.appendChild(el('h2',null,'Sin coincidencias'));
+      estado.appendChild(el('p',null,'Prueba con otra palabra, o borra el filtro para ver todas las sesiones.'));
+    }
+  }
+  q.addEventListener('input',filtra);
+
+  function vacio(){
+    estado.hidden=false; estado.textContent='';
+    estado.appendChild(el('h2',null,'Todavía no hay sesiones'));
+    estado.appendChild(el('p',null,'La primera aparecerá aquí en cuanto se cierre una sesión de trabajo con su entrada correspondiente.'));
+  }
+  function error(msg){
+    estado.hidden=false; estado.textContent='';
+    estado.appendChild(el('h2',null,'No se pudo cargar la bitácora'));
+    estado.appendChild(el('p',null,msg));
+    estado.appendChild(el('p',null,'Esta página necesita abrirse desde la web publicada. Abierta como fichero local, el navegador bloquea la lectura del índice.'));
+  }
+
+  fetch('bitacora/index.json',{cache:'no-cache'})
+    .then(function(r){ if(!r.ok) throw new Error('El índice respondió '+r.status); return r.json() })
+    .then(function(d){
+      datos=d;
+      var nombre=d.proyecto||'proyecto';
+      document.getElementById('brand').textContent='Bitácora · '+nombre;
+      document.getElementById('titulo').textContent='Bitácora de '+nombre;
+      document.title='Bitácora de '+nombre;
+      var meta=document.getElementById('meta');
+      if(d.repo){
+        var a=el('a',null,'Código en GitHub'); a.href='https://github.com/'+d.repo; a.target='_blank'; a.rel='noopener';
+        var s=el('span'); s.appendChild(a); meta.appendChild(s);
+      }
+      var idx=el('a',null,'Última versión publicada'); idx.href='index.html';
+      var s2=el('span'); s2.appendChild(idx); meta.appendChild(s2);
+      if(d.generado) meta.appendChild(el('span',null,'Actualizada el '+fecha(d.generado)));
+      document.getElementById('pie').textContent='Esta página se genera sola en cada publicación a partir de los ficheros de docs/bitacora/. Nadie la edita a mano.';
+      if(!(d.entradas||[]).length){ conteo.textContent=''; vacio(); return }
+      filtra();
+    })
+    .catch(function(err){ error(err.message||String(err)) });
+})();
+</script>
+</html>

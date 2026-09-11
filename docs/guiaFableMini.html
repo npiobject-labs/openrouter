@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="build" content="DM-B3-20260909-009">
+<title>Arranque DesdeMovil</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Sans+Condensed:wght@700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+:root{--bg:#F6F7F4;--bg2:#FFFFFF;--ink:#1B2430;--ink2:#4B5563;--mute:#8A93A0;--line:#D9DED8;--acc:#0B6E7A;--acc2:#0B6E7A1A;--warn:#B85C1E;--warn2:#B85C1E14;--code:#EEF1EC;
+--sans:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;--cond:"IBM Plex Sans Condensed","Arial Narrow",var(--sans);--mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--bg:#131A20;--bg2:#1B232B;--ink:#E6EAE7;--ink2:#B7C0C7;--mute:#7F8A94;--line:#2C3740;--acc:#4FB3BF;--acc2:#4FB3BF22;--warn:#E08A4C;--warn2:#E08A4C1F;--code:#0F151A}}
+:root[data-theme="dark"]{--bg:#131A20;--bg2:#1B232B;--ink:#E6EAE7;--ink2:#B7C0C7;--mute:#7F8A94;--line:#2C3740;--acc:#4FB3BF;--acc2:#4FB3BF22;--warn:#E08A4C;--warn2:#E08A4C1F;--code:#0F151A}
+*{box-sizing:border-box}[hidden]{display:none!important}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 var(--sans)}
+a{color:var(--acc);text-underline-offset:2px}
+.wrap{max-width:38rem;margin:0 auto;padding:0 1rem 4rem}
+.top{display:flex;align-items:center;gap:.6rem;padding:.9rem 0 .6rem;border-bottom:1px solid var(--line)}
+.top h1{font:700 1.35rem var(--cond);margin:0;flex:1}
+.ibtn{display:inline-flex;align-items:center;justify-content:center;width:2.2rem;height:2.2rem;border:1px solid var(--line);border-radius:8px;background:var(--bg2);color:var(--ink);cursor:pointer;padding:0}
+.ibtn svg{width:1.1rem;height:1.1rem;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.setup{display:flex;gap:.6rem;align-items:center;margin:1rem 0;flex-wrap:wrap}
+.setup label{font-weight:600;font-size:.9rem}
+.setup input{flex:1;min-width:12rem;font:1rem var(--mono);padding:.5rem .65rem;border:1px solid var(--line);border-radius:6px;background:var(--bg2);color:var(--ink)}
+.bar{height:5px;background:var(--line);border-radius:3px;overflow:hidden;margin:.2rem 0 1.2rem}.bar i{display:block;height:100%;width:0;background:var(--acc)}
+h2{font:700 1.1rem var(--cond);margin:1.6rem 0 .3rem;text-transform:uppercase;letter-spacing:.04em;color:var(--ink2)}
+ol{list-style:none;padding:0;margin:0}
+li.s{display:grid;grid-template-columns:1.5rem 1fr;gap:.6rem;padding:.75rem 0;border-top:1px dashed var(--line)}
+li.s:first-child{border-top:0}
+li.s input{width:1.2rem;height:1.2rem;margin:.15rem 0 0;accent-color:var(--acc)}
+li.s b{display:block;font-size:1rem;cursor:pointer}
+li.done b{color:var(--mute);text-decoration:line-through}
+li.s p{margin:.25rem 0 0;font-size:.92rem;color:var(--ink2)}
+code{font-family:var(--mono);font-size:.88em;background:var(--code);padding:.08em .3em;border-radius:3px}
+.block{position:relative;margin:.5rem 0 0}
+pre{font:.82rem/1.45 var(--mono);background:var(--code);border:1px solid var(--line);border-radius:6px;padding:.7rem 4.4rem .7rem .8rem;margin:0;white-space:pre-wrap;word-break:break-word}
+.copy{position:absolute;top:.45rem;right:.45rem;font:500 .75rem var(--sans);color:var(--acc);background:var(--bg2);border:1px solid var(--line);border-radius:4px;padding:.25rem .5rem;cursor:pointer}
+.warn{margin:.4rem 0 0;padding:.45rem .7rem;border-left:3px solid var(--warn);background:var(--warn2);font-size:.88rem;border-radius:0 6px 6px 0}
+.mini li{padding:.5rem 0;border-top:1px dashed var(--line);font-size:.92rem}
+.mini li:first-child{border-top:0}
+.mini b{font-weight:600}
+footer{margin-top:2rem;font-size:.8rem;color:var(--mute)}
+</style>
+</head>
+<body>
+<div class="wrap">
+<div class="top">
+  <h1>Arranque de un proyecto</h1>
+  <button class="ibtn" id="theme" type="button" aria-label="Cambiar tema" title="Tema">
+    <svg id="i-auto" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 3a9 9 0 0 1 0 18z" fill="currentColor" stroke="none"/></svg>
+    <svg id="i-light" viewBox="0 0 24 24" hidden><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+    <svg id="i-dark" viewBox="0 0 24 24" hidden><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
+  </button>
+</div>
+<div class="setup"><label for="pn">Proyecto</label><input id="pn" placeholder="MiProyecto" autocomplete="off" spellcheck="false"></div>
+<div class="bar"><i id="bar"></i></div>
+
+<h2>Crear · desde el móvil</h2>
+<ol>
+<li class="s" data-id="1"><input type="checkbox"><div><b>1 · Crear el repo desde la plantilla</b>
+<p><a class="L" data-href="https://github.com/new?template_name=DesdeMovil&template_owner=npiobject-labs" href="https://github.com/new?template_name=DesdeMovil&template_owner=npiobject-labs" target="_blank" rel="noopener">github.com/new?template_name=DesdeMovil&amp;template_owner=npiobject-labs</a> → Owner <code>npiobject-labs</code>, nombre <code class="P">MiProyecto</code>, <b>Public</b> (si no, no hereda <code>FLY_API_TOKEN</code>), Create.</p>
+<p>El workflow <b>Inicializar plantilla</b> renombra todo solo. El primer run de Pages sale en rojo: es normal.</p></div></li>
+
+<li class="s" data-id="2"><input type="checkbox"><div><b>2 · Pages → origen "GitHub Actions"</b>
+<p><a class="L" data-href="https://github.com/npiobject-labs/{P}/settings/pages" href="https://github.com/npiobject-labs/MiProyecto/settings/pages" target="_blank" rel="noopener">github.com/npiobject-labs/<span class="P">MiProyecto</span>/settings/pages</a> → Source: cambia <i>Deploy from a branch</i> por <b>GitHub Actions</b>.</p>
+<p class="warn">Si lo dejas como viene, verás el README en vez del mock.</p></div></li>
+
+<li class="s" data-id="3"><input type="checkbox"><div><b>3 · Primera sesión de Code</b>
+<p>App de Claude → <b>Code</b> → repo <code>npiobject-labs/<span class="P">MiProyecto</span></code> → pega:</p>
+<div class="block"><pre id="t1">Verifica que el proyecto quedó inicializado y que Pages responde. Si sigue existiendo .plantilla-pendiente, lanza el workflow "Inicializar plantilla" y espera. Dime SHA, URL de Pages y build.</pre><button class="copy" data-for="t1" type="button">Copiar</button></div>
+<p>Listo cuando <a class="L" data-href="https://npiobject-labs.github.io/{P}/" href="https://npiobject-labs.github.io/MiProyecto/" target="_blank" rel="noopener">npiobject-labs.github.io/<span class="P">MiProyecto</span>/</a> muestra "<span class="P">MiProyecto</span> · mock 0".</p></div></li>
+</ol>
+
+<h2>Después · solo si hace falta</h2>
+<ul class="mini" style="list-style:none;padding:0;margin:0">
+<li><b>Fly (backend):</b> nada que activar. <code>FLY_API_TOKEN</code> es secreto de la organización <code>npiobject-labs</code> y lo heredan sus repos <b>públicos</b>: el siguiente push que toque <code>app/**</code> despliega (o Actions → <i>Desplegar backend en Fly.io</i> → Run workflow). URL: <code>https://<span class="Pl">miproyecto</span>-npiobject-labs.fly.dev/salud</code>.</li>
+<li><b>Drive (copias):</b> carpeta normal en Mi unidad → id de la URL → pedir a la sesión: "pon este id en Parámetros de CLAUDE.md".</li>
+<li><b>Aterrizar en el PC:</b> PowerShell → <code>&amp; ([scriptblock]::Create((irm https://raw.githubusercontent.com/npiobject-labs/DesdeMovil/main/tools/aterrizar.ps1))) -Proyecto <span class="P">MiProyecto</span></code>. Deja <code>C - Desarrollo\<span class="P">MiProyecto</span>\repo</code>. No editar ahí.</li>
+<li><b>Borrar el proyecto:</b> Fly (solo la app; el token es de la organización y no se revoca) → GitHub (Settings → Danger Zone) → carpeta de Drive → sesiones de Code y carpeta del PC.</li>
+</ul>
+
+<footer>Guía completa con explicaciones: <code>docs/guiaNew.html</code> en <a href="https://github.com/npiobject-labs/DesdeMovil" target="_blank" rel="noopener">npiobject-labs/DesdeMovil</a>. Las casillas se guardan en este navegador.</footer>
+</div>
+<script>
+(function(){
+  var KEY='guia-mini-v1',st={};try{st=JSON.parse(localStorage.getItem(KEY)||'{}')}catch(e){}
+  function save(){try{localStorage.setItem(KEY,JSON.stringify(st))}catch(e){}}
+  var pn=document.getElementById('pn'),items=[].slice.call(document.querySelectorAll('li.s')),bar=document.getElementById('bar');
+  function nm(){return (st.name||'').trim()}
+  function apply(){var n=nm()||'MiProyecto';document.querySelectorAll('.P').forEach(function(e){e.textContent=n});document.querySelectorAll('.Pl').forEach(function(e){e.textContent=n.toLowerCase()});document.querySelectorAll('a.L').forEach(function(a){a.href=a.getAttribute('data-href').replace(/\{P\}/g,n)})}
+  function render(){var d=0;items.forEach(function(li){var id=li.getAttribute('data-id'),cb=li.querySelector('input');cb.checked=!!st[id];li.classList.toggle('done',!!st[id]);if(st[id])d++});bar.style.width=(d/items.length*100)+'%'}
+  items.forEach(function(li){var id=li.getAttribute('data-id'),cb=li.querySelector('input');cb.addEventListener('change',function(){st[id]=cb.checked;save();render()});li.querySelector('b').addEventListener('click',function(){cb.checked=!cb.checked;st[id]=cb.checked;save();render()})});
+  pn.value=nm();pn.addEventListener('input',function(){st.name=pn.value.replace(/\s+/g,'');save();apply()});
+  document.querySelectorAll('.copy').forEach(function(b){b.addEventListener('click',function(){var t=document.getElementById(b.getAttribute('data-for')).textContent;function ok(){b.textContent='Copiado';setTimeout(function(){b.textContent='Copiar'},1500)}if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(t).then(ok,function(){})}})});
+  var root=document.documentElement,tb=document.getElementById('theme'),ic={auto:'i-auto',light:'i-light',dark:'i-dark'};
+  function setT(m){st.theme=m;save();if(m==='auto')root.removeAttribute('data-theme');else root.setAttribute('data-theme',m);Object.keys(ic).forEach(function(k){document.getElementById(ic[k]).hidden=(k!==m)})}
+  setT(st.theme||'auto');tb.addEventListener('click',function(){var o=['auto','light','dark'];setT(o[(o.indexOf(st.theme||'auto')+1)%3])});
+  apply();render();
+})();
+</script>
+
+</body>
+</html>

@@ -1,0 +1,267 @@
+# Inicializacion automatica de un repo creado desde la plantilla.
+#
+# NO se ejecuta nunca en la plantilla misma: el job exige que el repo no sea
+# template Y que exista el marcador .plantilla-pendiente en la raiz. Tras
+# sustituir nombre, owner, slug del backend y prefijo de build, apartar la
+# documentacion heredada y comprobar que no queda ningun residuo, borra el
+# marcador y se borra a si mismo.
+name: Inicializar plantilla
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: write
+
+concurrency:
+  group: init-plantilla
+  cancel-in-progress: false
+
+jobs:
+  inicializar:
+    # Primera barrera: la plantilla original tiene is_template == true.
+    if: github.event.repository.is_template == false
+    name: Sustituir nombre y owner
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      # Segunda barrera: solo hay algo que hacer si queda el marcador.
+      - name: Comprobar el marcador
+        id: marcador
+        run: |
+          if [ -f .plantilla-pendiente ]; then
+            echo "pendiente=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "pendiente=false" >> "$GITHUB_OUTPUT"
+            echo "Sin marcador: el repo ya estaba inicializado, no se toca nada."
+          fi
+
+      - name: Sustituir nombre, owner, backend y prefijo de build
+        if: steps.marcador.outputs.pendiente == 'true'
+        run: |
+          set -euo pipefail
+          NOMBRE="${GITHUB_REPOSITORY#*/}"
+          OWNER="${GITHUB_REPOSITORY%%/*}"
+
+          # Slug: nombre en minusculas, saneado a [a-z0-9-]. Es la base del
+          # nombre del paquete Rust (<slug>-backend).
+          SLUG="$(printf '%s' "${NOMBRE}" \
+            | tr '[:upper:]' '[:lower:]' \
+            | tr -c 'a-z0-9-' '-' \
+            | sed -E 's/-+/-/g; s/^-//; s/-$//')"
+
+          # Usuario del runtime del Dockerfile: sin guiones y sin empezar por digito.
+          USUARIO="$(printf '%s' "${SLUG}" | tr -d '-' | cut -c1-30)"
+          case "${USUARIO}" in ''|[0-9]*) USUARIO="app${USUARIO}" ;; esac
+
+          # Prefijo del numero de build: iniciales del nombre (MiProyecto -> MP,
+          # proyecto_2 -> P2). Si sale de menos de dos caracteres, se usan las
+          # dos primeras letras del nombre.
+          PREFIJO="$(printf '%s' "${NOMBRE}" \
+            | sed -E 's/([a-z0-9])([A-Z])/\1 \2/g; s/[^A-Za-z0-9]+/ /g' \
+            | awk '{ for (i = 1; i <= NF && i <= 3; i++) printf "%s", toupper(substr($i, 1, 1)) }')"
+          if [ "${#PREFIJO}" -lt 2 ]; then
+            PREFIJO="$(printf '%s' "${NOMBRE}" | tr -cd 'A-Za-z0-9' | cut -c1-2 | tr '[:lower:]' '[:upper:]')"
+          fi
+          [ -n "${PREFIJO}" ] || PREFIJO="PR"
+
+          echo "Inicializando como ${OWNER}/${NOMBRE}"
+          echo "  slug: ${SLUG} · usuario del runtime: ${USUARIO} · prefijo de build: ${PREFIJO}-B1"
+
+          # El enlace "Use this template" debe seguir apuntando a la plantilla
+          # original, asi que se aparta antes de sustituir y se restaura despues.
+          # Va en ARRANQUE.md y en las guias de docs/, y ahi el "&" aparece a
+          # veces como "&amp;", asi que se apartan los dos parametros por
+          # separado en vez de la cadena entera.
+          for f in ARRANQUE.md docs/*.html; do
+            [ -f "$f" ] || continue
+            sed -i -e 's|template_name=DesdeMovil|@@PLANTILLA_NOMBRE@@|g' \
+                   -e 's|template_owner=npiobject-labs|@@PLANTILLA_OWNER@@|g' \
+                   -e 's|github.com/npiobject-labs/DesdeMovil|@@PLANTILLA_REPO@@|g' "$f"
+          done
+
+          # Nombre y owner. La seccion "Parametros" de CLAUDE.md lleva el nombre
+          # y el owner de ejemplo, asi que queda rellenada por esta sustitucion.
+          for f in CLAUDE.md README.md ARRANQUE.md docs/*.html tools/*.ps1 app/src/main.rs; do
+            [ -f "$f" ] || continue
+            # El owner de la plantilla es la organizacion "npiobject-labs", y
+            # "npiobject" a secas aparece en textos heredados. Los dos pasan por
+            # un marcador antes de escribir el owner real: sustituirlos en
+            # cadena dejaria "npiobject-labs-labs" cuando el owner es la propia
+            # organizacion, porque el segundo sed volveria a morder el prefijo.
+            sed -i -e "s/DesdeMovil/${NOMBRE}/g" \
+                   -e 's/npiobject-labs/@@OWNER@@/g' -e 's/npiobject/@@OWNER@@/g' \
+                   -e "s/@@OWNER@@/${OWNER}/g" \
+                   -e "s/desdemovil/${SLUG}/g" "$f"
+            echo "  sustituido: $f"
+          done
+
+          # Backend: paquete Rust, ruta del binario y usuario del runtime. Sin
+          # esto un proyecto generado compila "desdemovil-backend" y su GET /
+          # responde con el nombre de la plantilla.
+          sed -i "s/desdemovil-backend/${SLUG}-backend/g" app/Cargo.toml app/Cargo.lock app/Dockerfile
+          sed -i "s/desdemovil/${USUARIO}/g" app/Dockerfile
+          echo "  backend renombrado a ${SLUG}-backend"
+
+          # El sed deja el paquete propio en el sitio del nombre viejo, y el
+          # primer "cargo build" lo recoloca: un diff que el usuario no ha
+          # hecho. Se reordena aqui, igual que hace cargo (por nombre y version).
+          # El bloque va indentado por el YAML y Python no lo tolera: se quita
+          # el sangrado al escribirlo, conservando el relativo.
+          sed -E 's/^ {10}//' > "${RUNNER_TEMP}/ordenar_lock.py" <<'ORDENAR'
+          import re
+          ruta = "app/Cargo.lock"
+          texto = open(ruta, encoding="utf-8").read()
+          corte = texto.index("[[package]]")
+          cabecera, cuerpo = texto[:corte], texto[corte:]
+          bloques = [b for b in cuerpo.split("\n\n") if b.strip()]
+          def clave(bloque):
+              nombre = re.search(r'^name = "(.*)"$', bloque, re.M)
+              version = re.search(r'^version = "(.*)"$', bloque, re.M)
+              return (nombre.group(1) if nombre else "", version.group(1) if version else "")
+          ordenados = sorted(bloques, key=clave)
+          if ordenados == bloques:
+              print("  Cargo.lock ya estaba ordenado")
+          else:
+              open(ruta, "w", encoding="utf-8").write(
+                  cabecera + "\n\n".join(b.rstrip("\n") for b in ordenados) + "\n")
+              print("  Cargo.lock reordenado")
+          ORDENAR
+          python3 "${RUNNER_TEMP}/ordenar_lock.py"
+
+          # Prefijo del numero de build de los mocks, en la regla y en el mock vivo.
+          sed -i "s/DM-B3/${PREFIJO}-B1/g" CLAUDE.md docs/*.html
+          echo "  prefijo de build: ${PREFIJO}-B1"
+
+          # Comentarios PLANTILLA: ya resueltos. Nada de .github/workflows/ se
+          # toca aqui: GITHUB_TOKEN no puede modificar workflows y el push seria
+          # rechazado ("refusing to allow a GitHub App to ... without workflows
+          # permission"). Este workflow no se borra: queda inerte sin el marcador
+          # y ademas se deshabilita por la API al final.
+          sed -i '/^# PLANTILLA:/d' app/Dockerfile
+          sed -i '/^# PLANTILLA: si cambias este nombre/{N;d}' app/Cargo.toml
+
+          for f in ARRANQUE.md docs/*.html; do
+            [ -f "$f" ] || continue
+            sed -i -e 's|@@PLANTILLA_NOMBRE@@|template_name=DesdeMovil|g' \
+                   -e 's|@@PLANTILLA_OWNER@@|template_owner=npiobject-labs|g' \
+                   -e 's|@@PLANTILLA_REPO@@|github.com/npiobject-labs/DesdeMovil|g' "$f"
+          done
+
+          # El id de Drive de la plantilla no se hereda: cada proyecto pone el suyo.
+          sed -i -E 's#^(\| Carpeta de Drive \(id\) \|).*#\1  |#' CLAUDE.md
+          echo "  seccion Parametros rellenada; id de Drive vaciado"
+
+          rm -f .plantilla-pendiente
+
+      # docs/planificacion/ nace con la planificacion completa de la plantilla
+      # mezclada con la carpeta donde va la del proyecto nuevo. Se aparta.
+      - name: Apartar la documentacion heredada
+        if: steps.marcador.outputs.pendiente == 'true'
+        run: |
+          set -euo pipefail
+          if [ -d docs/planificacion ]; then
+            mkdir -p docs/plantilla
+            find docs/planificacion -mindepth 1 -maxdepth 1 -exec mv -t docs/plantilla {} +
+            echo "  docs/planificacion/ -> docs/plantilla/"
+          fi
+          mkdir -p docs/planificacion/sesiones
+          : > docs/planificacion/sesiones/.gitkeep
+
+          # La bitacora del hijo empieza vacia: fuera la entrada de ejemplo de
+          # la plantilla (su esquema sigue documentado en docs/bitacora/README.md).
+          rm -f docs/bitacora/ejemplo.json
+          echo "  docs/bitacora/ejemplo.json borrado: bitacora vacia"
+
+      # El checklist real de la inicializacion: si queda cualquier rastro de la
+      # plantilla fuera de docs/plantilla/, el run falla y se ve en Actions.
+      - name: Comprobar que no queda ningun residuo
+        if: steps.marcador.outputs.pendiente == 'true'
+        run: |
+          set -euo pipefail
+          # init-plantilla.yml se excluye: es la herramienta, no el resultado, y
+          # ya no puede borrarse a si mismo (ver el paso de sustitucion). La
+          # organizacion de Fly se llama "desdemovil" y es comun a todos los
+          # proyectos: no es un residuo, se excluye por linea.
+          residuos="$(grep -rniE 'desdemovil|DM-B3|PLANTILLA:' \
+            --exclude-dir=.git --exclude-dir=plantilla \
+            --exclude=init-plantilla.yml . \
+            | grep -vE 'template_name=DesdeMovil|github\.com/npiobject-labs/DesdeMovil|--org desdemovil|FLY_ORG: desdemovil' || true)"
+          if [ -n "${residuos}" ]; then
+            echo "::error::Quedan residuos de la plantilla tras la inicializacion."
+            printf '%s\n' "${residuos}"
+            exit 1
+          fi
+          echo "Sin residuos de la plantilla."
+
+      - name: Escribir el indice de la documentacion heredada
+        if: steps.marcador.outputs.pendiente == 'true'
+        run: |
+          set -euo pipefail
+          NOMBRE="${GITHUB_REPOSITORY#*/}"
+          # El bloque va indentado por el YAML: se quita el sangrado al escribir.
+          sed -E 's/^ {10}//' > docs/planificacion/README.md <<EOF
+          # Planificación de ${NOMBRE}
+
+          Esta carpeta arranca vacía: aquí va la planificación, las decisiones y los
+          resúmenes de sesión **de este proyecto**, y solo aquí se editan.
+
+          El historial de la plantilla de origen
+          ([\`npiobject-labs/DesdeMovil\`](https://github.com/npiobject-labs/DesdeMovil)) está en
+          [\`../plantilla/\`](../plantilla/): describe cómo se validó el flujo "PC arranca,
+          móvil continúa" y sigue nombrando al proyecto original. Es referencia; no se
+          edita ni se mezcla con lo de aquí.
+          EOF
+
+      - name: Commit y push
+        if: steps.marcador.outputs.pendiente == 'true'
+        run: |
+          set -euo pipefail
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "Nada que commitear."
+            exit 0
+          fi
+          git commit -m "Inicializar la plantilla para ${GITHUB_REPOSITORY}"
+          git push origin "HEAD:${GITHUB_REF_NAME}"
+
+      # No puede borrarse a si mismo (es un fichero de .github/workflows/), asi
+      # que se apaga por la API. El marcador ya lo dejaba inerte; esto ademas
+      # evita un run vacio en cada push.
+      - name: Apagar este workflow
+        if: steps.marcador.outputs.pendiente == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh workflow disable init-plantilla.yml || echo "No se pudo deshabilitar; queda inerte por el marcador."
+
+      # Un commit hecho con GITHUB_TOKEN no dispara workflows por push, asi que
+      # Pages se lanza explicitamente por workflow_dispatch (esto si esta permitido).
+      # Tiene que ser sobre la rama por defecto: el entorno github-pages solo
+      # despliega desde ella.
+      - name: Lanzar la publicacion de Pages
+        if: steps.marcador.outputs.pendiente == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh workflow run pages.yml --ref "${GITHUB_REF_NAME}"
+
+      - name: Resumen
+        if: steps.marcador.outputs.pendiente == 'true'
+        run: |
+          {
+            echo "### Plantilla inicializada"
+            echo ""
+            echo "- Proyecto: \`${GITHUB_REPOSITORY#*/}\`"
+            echo "- Owner: \`${GITHUB_REPOSITORY%%/*}\`"
+            echo "- Documentacion heredada apartada a \`docs/plantilla/\`."
+            echo "- Marcador \`.plantilla-pendiente\`: borrado."
+            echo "- \`init-plantilla.yml\`: deshabilitado (no puede borrarse solo; borralo a mano si quieres)."
+            echo "- Pages: lanzado \`pages.yml\`; la URL sera https://${GITHUB_REPOSITORY%%/*}.github.io/${GITHUB_REPOSITORY#*/}/"
+          } >> "$GITHUB_STEP_SUMMARY"

@@ -1,0 +1,497 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="build" content="DM-B3-20260910-009">
+<title>Guía DesdeMovil</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Sans+Condensed:wght@600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+:root{
+  --bg:#F6F7F4; --bg2:#FFFFFF; --ink:#1B2430; --ink2:#4B5563; --mute:#8A93A0;
+  --line:#D9DED8; --acc:#0B6E7A; --acc2:#0B6E7A1A; --warn:#B85C1E; --warn2:#B85C1E14;
+  --ok:#2E7D4F; --ok2:#2E7D4F14; --code:#EEF1EC; --shadow:0 1px 2px rgba(27,36,48,.06);
+  --sans:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  --cond:"IBM Plex Sans Condensed","Arial Narrow",var(--sans);
+  --mono:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#131A20; --bg2:#1B232B; --ink:#E6EAE7; --ink2:#B7C0C7; --mute:#7F8A94;
+    --line:#2C3740; --acc:#4FB3BF; --acc2:#4FB3BF22; --warn:#E08A4C; --warn2:#E08A4C1F;
+    --ok:#5FBF87; --ok2:#5FBF871F; --code:#0F151A; --shadow:none;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#131A20; --bg2:#1B232B; --ink:#E6EAE7; --ink2:#B7C0C7; --mute:#7F8A94;
+  --line:#2C3740; --acc:#4FB3BF; --acc2:#4FB3BF22; --warn:#E08A4C; --warn2:#E08A4C1F;
+  --ok:#5FBF87; --ok2:#5FBF871F; --code:#0F151A; --shadow:none;
+}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.55 var(--sans);}
+a{color:var(--acc);text-decoration-thickness:1px;text-underline-offset:2px}
+a:focus-visible,button:focus-visible,input:focus-visible,summary:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
+.wrap{max-width:46rem;margin:0 auto;padding:0 1.1rem 5rem}
+h1,h2,h3{font-family:var(--cond);line-height:1.1;text-wrap:balance;margin:0}
+h1{font-size:2.3rem;font-weight:700;letter-spacing:-.01em}
+h2{font-size:1.55rem;font-weight:700;margin-top:.2rem}
+h3{font-size:1.1rem;font-weight:600}
+p{margin:.6rem 0}
+.eyebrow{font-family:var(--mono);font-size:.72rem;letter-spacing:.12em;text-transform:uppercase;color:var(--mute)}
+.lede{font-size:1.08rem;color:var(--ink2);max-width:38rem}
+code{font-family:var(--mono);font-size:.9em;background:var(--code);padding:.1em .35em;border-radius:3px}
+pre{font-family:var(--mono);font-size:.84rem;line-height:1.5;background:var(--code);border:1px solid var(--line);border-radius:6px;padding:.9rem 1rem;overflow-x:auto;margin:0;white-space:pre-wrap;word-break:break-word}
+.block{position:relative;margin:.7rem 0}
+.block .copy{position:absolute;top:.5rem;right:.5rem}
+.btn{font:500 .8rem var(--sans);color:var(--acc);background:var(--bg2);border:1px solid var(--line);border-radius:4px;padding:.3rem .6rem;cursor:pointer}
+.btn:hover{border-color:var(--acc)}
+.btn.small{font-size:.74rem;padding:.2rem .5rem}
+/* header */
+header{padding:2.4rem 0 1.4rem;border-bottom:1px solid var(--line)}
+.meta{display:flex;flex-wrap:wrap;gap:.4rem 1.2rem;margin-top:1rem;font-size:.86rem;color:var(--ink2)}
+/* project name */
+.setup{background:var(--bg2);border:1px solid var(--line);border-radius:8px;padding:1rem 1.1rem;margin:1.4rem 0;box-shadow:var(--shadow)}
+.setup label{display:block;font-weight:600;margin-bottom:.35rem}
+.setup .row{display:flex;gap:.6rem;flex-wrap:wrap;align-items:center}
+.setup input{font:1rem var(--mono);padding:.55rem .7rem;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--ink);min-width:14rem;flex:1}
+.setup small{color:var(--mute);display:block;margin-top:.45rem}
+/* progress */
+.progress{position:sticky;top:0;z-index:5;background:var(--bg);border-bottom:1px solid var(--line);padding:.55rem 0;display:flex;align-items:center;gap:.9rem;font-size:.86rem}
+.bar{flex:1;height:6px;background:var(--line);border-radius:3px;overflow:hidden}
+.bar i{display:block;height:100%;width:0;background:var(--acc);transition:width .25s}
+.progress b{font-variant-numeric:tabular-nums;white-space:nowrap}
+/* phases */
+section.phase{padding:2rem 0 1rem;border-bottom:1px solid var(--line);scroll-margin-top:6.2rem}
+.phase-head{display:flex;flex-wrap:wrap;gap:.5rem .9rem;align-items:baseline;margin-bottom:.4rem}
+.phase-n{font-family:var(--mono);font-size:.8rem;color:var(--acc);border:1px solid var(--acc);border-radius:999px;padding:.1rem .55rem;white-space:nowrap}
+.when{font-size:.9rem;color:var(--ink2);margin:.2rem 0 1rem}
+/* step */
+.step{display:grid;grid-template-columns:1.6rem 1fr;gap:.7rem;padding:1rem 0;border-top:1px dashed var(--line)}
+.step:first-of-type{border-top:0}
+.step input[type=checkbox]{width:1.25rem;height:1.25rem;margin:.15rem 0 0;accent-color:var(--acc);cursor:pointer}
+.step h3{cursor:pointer}
+.step.done h3{color:var(--mute);text-decoration:line-through}
+.where{font-size:.86rem;color:var(--ink2);margin:.25rem 0 .4rem}
+.where code{font-size:.82rem}
+.see{margin:.6rem 0 0;padding:.6rem .8rem;border-left:3px solid var(--ok);background:var(--ok2);font-size:.92rem;border-radius:0 6px 6px 0}
+.see b{color:var(--ok)}
+.warn{margin:.6rem 0 0;padding:.6rem .8rem;border-left:3px solid var(--warn);background:var(--warn2);font-size:.92rem;border-radius:0 6px 6px 0}
+.warn b{color:var(--warn)}
+.note{margin:.6rem 0 0;padding:.6rem .8rem;border-left:3px solid var(--acc);background:var(--acc2);font-size:.92rem;border-radius:0 6px 6px 0}
+details{margin:.7rem 0;border:1px solid var(--line);border-radius:6px;background:var(--bg2)}
+summary{cursor:pointer;padding:.6rem .9rem;font-weight:500;font-size:.92rem}
+details > div{padding:.2rem .9rem .8rem}
+/* cycle diagram */
+.cycle{display:grid;grid-template-columns:repeat(auto-fit,minmax(9.5rem,1fr));gap:.5rem;margin:1rem 0}
+.cycle div{background:var(--bg2);border:1px solid var(--line);border-radius:6px;padding:.6rem .7rem;font-size:.86rem}
+.cycle b{display:block;font-family:var(--cond);font-size:1rem;margin-bottom:.15rem}
+.cycle .you{border-color:var(--acc)}
+/* fail table */
+table{width:100%;border-collapse:collapse;font-size:.9rem;margin:.6rem 0}
+th,td{text-align:left;vertical-align:top;padding:.55rem .5rem;border-bottom:1px solid var(--line)}
+th{font-family:var(--cond);font-size:.95rem}
+.tbl{overflow-x:auto}
+.rules li{margin:.35rem 0}
+footer{padding:2rem 0 0;font-size:.84rem;color:var(--mute)}
+/* topbar */
+.topbar{position:sticky;top:0;z-index:20;background:var(--bg);border-bottom:1px solid var(--line)}
+.topbar .in{max-width:46rem;margin:0 auto;padding:.5rem 1.1rem;display:flex;align-items:center;gap:.6rem}
+.brand{font-family:var(--cond);font-weight:700;font-size:1.05rem;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ibtn{display:inline-flex;align-items:center;justify-content:center;width:2.4rem;height:2.4rem;border:1px solid var(--line);border-radius:8px;background:var(--bg2);color:var(--ink);cursor:pointer;padding:0}
+.ibtn:hover{border-color:var(--acc);color:var(--acc)}
+[hidden]{display:none!important}
+.ibtn svg{width:1.2rem;height:1.2rem;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.menu{position:relative;margin:0;border:0;background:transparent}
+.menu summary{list-style:none;padding:0}
+.menu summary::-webkit-details-marker{display:none}
+.menu[open] summary .ibtn{border-color:var(--acc);color:var(--acc)}
+.menu-list{padding:.4rem !important;position:absolute;right:0;top:calc(100% + .4rem);min-width:16rem;background:var(--bg2);border:1px solid var(--line);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.18);padding:.4rem;z-index:30}
+.menu-list a{display:flex;gap:.6rem;align-items:baseline;padding:.55rem .7rem;border-radius:6px;color:var(--ink);text-decoration:none;font-size:.92rem}
+.menu-list a:hover{background:var(--acc2)}
+.menu-list a small{font-family:var(--mono);font-size:.68rem;color:var(--mute);min-width:5.2rem}
+.menu-list .sep{height:1px;background:var(--line);margin:.3rem .4rem}
+.menu-list .done-count{font-family:var(--mono);font-size:.7rem;color:var(--acc);margin-left:auto}
+.progress{position:static;border:0;padding:.45rem 1.1rem .55rem;max-width:46rem;margin:0 auto;font-size:.8rem}
+.sub{font-size:.78rem;color:var(--mute);margin-left:.6rem;white-space:nowrap}
+/* help */
+.help{display:inline-flex;align-items:center;justify-content:center;width:1.15rem;height:1.15rem;border-radius:50%;border:1px solid var(--acc);color:var(--acc);background:transparent;font:600 .72rem var(--sans);cursor:pointer;vertical-align:.1em;margin-left:.2rem;padding:0;position:relative}
+.help:hover,.help.open{background:var(--acc);color:#fff}
+.tip{display:none;position:absolute;left:50%;transform:translateX(-50%);top:calc(100% + .5rem);width:min(20rem,80vw);background:var(--ink);color:var(--bg);font:400 .82rem/1.45 var(--sans);padding:.6rem .75rem;border-radius:8px;text-align:left;z-index:40;box-shadow:0 6px 20px rgba(0,0,0,.25)}
+.help.open .tip{display:block}
+.tip::before{content:"";position:absolute;top:-.4rem;left:50%;transform:translateX(-50%);border:.4rem solid transparent;border-top:0;border-bottom-color:var(--ink)}
+.step h3 .help{margin-left:.35rem}
+.hidden-done .step.done{display:none}
+.topbar .toggle-done{font:500 .72rem var(--sans)}
+@media (max-width:520px){.brand{font-size:.95rem}.phase-head{flex-direction:column;align-items:flex-start}.menu-list{min-width:17.5rem}.tip{left:auto;right:0;transform:none}.tip::before{left:auto;right:.4rem;transform:none}}
+@media (max-width:520px){h1{font-size:1.9rem}.wrap{padding:0 .9rem 4rem}.step{gap:.55rem}}
+@media (prefers-reduced-motion: reduce){.bar i{transition:none}}
+</style>
+</head>
+<body>
+<div class="topbar">
+  <div class="in">
+    <span class="brand">Guía DesdeMovil</span>
+    <button class="ibtn" id="theme" type="button" aria-label="Cambiar tema" title="Tema: automático">
+      <svg id="ico-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+      <svg id="ico-moon" viewBox="0 0 24 24" hidden><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
+      <svg id="ico-auto" viewBox="0 0 24 24" hidden><circle cx="12" cy="12" r="9"/><path d="M12 3a9 9 0 0 1 0 18z" fill="currentColor" stroke="none"/></svg>
+    </button>
+    <details class="menu" id="menu">
+      <summary><span class="ibtn" role="button" aria-label="Menú de fases"><svg viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></svg></span></summary>
+      <div class="menu-list" id="menu-list">
+        <a href="#f0"><small>una vez</small>Cuentas conectadas</a>
+        <a href="#f1"><small>2 pasos</small>Crear el proyecto</a>
+        <a href="#f2"><small>cada día</small>Desarrollar desde el móvil</a>
+        <a href="#f3"><small>opcional</small>Fly.io a mitad de proyecto</a>
+        <a href="#f4"><small>opcional</small>Copias en Google Drive</a>
+        <a href="#f5"><small>PC</small>Aterrizar en el PC</a>
+        <a href="#f8"><small>borrar</small>Eliminar un proyecto</a>
+        <div class="sep"></div>
+        <a href="#f6"><small>ayuda</small>Diagnóstico rápido</a>
+        <a href="#f7"><small>reglas</small>Las que no se negocian</a>
+        <div class="sep"></div>
+        <a href="#" id="toggle-done"><small>vista</small><span id="toggle-done-txt">Ocultar pasos hechos</span></a>
+        <a href="#" id="reset"><small>vista</small>Reiniciar casillas</a>
+      </div>
+    </details>
+  </div>
+  <div class="progress"><span>Progreso</span><div class="bar"><i id="bar"></i></div><b id="count">0 de 0</b><span class="sub" id="pn-echo"></span></div>
+</div>
+
+<div class="wrap">
+<header>
+  <div class="eyebrow">Método DesdeMovil · plantilla npiobject-labs/DesdeMovil</div>
+  <h1>Crear y desarrollar un proyecto desde el móvil, con el PC apagado</h1>
+  <p class="lede">Todo lo que hay que hacer, en orden, para arrancar un proyecto nuevo desde la plantilla y trabajarlo desde la app de Claude en el móvil. El código y la documentación viven en GitHub; GitHub Pages publica los mocks; Fly.io y Google Drive son opcionales. El PC solo entra al final, para aterrizar una copia.</p>
+  <div class="meta">
+    <span>Versión 3 (guiaNew) · 6 sep 2026 · plantilla con portado de los proyectos hijos</span>
+    <span>Organización GitHub: <code>npiobject-labs</code></span>
+    <span>Las casillas se guardan en este navegador</span>
+  </div>
+</header>
+
+<div class="setup">
+  <label for="pn">Nombre del proyecto nuevo</label>
+  <div class="row">
+    <input id="pn" placeholder="p. ej. MiProyecto" autocomplete="off" spellcheck="false">
+  </div>
+  <small>Escríbelo y todas las direcciones y textos de esta guía se rellenan solos. Sin espacios ni tildes; es el nombre que tendrá el repositorio.</small>
+</div>
+
+<!-- FASE 0 -->
+<section class="phase" id="f0">
+  <div class="phase-head"><span class="phase-n">Una sola vez</span><h2>Cuentas conectadas</h2></div>
+  <p class="when">Ya está hecho en tu cuenta. Está aquí para que la guía sea completa y para revisarlo si algo deja de funcionar.</p>
+
+  <div class="step" data-id="c1"><input type="checkbox"><div>
+    <h3>GitHub conectado a Claude Code en la nube<button class="help" type="button" aria-label="Ayuda">?<span class="tip">Claude Code en la nube es la versión de Claude que trabaja sobre un repositorio de GitHub en un servidor de Anthropic. Se maneja desde claude.ai/code o desde la pestaña Code de la app del móvil, y sigue funcionando con el PC apagado.</span></button></h3>
+    <p class="where">Dónde: <a href="https://claude.ai/code" target="_blank" rel="noopener">claude.ai/code</a> (en la app, el icono <code>&lt;/&gt;</code> del panel lateral; en el móvil, pestaña <b>Code</b>).</p>
+    <p>La primera vez pide "Sign in with GitHub". Autoriza con tu cuenta personal, la que es miembro de la organización <code>npiobject-labs</code>. A partir de ahí, el selector "Seleccionar repositorio…" bajo la caja de texto lista los repos de la organización.</p>
+    <p class="see"><b>Cómo saber que está bien:</b> al abrir claude.ai/code ves "Seleccionar repositorio…" y al pulsarlo aparece <code>npiobject-labs/DesdeMovil</code>.</p>
+  </div></div>
+
+  <div class="step" data-id="c2"><input type="checkbox"><div>
+    <h3>Fly.io (solo si algún proyecto va a tener backend)</h3>
+    <p class="where">Dónde: <a href="https://fly.io/dashboard" target="_blank" rel="noopener">fly.io/dashboard</a>.</p>
+    <p>No hay nada que preparar por proyecto. <code>FLY_API_TOKEN</code> es un <b>secreto de la organización <code>npiobject-labs</code></b> y lo heredan todos sus repos públicos: ya no se crea un token de Fly por proyecto.</p>
+  </div></div>
+
+  <div class="step" data-id="c3"><input type="checkbox"><div>
+    <h3>Conector de Google Drive en Claude (solo si quieres copias en Drive)</h3>
+    <p>Las sesiones de Code ya han demostrado tener el conector de Drive disponible. No requiere nada del PC.</p>
+    <p class="warn"><b>Ojo:</b> el conector escribe en <b>carpetas normales</b> de Mi unidad. Un "Proyecto" de Drive (la función nueva de Drive con ese nombre) no sirve: no admite ficheros del conector.</p>
+  </div></div>
+</section>
+
+<!-- FASE 1 -->
+<section class="phase" id="f1">
+  <div class="phase-head"><span class="phase-n">Por proyecto · 2 pasos</span><h2>Crear el proyecto <span class="P"></span></h2></div>
+  <p class="when">Cinco minutos desde el móvil. Solo estos dos pasos exigen tu mano; el resto lo hace la sesión de Code.</p>
+
+  <div class="step" data-id="p1"><input type="checkbox"><div>
+    <h3>1 · Generar el repositorio desde la plantilla<button class="help" type="button" aria-label="Ayuda">?<span class="tip">Una plantilla de GitHub es un repositorio marcado como "template". Al generar uno nuevo desde ella se copian todos sus ficheros, sin historial, y el nuevo repo es tuyo por completo.</span></button></h3>
+    <p class="where">Dónde: <a class="L" data-href="https://github.com/new?template_name=DesdeMovil&template_owner=npiobject-labs" href="https://github.com/new?template_name=DesdeMovil&template_owner=npiobject-labs" target="_blank" rel="noopener">github.com/new?template_name=DesdeMovil&amp;template_owner=npiobject-labs</a> (con sesión iniciada en GitHub). En <b>Owner</b> elige <b><code>npiobject-labs</code></b>, no tu cuenta personal, y déjalo <b>Public</b>: de ahí hereda el repo el secreto <code>FLY_API_TOKEN</code> de la organización. En el plan Free, un repo privado no recibe los secretos de la organización.</p>
+    <p>Ese enlace abre el formulario de "Create a new repository" con la plantilla ya elegida. Rellena solo <b>Repository name</b> con <code class="P">MiProyecto</code>, déjalo <b>Public</b> (Pages gratuito exige repo público) y pulsa <b>Create repository</b>.</p>
+    <p class="note">Si en la portada de <code>npiobject-labs/DesdeMovil</code> no ves el botón verde "Use this template", es que no has iniciado sesión en GitHub en ese navegador. El enlace de arriba evita buscar el botón.</p>
+    <p class="see"><b>Qué debes ver:</b> el repo nuevo en <code>github.com/npiobject-labs/<span class="P">MiProyecto</span></code> con los mismos ficheros que la plantilla (<code>ARRANQUE.md</code>, <code>CLAUDE.md</code>, <code>docs/</code>, <code>app/</code>, <code>tools/</code>). Al cabo de un minuto, el workflow <b>Inicializar plantilla</b> deja el repo entero con tu nombre: sustituye "DesdeMovil" y el owner en <code>README.md</code>, <code>CLAUDE.md</code>, <code>ARRANQUE.md</code>, <code>tools/*.ps1</code>, <code>docs/*.html</code> y <code>app/src/main.rs</code>; renombra el paquete del backend (<code>&lt;slug&gt;-backend</code> en <code>app/Cargo.toml</code>, <code>Cargo.lock</code> y <code>Dockerfile</code>); fija el prefijo de los builds con las iniciales del proyecto (<code>CasaVerde</code> → <code>CV-B1-…</code>); rellena la tabla <b>Parámetros</b> de <code>CLAUDE.md</code> con el id de Drive vacío; aparta la documentación heredada de la plantilla a <code>docs/plantilla/</code> (solo lectura) y deja <code>docs/planificacion/</code> limpia para tu proyecto. Al final hace un <code>grep</code> de todo lo que huela a plantilla y <b>falla el run si encuentra restos</b>: ese grep es el checklist, no hace falta revisar ficheros a mano. Después borra el marcador <code>.plantilla-pendiente</code>, se deshabilita a sí mismo por la API (no puede borrarse: <code>GITHUB_TOKEN</code> no tiene permiso para tocar <code>.github/workflows/</code>) y relanza Pages.</p>
+    <p class="warn"><b>El primer run de Pages sale en rojo, y es normal.</b> "Use this template" dispara el workflow de Pages con el commit inicial, antes de que hayas hecho el paso 2. Ese run falla con <code>Create Pages site failed… Resource not accessible by integration</code>. No lo arregles: el workflow de inicialización relanza Pages al terminar, ya con el origen correcto. (El de Fly, en cambio, despliega: el token le llega heredado de la organización.)</p>
+    <p class="note">Si en Actions no aparece ese run, lánzalo a mano: <b>Actions → Inicializar plantilla → Run workflow</b>. También lo hará la sesión de Code del paso 3 si lo encuentra pendiente.</p>
+  </div></div>
+
+  <div class="step" data-id="p2"><input type="checkbox"><div>
+    <h3>2 · Activar GitHub Pages con origen "GitHub Actions"<button class="help" type="button" aria-label="Ayuda">?<span class="tip">GitHub Pages publica una carpeta del repo como web pública. El "origen" dice quién la construye: con "GitHub Actions" es nuestro workflow el que publica docs/; con "Deploy from a branch" lo hace GitHub a su manera y saca el README.</span></button></h3>
+    <p class="where">Dónde: <a class="L" data-href="https://github.com/npiobject-labs/{P}/settings/pages" href="https://github.com/npiobject-labs/MiProyecto/settings/pages" target="_blank" rel="noopener">github.com/npiobject-labs/<span class="P">MiProyecto</span>/settings/pages</a></p>
+    <p>En <b>Build and deployment → Source</b>, despliega el menú y elige <b>GitHub Actions</b>. No hay botón de guardar: al elegirlo queda hecho.</p>
+    <p class="warn"><b>Este es el error más fácil de cometer.</b> El menú viene de fábrica en "Deploy from a branch". Si lo dejas así, GitHub publica la raíz del repo con su constructor antiguo: tendrás un enlace que funciona pero muestra el README, no el mock de <code>docs/</code>. Si te pasa, vuelve aquí y cambia el origen; la siguiente publicación lo corrige.</p>
+    <p class="see"><b>Qué debes ver:</b> bajo "Source" pone "GitHub Actions" y desaparece el selector de rama.</p>
+    <p class="note"><b>Cómo saber si se te olvidó:</b> en la pestaña <b>Actions</b> aparece, tras cada push, un run llamado <code>pages build and deployment</code> con un paso <code>Build with Jekyll</code>. Ese constructor solo existe en el modo antiguo; con el origen en "GitHub Actions" no vuelve a aparecer.</p>
+  </div></div>
+
+  <div class="step" data-id="p3"><input type="checkbox"><div>
+    <h3>3 · Primera sesión de Code: comprobar que todo responde<button class="help" type="button" aria-label="Ayuda">?<span class="tip">Una sesión es una conversación de Claude Code ligada a un repositorio concreto. Cada vez que empiezas una eliges el repo en el selector; no se puede cambiar después.</span></button></h3>
+    <p class="where">Dónde: app de Claude → pestaña <b>Code</b> → "Seleccionar repositorio…" → <code>npiobject-labs/<span class="P">MiProyecto</span></code>, rama <code>main</code>.</p>
+    <p>Pega esta instrucción tal cual:</p>
+    <div class="block"><pre id="t1">Verifica que el proyecto quedó inicializado y que Pages responde. Si sigue existiendo .plantilla-pendiente, lanza el workflow "Inicializar plantilla" y espera a que termine. Dime SHA, URL de Pages y número de build.</pre><button class="btn copy" data-for="t1">Copiar</button></div>
+    <p class="see"><b>Qué debes ver:</b> la sesión responde con la URL <a class="L" data-href="https://npiobject-labs.github.io/{P}/" href="https://npiobject-labs.github.io/MiProyecto/" target="_blank" rel="noopener">npiobject-labs.github.io/<span class="P">MiProyecto</span>/</a> y, al abrirla en el móvil, la página dice "<span class="P">MiProyecto</span> · mock 0" con un build que empieza por las iniciales de tu proyecto. Si muestra un README, revisa el paso 2. En el repo, <code>docs/planificacion/</code> debe estar vacía salvo su <code>README.md</code>, y lo heredado de la plantilla en <code>docs/plantilla/</code>.</p>
+    <p class="note">En Actions verás también el workflow <b>Desplegar backend en Fly.io</b> terminando en verde con el aviso "Fly no configurado". Es lo esperado: Fly es opcional y se activa en la fase de más abajo cuando haga falta.</p>
+  </div></div>
+</section>
+
+<!-- FASE 2 -->
+<section class="phase" id="f2">
+  <div class="phase-head"><span class="phase-n">Cada día</span><h2>Desarrollar desde el móvil</h2></div>
+  <p class="when">El ciclo de trabajo normal. El PC no interviene en ninguna vuelta.</p>
+
+  <div class="cycle">
+    <div class="you"><b>Tú, en el móvil</b>Escribes la instrucción en la sesión de Code del proyecto.</div>
+    <div><b>Sesión de Code</b>Edita, prueba en su sandbox, hace commit y push a <code>main</code>.</div>
+    <div><b>GitHub Actions</b>Publica <code>docs/</code> en Pages y, si Fly está activo, despliega <code>app/</code>. Verifica las URLs.</div>
+    <div><b>Sesión de Code</b>Lee el resultado del workflow y solo entonces te avisa: SHA, URL, build.</div>
+    <div class="you"><b>Tú, en el móvil</b>Abres la URL, pruebas, y pides el siguiente cambio.</div>
+  </div>
+
+  <div class="step" data-id="d1"><input type="checkbox"><div>
+    <h3>Cómo pedir las cosas</h3>
+    <p>Una instrucción por objetivo, concreta. La sesión ya sabe las reglas por <code>CLAUDE.md</code>: mocks en <code>docs/</code>, cada uno con su número de build, documentación en <code>docs/planificacion/</code>, verificación antes de avisar. Ejemplos que funcionan bien:</p>
+    <div class="block"><pre id="t2">Añade a docs/index.html una pantalla de inicio de sesión (usuario, contraseña, botón). Sube el build a 002, publica y dime cuándo puedo verlo.</pre><button class="btn copy" data-for="t2">Copiar</button></div>
+    <div class="block"><pre id="t3">Resume en docs/planificacion/decisiones.md las decisiones de diseño tomadas hasta hoy, con fecha, y haz push.</pre><button class="btn copy" data-for="t3">Copiar</button></div>
+  </div></div>
+
+  <div class="step" data-id="d2"><input type="checkbox"><div>
+    <h3>Cuándo fiarte de "ya puedes probarlo"<button class="help" type="button" aria-label="Ayuda">?<span class="tip">SHA: identificador de 40 caracteres (se citan los 7 primeros) del commit exacto que se ha publicado. Build: número que lleva cada mock en su etiqueta meta, para saber de un vistazo qué versión estás viendo. Run: una ejecución de un workflow, con su marca verde o roja.</span></button></h3>
+    <p>Solo cuando el aviso trae el SHA del commit y el número de build, y el workflow está en verde. Puedes comprobarlo tú en <a class="L" data-href="https://github.com/npiobject-labs/{P}/actions" href="https://github.com/npiobject-labs/MiProyecto/actions" target="_blank" rel="noopener">la pestaña Actions del repo</a>: el último run de "Deploy docs to GitHub Pages" debe tener la marca verde.</p>
+    <p class="note">La sesión no puede abrir tu web desde su sandbox<button class="help" type="button" aria-label="Ayuda">?<span class="tip">El sandbox es el entorno aislado donde trabaja la sesión de Code. Tiene salida a GitHub, pero no a tu web publicada ni a Fly. No es un fallo: es la política de red de ese entorno.</span></button> (bloquea <code>*.github.io</code> y Fly). Por eso quien verifica es el workflow, y la sesión solo lee su resultado. Si una sesión dice "no puedo acceder a la URL", es normal; lo que importa es el run.</p>
+  </div></div>
+
+  <div class="step" data-id="d3"><input type="checkbox"><div>
+    <h3>Al terminar cada sesión</h3>
+    <p>Pide el cierre: la sesión escribe un resumen de cinco líneas (qué cambió, SHA, URL, estado de Drive, qué falta) en <code>docs/planificacion/sesiones/</code> y una entrada nueva en <code>docs/bitacora/AAAAMMDD-HHMM.json</code>. El resumen es lo que leerá la siguiente sesión para continuar, así que no lo saltes.</p>
+    <p>La entrada aparece en la <a class="L" data-href="https://npiobject-labs.github.io/{P}/bitacora.html" href="https://npiobject-labs.github.io/MiProyecto/bitacora.html" target="_blank" rel="noopener">bitácora del proyecto</a> (<code>npiobject-labs.github.io/<span class="P">MiProyecto</span>/bitacora.html</code>): sesiones en orden inverso, con buscador, lo que se pidió, qué cambió y enlaces al commit, al run y al mock de ese día. Es pública y no necesita cuenta.</p>
+    <div class="block"><pre id="t4">Cierra la sesión: resumen de 5 líneas en docs/planificacion/sesiones/ y entrada
+nueva en docs/bitacora/AAAAMMDD-HHMM.json con objetivo, los prompts de esta
+sesión, qué cambió, SHA, run de Actions, mock archivado y URL de Fly si aplica.
+Push, verifica que Pages queda en verde, y sube la copia a Drive.</pre><button class="btn copy" data-for="t4">Copiar</button></div>
+  </div></div>
+</section>
+
+<!-- FASE 3 -->
+<section class="phase" id="f3">
+  <div class="phase-head"><span class="phase-n">Opcional · cuando haga falta</span><h2>Fly.io a mitad de proyecto</h2></div>
+  <p class="when">El día que el proyecto necesita un servidor propio (API, base de datos, algo que no cabe en una página estática). Nada de lo hecho hasta entonces cambia: el repo ya trae <code>app/</code> con un servicio Rust mínimo y el workflow de despliegue, con el token ya en la mano.</p>
+
+  <div class="step" data-id="y1"><input type="checkbox"><div>
+    <h3>1 · Comprobar que no hay nada que activar<button class="help" type="button" aria-label="Ayuda">?<span class="tip">Un secreto de organización es una clave guardada una sola vez en la organización de GitHub, que todos sus repos pueden usar sin copiarla. Solo la ve el workflow, nunca aparece en los logs.</span></button></h3>
+    <p class="where">Dónde: <a class="L" data-href="https://github.com/npiobject-labs/{P}/settings/secrets/actions" href="https://github.com/npiobject-labs/MiProyecto/settings/secrets/actions" target="_blank" rel="noopener">github.com/npiobject-labs/<span class="P">MiProyecto</span>/settings/secrets/actions</a></p>
+    <p><code>FLY_API_TOKEN</code> es un <b>secreto de organización</b> de <code>npiobject-labs</code>: lo heredan todos sus repos públicos. No crees ningún token de Fly ni ningún secreto de repositorio; ya no hace falta.</p>
+    <p class="warn"><b>El repo tiene que ser público.</b> En el plan Free de GitHub los secretos de organización no llegan a los repos privados: ahí <code>deploy.yml</code> terminaría en verde con el aviso "Fly no configurado" y no desplegaría nada.</p>
+    <p class="see"><b>Qué debes ver:</b> en esa pantalla, <code>FLY_API_TOKEN</code> bajo <b>Organization secrets</b>. Si solo lo ves bajo <i>Repository secrets</i>, es un resto de la forma antigua y puedes borrarlo.</p>
+  </div></div>
+
+  <div class="step" data-id="y3"><input type="checkbox"><div>
+    <h3>2 · Lanzar el primer despliegue</h3>
+    <p>El siguiente push que toque <code>app/</code> despliega solo. Para forzarlo, dos formas: desde la sesión de Code,</p>
+    <div class="block"><pre id="t5">Lanza el workflow de despliegue a Fly sobre main, espera al run, verifica por API que termina en verde y dime la URL de la app y la respuesta de /salud.</pre><button class="btn copy" data-for="t5">Copiar</button></div>
+    <p>O a mano: pestaña <b>Actions</b> del repo → <b>Desplegar backend en Fly.io</b> → <b>Run workflow</b> sobre <code>main</code>.</p>
+    <p>El nombre de la app lo deriva el workflow como <code>&lt;repo&gt;-&lt;owner&gt;</code> en minúsculas, con todo lo que no sea letra, número o guion convertido en guion y recortado a 30 caracteres: para este proyecto, <code><span class="Pl">miproyecto</span>-npiobject-labs</code>. Si prefieres otro, crea antes la variable de repositorio <code>FLY_APP</code> (misma pantalla que los secretos, pestaña <b>Variables</b>, esta sí del repo) y anótalo en la fila "App de Fly.io" de la tabla Parámetros de <code>CLAUDE.md</code>. Los nombres son únicos en <b>todo Fly.io</b>, no solo en tu cuenta: por eso el derivado lleva el owner de sufijo. Si aun así el nombre ya está cogido, la creación no protesta y el fallo aparece más tarde, en el paso de despliegue, con un mensaje que no apunta a la causa; la salida es definir <code>FLY_APP</code> con otro nombre y relanzar.</p>
+    <p class="note">El primer despliegue tarda varios minutos porque compila Rust desde cero. Los siguientes van rápidos. A partir de aquí, cada push que toque <code>app/</code> despliega solo.</p>
+    <p class="see"><b>Qué debes ver:</b> <code>https://&lt;app&gt;.fly.dev/salud</code> responde <code>{"ok":true,"build":"&lt;SHA del commit&gt;"}</code>. El resumen del run en Actions muestra el nombre exacto de la app y la URL.</p>
+  </div></div>
+</section>
+
+<!-- FASE 4 -->
+<section class="phase" id="f4">
+  <div class="phase-head"><span class="phase-n">Opcional</span><h2>Copias de la documentación en Google Drive</h2></div>
+  <p class="when">Si quieres hojear la documentación desde la app de Drive. Es un espejo: nada de lo que hay en Drive es origen de nada.</p>
+
+  <div class="step" data-id="g1"><input type="checkbox"><div>
+    <h3>Crear la carpeta y anotar su id<button class="help" type="button" aria-label="Ayuda">?<span class="tip">Drive es un espejo: recibe copias de lo que ya está en el repo para que las hojees desde la app de Drive. Nada de lo que hay en Drive se usa como origen, y nunca se borra ni se renombra allí.</span></button></h3>
+    <p class="where">Dónde: <a href="https://drive.google.com/drive/my-drive" target="_blank" rel="noopener">Mi unidad</a> → Nueva carpeta → nómbrala <code class="P">MiProyecto</code>. Ábrela: el id es el último tramo de la dirección, tras <code>/folders/</code>.</p>
+    <p>Luego, en la sesión de Code:</p>
+    <div class="block"><pre id="t6">Pon este id en la fila "Carpeta de Drive (id)" de la tabla Parámetros de CLAUDE.md y haz push: &lt;PEGA-AQUÍ-EL-ID&gt;. A partir de ahora, al cerrar cada sesión sube copias de docs/planificacion/ a esa carpeta.</pre><button class="btn copy" data-for="t6">Copiar</button></div>
+    <p class="warn"><b>Regla:</b> en Drive nunca se borra ni se renombra nada, ni tú ni la sesión. Si hay que sustituir un documento, se sube con sufijo <code>-v2</code>. Un borrado en Drive ya nos costó un informe.</p>
+  </div></div>
+</section>
+
+<!-- FASE 5 -->
+<section class="phase" id="f5">
+  <div class="phase-head"><span class="phase-n">Cuando quieras · PC encendido</span><h2>Aterrizar el proyecto en el PC</h2></div>
+  <p class="when">Una copia de consulta en Windows 11. Repetible cuantas veces quieras; siempre sobrescribe lo local con lo que hay en GitHub. Nunca se edita en el PC.</p>
+
+  <div class="step" data-id="a1"><input type="checkbox"><div>
+    <h3>Primera vez: una línea en PowerShell<button class="help" type="button" aria-label="Ayuda">?<span class="tip">Aterrizar es traer al PC una copia exacta de lo que hay en GitHub. Es idempotente: ejecutarlo dos veces deja el mismo resultado. Y es destructivo a propósito: lo local se sobrescribe, porque en el PC nunca se edita.</span></button></h3>
+    <p>Descarga el script de aterrizaje desde el repo y lo ejecuta. Deja el proyecto en <code>C:\Users\&lt;tú&gt;\C - Desarrollo\<span class="P">MiProyecto</span>\repo</code>.</p>
+    <div class="block"><pre id="t7">& ([scriptblock]::Create((irm https://raw.githubusercontent.com/npiobject-labs/DesdeMovil/main/tools/aterrizar.ps1))) -Proyecto <span class="P">MiProyecto</span></pre><button class="btn copy" data-for="t7">Copiar</button></div>
+    <p>Si PowerShell bloquea la ejecución: antepón <code>powershell -ExecutionPolicy Bypass -Command</code> y la línea entre comillas. Requiere <code>git</code> instalado.</p>
+    <p class="warn"><b>La carpeta <code>repo\</code> debe estar vacía o no existir</b> la primera vez. Si tiene cualquier fichero (un script guardado a mano, por ejemplo), el aterrizaje lo dice y se detiene sin tocar nada: vacíala y repite. No guardes nada dentro de <code>repo\</code>: cada aterrizaje borra lo que no esté en GitHub.</p>
+  </div></div>
+
+  <div class="step" data-id="a2"><input type="checkbox"><div>
+    <h3>Siguientes veces y comprobación</h3>
+    <p>Desde la copia local: <code>tools\aterrizar.ps1</code> vuelve a dejarla igual que <code>main</code>. <code>tools\estado.ps1</code> dice <b>AL DIA</b> o <b>DESACTUALIZADO</b> sin tocar nada.</p>
+    <p class="see"><b>Prueba de confianza:</b> borra un fichero cualquiera de <code>repo\</code>, ejecuta <code>aterrizar.ps1</code> y debe reaparecer. Ejecútalo dos veces seguidas y la segunda no debe cambiar nada. <b>[SUPUESTO]</b> los scripts de PowerShell no se han llegado a ejecutar nunca: no hay <code>pwsh</code> en el sandbox de las sesiones, así que esta es la comprobación pendiente en el primer PC donde se usen.</p>
+    <p class="note">La copia viva de esta guía está en <code>docs/guiaNew.html</code> del repo y publicada en Pages. Si la guardas en el PC, fuera de <code>repo\</code>: <code>aterrizar.ps1</code> borra todo lo que sobra dentro de <code>repo\</code>.</p>
+  </div></div>
+</section>
+
+<!-- FASE 6 -->
+<section class="phase" id="f6">
+  <div class="phase-head"><span class="phase-n">Cuando algo falla</span><h2>Diagnóstico rápido</h2></div>
+  <div class="tbl"><table>
+    <tr><th>Lo que ves</th><th>Causa</th><th>Qué hacer</th></tr>
+    <tr><td>La URL de Pages muestra el README, no el mock</td><td>Pages con origen "Deploy from a branch"</td><td>Settings → Pages → Source: GitHub Actions. Espera al siguiente run.</td></tr>
+    <tr><td>La sesión dice "GitHub access to this repository is not enabled for this session"</td><td>La sesión se creó sin seleccionar el repo (o desde una carpeta local de Cowork)</td><td>Crea otra sesión en claude.ai/code eligiendo el repo en el selector. No se puede añadir en caliente.</td></tr>
+    <tr><td>El run de Fly termina en verde pero dice "Fly no configurado"</td><td>El secreto de organización no llega al repo: es privado (plan Free) o está fuera de <code>npiobject-labs</code></td><td>Hazlo público en Settings, o muévelo a la organización. No crees un secreto de repositorio.</td></tr>
+    <tr><td>Fly: "Not authorized" o "app not found" al desplegar</td><td>El token heredado caducó o se revocó en Fly.io</td><td>Se arregla una sola vez para todos los proyectos: renueva el secreto <code>FLY_API_TOKEN</code> en la organización <code>npiobject-labs</code>.</td></tr>
+    <tr><td>Pages: "Create Pages site failed… Resource not accessible by integration"</td><td>Pages no estaba activado y el workflow no puede activarlo. En el primer run tras "Use this template" es lo esperado.</td><td>Paso 2 de "Crear el proyecto". La inicialización relanza Pages sola; si no, Actions → workflow de Pages → Run workflow.</td></tr>
+    <tr><td>En Actions aparece "pages build and deployment" con "Build with Jekyll"</td><td>Pages sigue en "Deploy from a branch"</td><td>Settings → Pages → Source: GitHub Actions.</td></tr>
+    <tr><td>El workflow "Inicializar plantilla" falla en el paso final de comprobación</td><td>Quedó algún resto de la plantilla (un marcador <code>PLANTILLA</code>, el nombre antiguo) fuera de <code>docs/plantilla/</code></td><td>El log dice en qué fichero. Pídele a la sesión que lo corrija y relance el workflow.</td></tr>
+    <tr><td>Fly: el despliegue falla sin motivo claro justo después de crear la app</td><td>El nombre derivado ya existe en otra cuenta de Fly</td><td>Define la variable <code>FLY_APP</code> con otro nombre y relanza.</td></tr>
+    <tr><td>El aterrizaje dice que <code>repo\</code> existe y no es un repositorio</td><td>Quedó algún fichero suelto dentro</td><td>Vacía la carpeta (o renómbrala) y repite. Cierra antes cualquier editor o ventana que la tenga abierta.</td></tr>
+    <tr><td>Tras la inicialización automática, Pages no se publicó</td><td>Un commit hecho por el propio workflow no dispara otros workflows</td><td>El workflow de inicialización ya lanza Pages al terminar; si no ocurrió, Actions → workflow de Pages → Run workflow, o pídeselo a la sesión.</td></tr>
+    <tr><td>El conector de Drive no puede escribir en la carpeta</td><td>Es un "Proyecto" de Drive, no una carpeta</td><td>Crea una carpeta normal en Mi unidad y usa su id.</td></tr>
+    <tr><td>La sesión "no puede abrir" la URL de Pages o de Fly</td><td>El sandbox bloquea esos destinos</td><td>Normal. La prueba válida es el run en verde y tu navegador.</td></tr>
+  </table></div>
+</section>
+
+<!-- FASE 6b -->
+<section class="phase" id="f8">
+  <div class="phase-head"><span class="phase-n">Cuando un proyecto sobra</span><h2>Eliminar un proyecto sin dejar restos</h2></div>
+  <p class="when">Un proyecto toca cuatro herramientas. Bórralo en este orden y no quedará nada colgando ni consumiendo cuota.</p>
+
+  <p class="note">Con el repo aterrizado en el PC, <code>tools\eliminar.ps1</code> hace los tres primeros pasos: <code>pwsh -File tools\eliminar.ps1</code> enseña el plan sin tocar nada, y <code>-Confirmar</code> lo ejecuta pidiéndote el nombre del proyecto. Necesita <code>flyctl</code> y <code>gh</code>; lo que falte lo deja anotado como pendiente. Drive y las sesiones siguen siendo a mano.</p>
+
+  <div class="step" data-id="e1"><input type="checkbox"><div>
+    <h3>1 · Fly.io: la app<button class="help" type="button" aria-label="Ayuda">?<span class="tip">Una app de Fly es un servidor pequeño con su URL propia. Mientras existe puede consumir cuota; por eso se borra al terminar el proyecto.</span></button></h3>
+    <p class="where">Dónde: <a href="https://fly.io/dashboard" target="_blank" rel="noopener">fly.io/dashboard</a> → la app (<code><span class="Pl">miproyecto</span>-npiobject-labs</code> o el nombre que pusieras en <code>FLY_APP</code>) → <b>Settings → Delete app</b>. Confirma escribiendo el nombre.</p>
+    <p>Al borrar la app se liberan sus máquinas, volúmenes e IPs; comprueba en el dashboard que la lista de apps ya no la muestra. <b>No se revoca ningún token</b>: <code>FLY_API_TOKEN</code> es de la organización y lo usan los demás proyectos.</p>
+    <p class="note">Si nunca activaste Fly en este proyecto, no hay nada que borrar aquí.</p>
+  </div></div>
+
+  <div class="step" data-id="e2"><input type="checkbox"><div>
+    <h3>2 · GitHub: el repositorio</h3>
+    <p class="where">Dónde: <a class="L" data-href="https://github.com/npiobject-labs/{P}/settings" href="https://github.com/npiobject-labs/MiProyecto/settings" target="_blank" rel="noopener">github.com/npiobject-labs/<span class="P">MiProyecto</span>/settings</a> → al final de la página, <b>Danger Zone → Delete this repository</b>.</p>
+    <p>Con el repo se van su sitio de Pages, sus variables y sus workflows. El secreto <code>FLY_API_TOKEN</code> no: vive en la organización y sigue ahí para los demás proyectos. Por eso Fly va antes: una vez borrado el repo ya no tienes a mano el nombre de la app.</p>
+  </div></div>
+
+  <div class="step" data-id="e3"><input type="checkbox"><div>
+    <h3>3 · Google Drive: la carpeta de copias</h3>
+    <p class="where">Dónde: <a href="https://drive.google.com/drive/my-drive" target="_blank" rel="noopener">Mi unidad</a> → carpeta <code class="P">MiProyecto</code> → Mover a la papelera. Y vacía la papelera si quieres que desaparezca del todo.</p>
+    <p>Si el proyecto no tenía id de Drive en <code>CLAUDE.md</code>, no hay carpeta.</p>
+  </div></div>
+
+  <div class="step" data-id="e4"><input type="checkbox"><div>
+    <h3>4 · Claude y el PC</h3>
+    <p>En <a href="https://claude.ai/code" target="_blank" rel="noopener">claude.ai/code</a>, las sesiones del proyecto siguen en la lista: archívalas (icono de archivo al pasar el cursor) o bórralas desde el menú de la sesión. Si el proyecto tenía un proyecto de Cowork asociado, bórralo también.</p>
+    <p>En el PC, si lo habías aterrizado: borra la carpeta <code>C - Desarrollo\<span class="P">MiProyecto</span></code> entera. No hay nada allí que no estuviera en GitHub.</p>
+  </div></div>
+</section>
+
+<section class="phase" id="f7">
+  <div class="phase-head"><span class="phase-n">Reglas</span><h2>Las que no se negocian</h2></div>
+  <ul class="rules">
+    <li><b>El repo es la única fuente de verdad</b>, para el código y para la documentación (<code>docs/planificacion/</code>). Todo cambio termina en <code>main</code>.</li>
+    <li><b>La copia del PC es de solo lectura.</b> No se edita ahí; no existe camino PC → nube. Aterrizar sobrescribe sin preguntar, y eso es lo que lo hace seguro.</li>
+    <li><b>Drive es un espejo.</b> Solo recibe copias; nunca se borra ni se renombra nada allí; nunca se toma nada de Drive como origen.</li>
+    <li><b>No se avisa sin verificar.</b> "Puedes probarlo" solo con el run en verde, SHA y build.</li>
+    <li><b>Los secretos no pasan por el chat.</b> Tokens y claves van a Settings → Secrets, del repo o de la organización, nunca a una sesión ni a un fichero.</li>
+    <li><b>Lo que hay en <code>docs/</code> es público.</b> Sin claves, sin endpoints internos, sin datos reales en los mocks.</li>
+  </ul>
+</section>
+
+<footer>
+  <p>Plantilla: <a href="https://github.com/npiobject-labs/DesdeMovil" target="_blank" rel="noopener">github.com/npiobject-labs/DesdeMovil</a>. Con el móvil en la mano y sin explicaciones: <a href="guiaFableMini.html">guiaFableMini.html</a>. El método y cuándo compensa: <a href="guiaFable.html">guiaFable.html</a>.</p>
+  <p>Versión 3 (guiaNew): recoge la plantilla simplificada y el portado de mejoras desde <code>PruebaPlantilla</code> y <code>proyecto_2</code> (inicialización completa con comprobación de restos, primer run en rojo, detección del modo antiguo de Pages, unicidad global de nombres en Fly, <code>docs/plantilla/</code>). Complementa a <code>docs/guiaFable.html</code>, la versión en prosa que mantiene la sesión de Code.</p>
+</footer>
+</div>
+
+<script>
+(function(){
+  var KEY='guia-v2';
+  var state={};
+  try{state=JSON.parse(localStorage.getItem(KEY)||'{}')}catch(e){state={}}
+  var pn=document.getElementById('pn');
+  var steps=Array.prototype.slice.call(document.querySelectorAll('.step'));
+  var bar=document.getElementById('bar'), count=document.getElementById('count');
+
+  function save(){try{localStorage.setItem(KEY,JSON.stringify(state))}catch(e){}}
+  function name(){return (state.name||'').trim()}
+  function applyName(){
+    var n=name()||'MiProyecto', low=n.toLowerCase();
+    document.querySelectorAll('.P').forEach(function(el){el.textContent=n});
+    document.querySelectorAll('.Pl').forEach(function(el){el.textContent=low});
+    document.querySelectorAll('a.L').forEach(function(a){a.href=a.getAttribute('data-href').replace(/\{P\}/g,n)});
+  }
+  function render(){
+    var done=0;
+    steps.forEach(function(s){
+      var id=s.getAttribute('data-id'), cb=s.querySelector('input[type=checkbox]');
+      cb.checked=!!state[id]; s.classList.toggle('done',!!state[id]); if(state[id])done++;
+    });
+    count.textContent=done+' de '+steps.length;
+    bar.style.width=(steps.length?done/steps.length*100:0)+'%';
+  }
+  steps.forEach(function(s){
+    var id=s.getAttribute('data-id'), cb=s.querySelector('input[type=checkbox]');
+    cb.addEventListener('change',function(){state[id]=cb.checked;save();render()});
+    s.querySelector('h3').addEventListener('click',function(){cb.checked=!cb.checked;state[id]=cb.checked;save();render()});
+  });
+  pn.value=name();
+  pn.addEventListener('input',function(){state.name=pn.value.replace(/\s+/g,'');save();applyName()});
+  document.getElementById('reset').addEventListener('click',function(e){
+    e.preventDefault();steps.forEach(function(s){delete state[s.getAttribute('data-id')]});save();render();
+  });
+  document.querySelectorAll('.copy').forEach(function(b){
+    b.addEventListener('click',function(){
+      var t=document.getElementById(b.getAttribute('data-for')).textContent;
+      function ok(){b.textContent='Copiado';setTimeout(function(){b.textContent='Copiar'},1500)}
+      if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(t).then(ok,function(){})}
+      else{var ta=document.createElement('textarea');ta.value=t;document.body.appendChild(ta);ta.select();try{document.execCommand('copy');ok()}catch(e){}document.body.removeChild(ta)}
+    });
+  });
+  // nombre en la barra
+  var echo=document.getElementById('pn-echo');
+  function echoName(){echo.textContent=name()?('· '+name()):''}
+  pn.addEventListener('input',echoName); echoName();
+
+  // tema: auto -> claro -> oscuro
+  var root=document.documentElement, tbtn=document.getElementById('theme');
+  var icons={auto:'ico-auto',light:'ico-sun',dark:'ico-moon'}, labels={auto:'automático',light:'claro',dark:'oscuro'};
+  function setTheme(m){
+    state.theme=m; save();
+    if(m==='auto'){root.removeAttribute('data-theme')}else{root.setAttribute('data-theme',m)}
+    Object.keys(icons).forEach(function(k){document.getElementById(icons[k]).hidden=(k!==m)});
+    tbtn.title='Tema: '+labels[m];
+  }
+  setTheme(state.theme||'auto');
+  tbtn.addEventListener('click',function(){var o=['auto','light','dark'];setTheme(o[(o.indexOf(state.theme||'auto')+1)%3])});
+
+  // menú
+  var menu=document.getElementById('menu');
+  menu.querySelectorAll('a').forEach(function(a){a.addEventListener('click',function(){if(a.getAttribute('href')!=='#')menu.removeAttribute('open')})});
+  document.addEventListener('click',function(e){if(!menu.contains(e.target))menu.removeAttribute('open')});
+
+  // ocultar hechos
+  var td=document.getElementById('toggle-done'), tdt=document.getElementById('toggle-done-txt');
+  function applyHide(){document.body.classList.toggle('hidden-done',!!state.hideDone);tdt.textContent=state.hideDone?'Mostrar pasos hechos':'Ocultar pasos hechos'}
+  td.addEventListener('click',function(e){e.preventDefault();state.hideDone=!state.hideDone;save();applyHide();menu.removeAttribute('open')});
+  applyHide();
+
+  // ayudas
+  document.querySelectorAll('.help').forEach(function(h){
+    h.addEventListener('click',function(e){
+      e.preventDefault();e.stopPropagation();
+      var was=h.classList.contains('open');
+      document.querySelectorAll('.help.open').forEach(function(x){x.classList.remove('open')});
+      if(!was)h.classList.add('open');
+    });
+  });
+  document.addEventListener('click',function(){document.querySelectorAll('.help.open').forEach(function(x){x.classList.remove('open')})});
+  document.addEventListener('keydown',function(e){if(e.key==='Escape'){document.querySelectorAll('.help.open').forEach(function(x){x.classList.remove('open')});menu.removeAttribute('open')}});
+
+  applyName();render();
+})();
+</script>
+
+</body>
+</html>

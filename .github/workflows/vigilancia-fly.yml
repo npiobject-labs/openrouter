@@ -1,0 +1,95 @@
+name: Vigilancia de gasto en Fly.io
+
+# Red de seguridad. Fly.io no ofrece alertas de gasto, asi que este workflow
+# revisa cada lunes que ninguna maquina de la organizacion se haya quedado
+# encendida. Si encuentra alguna, el job falla y GitHub envia un correo
+# automatico a los watchers del repositorio.
+#
+# Requiere el secreto FLY_API_TOKEN (el mismo que usa deploy.yml).
+# Opcional: la variable de repositorio FLY_MAQUINAS_MAX sube el umbral de
+# maquinas encendidas toleradas (por defecto 0).
+
+on:
+  schedule:
+    # Lunes a las 07:00 UTC (09:00 en Madrid en horario de verano).
+    - cron: '0 7 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: fly-vigilancia
+  cancel-in-progress: false
+
+jobs:
+  vigilar:
+    name: Revisar maquinas encendidas
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+      FLY_ORG: desdemovil
+      MAQUINAS_MAX: ${{ vars.FLY_MAQUINAS_MAX || '0' }}
+    steps:
+      - name: Comprobar que el token esta configurado
+        run: |
+          if [ -z "${FLY_API_TOKEN}" ]; then
+            echo "::error::Falta el secreto FLY_API_TOKEN; ver ARRANQUE.md, seccion Fly."
+            exit 1
+          fi
+          echo "Token presente (valor oculto)."
+
+      - name: Instalar flyctl
+        uses: superfly/flyctl-actions/setup-flyctl@master
+
+      - name: Inventariar apps y maquinas
+        run: |
+          set -euo pipefail
+
+          if ! flyctl apps list --org "${FLY_ORG}" --json > apps.json 2> error.txt; then
+            echo "::error::No se pudo listar las apps de la organizacion ${FLY_ORG}."
+            cat error.txt
+            exit 1
+          fi
+
+          apps="$(jq -r '.[] | (.Name // .name)' apps.json | sort)"
+          encendidas=0
+
+          {
+            echo "### Vigilancia de Fly.io - organizacion \`${FLY_ORG}\`"
+            echo ""
+            echo "| App | Maquinas | Encendidas | Regiones |"
+            echo "| --- | ---: | ---: | --- |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          for app in ${apps}; do
+            if ! flyctl machines list --app "${app}" --json > maquinas.json 2> /dev/null; then
+              echo '[]' > maquinas.json
+            fi
+            total="$(jq 'length' maquinas.json)"
+            arriba="$(jq '[.[] | select((.state // .State) == "started")] | length' maquinas.json)"
+            regiones="$(jq -r '[.[] | (.region // .Region)] | unique | join(", ")' maquinas.json)"
+            encendidas=$(( encendidas + arriba ))
+            echo "| \`${app}\` | ${total} | ${arriba} | ${regiones:--} |" >> "$GITHUB_STEP_SUMMARY"
+          done
+
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "Maquinas encendidas: ${encendidas} (maximo tolerado: ${MAQUINAS_MAX})"
+
+          if [ "${encendidas}" -gt "${MAQUINAS_MAX}" ]; then
+            {
+              echo "**Aviso: ${encendidas} maquina(s) encendida(s), por encima del maximo (${MAQUINAS_MAX}).**"
+              echo ""
+              echo "Si acabas de visitar la app es normal: con \`auto_stop_machines\` se apaga sola a los pocos minutos."
+              echo "Si no, revisa el gasto en https://fly.io/dashboard/${FLY_ORG}/billing y apagala con:"
+              echo ""
+              echo '```'
+              echo "flyctl machines stop --app <app>"
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
+            echo "::error::${encendidas} maquina(s) encendida(s) en Fly.io (maximo tolerado: ${MAQUINAS_MAX})."
+            exit 1
+          fi
+
+          echo "Todo en reposo. Ninguna maquina encendida." >> "$GITHUB_STEP_SUMMARY"

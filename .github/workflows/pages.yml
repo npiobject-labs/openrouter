@@ -1,0 +1,173 @@
+# Este workflow no lleva el nombre del proyecto: init-plantilla.yml no lo toca.
+# Requiere Settings -> Pages -> Source: GitHub Actions activado una vez a mano.
+name: Deploy docs to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Generar el índice de la bitácora
+        run: |
+          python3 - <<'PY'
+          import json, os, glob, datetime, sys
+
+          carpeta = 'docs/bitacora'
+          os.makedirs(carpeta, exist_ok=True)
+
+          entradas, errores = [], []
+          for ruta in sorted(glob.glob(os.path.join(carpeta, '*.json'))):
+              nombre = os.path.basename(ruta)
+              if nombre == 'index.json':
+                  continue
+              try:
+                  with open(ruta, encoding='utf-8') as f:
+                      e = json.load(f)
+              except Exception as ex:
+                  errores.append(f'{nombre}: no es JSON válido ({ex})')
+                  continue
+              if not isinstance(e, dict):
+                  errores.append(f'{nombre}: la entrada debe ser un objeto JSON')
+                  continue
+              for campo in ('fecha', 'titulo'):
+                  if not e.get(campo):
+                      errores.append(f'{nombre}: falta el campo obligatorio "{campo}"')
+              e['_fichero'] = nombre
+              entradas.append(e)
+
+          if errores:
+              for m in errores:
+                  print(f'::error file={carpeta}::{m}')
+              sys.exit('Bitácora: hay entradas mal formadas. Corrígelas y vuelve a publicar.')
+
+          entradas.sort(key=lambda e: str(e.get('fecha', '')), reverse=True)
+
+          repo = os.environ.get('GITHUB_REPOSITORY', '')
+          owner, _, nombre_repo = repo.partition('/')
+          salida = {
+              'proyecto': nombre_repo or 'proyecto',
+              'owner': owner,
+              'repo': repo,
+              'generado': datetime.datetime.now(datetime.timezone.utc).isoformat(timespec='seconds'),
+              'entradas': entradas,
+          }
+          with open(os.path.join(carpeta, 'index.json'), 'w', encoding='utf-8') as f:
+              json.dump(salida, f, ensure_ascii=False, indent=1)
+
+          print(f'Bitácora: {len(entradas)} entradas indexadas.')
+          PY
+
+      - name: Generar el índice de mocks
+        run: |
+          python3 - <<'PY'
+          import glob, html, os, re
+
+          carpeta = 'docs/mocks'
+          if not os.path.isdir(carpeta):
+              print('No hay docs/mocks/: nada que indexar.')
+              raise SystemExit
+
+          def etiqueta(texto, patron, defecto):
+              m = re.search(patron, texto, re.I | re.S)
+              return m.group(1).strip() if m else defecto
+
+          mocks = []
+          for ruta in sorted(glob.glob(os.path.join(carpeta, '*.html')), reverse=True):
+              nombre = os.path.basename(ruta)
+              if nombre == 'index.html':
+                  continue
+              with open(ruta, encoding='utf-8') as f:
+                  texto = f.read()
+              mocks.append({
+                  'fichero': nombre,
+                  'titulo': etiqueta(texto, r'<title>(.*?)</title>', nombre),
+                  'build': etiqueta(texto, r'<meta\s+name="build"\s+content="([^"]*)"', 'sin build'),
+              })
+
+          filas = '\n'.join(
+              '      <li><a href="{f}">{t}</a> <span class="build">{b}</span></li>'.format(
+                  f=html.escape(m['fichero']),
+                  t=html.escape(m['titulo']),
+                  b=html.escape(m['build']),
+              )
+              for m in mocks
+          ) or '      <li class="vacio">Todavía no hay mocks archivados.</li>'
+
+          pagina = """<!doctype html>
+          <html lang="es">
+          <head>
+            <meta charset="utf-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1">
+            <title>Mocks archivados</title>
+            <style>
+              :root {{ color-scheme: light dark; }}
+              body {{ font-family: system-ui, -apple-system, sans-serif; margin: 0; padding: 2rem 1rem; background: #fafafa; color: #1a1a1a; }}
+              main {{ max-width: 32rem; margin: 0 auto; }}
+              h1 {{ font-size: 1.5rem; margin: 0 0 .25rem; }}
+              .sub {{ color: #555; margin: 0 0 1.5rem; }}
+              ul {{ list-style: none; margin: 0; padding: 0; }}
+              li {{ padding: .7rem 0; border-bottom: 1px solid #e2e2e2; }}
+              .build {{ color: #777; font-size: .8rem; font-variant-numeric: tabular-nums; }}
+              .vacio {{ color: #777; }}
+              a {{ color: #0b6e7a; text-underline-offset: 2px; }}
+              .pie {{ margin-top: 1.75rem; font-size: .85rem; color: #777; }}
+              @media (prefers-color-scheme: dark) {{
+                body {{ background: #14171a; color: #e8e8e8; }}
+                .sub, .build, .vacio, .pie {{ color: #9aa4ad; }}
+                li {{ border-color: #2c3238; }}
+                a {{ color: #7fd4de; }}
+              }}
+            </style>
+          </head>
+          <body>
+            <main>
+              <h1>Mocks archivados</h1>
+              <p class="sub">Las versiones anteriores de la portada, de la más reciente a la más antigua.</p>
+              <ul>
+          {filas}
+              </ul>
+              <p class="pie"><a href="../">Portada</a> · <a href="../bitacora.html">Bitácora</a><br>
+              Esta página se genera sola en cada publicación a partir de los ficheros de docs/mocks/. Nadie la edita a mano.</p>
+            </main>
+          </body>
+          </html>
+          """.format(filas=filas)
+
+          with open(os.path.join(carpeta, 'index.html'), 'w', encoding='utf-8') as f:
+              f.write(pagina)
+
+          print(f'Mocks: {len(mocks)} indexados.')
+          PY
+
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+        with:
+          enablement: true
+
+      - name: Upload docs artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: docs
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

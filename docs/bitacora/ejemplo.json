@@ -1,0 +1,32 @@
+{
+  "fecha": "2026-09-08T18:30:00+02:00",
+  "titulo": "Pantalla de inicio de sesión en el mock",
+  "objetivo": "Añadir la primera pantalla real al mock y dejarla publicada para probarla desde el móvil.",
+  "prompts": [
+    {
+      "texto": "Añade a docs/index.html una pantalla de inicio de sesión (usuario, contraseña, botón). Sube el build a 002, archiva el mock anterior en docs/mocks/ y publica. Dime cuándo puedo verlo.",
+      "nota": "Transcripción de lo pedido en la sesión, no una copia literal palabra por palabra."
+    },
+    {
+      "texto": "El botón queda muy pegado al campo de contraseña. Sepáralo y haz que ocupe todo el ancho en móvil."
+    }
+  ],
+  "cambios": [
+    "docs/index.html: formulario de acceso con usuario, contraseña y botón a ancho completo por debajo de 520 px.",
+    "docs/mocks/001-inicio.html: archivado el mock anterior.",
+    "Build actualizado a MP-B1-20260908-002."
+  ],
+  "sha": "1810265",
+  "sha_completo": "1810265f3c2a9d84b71e05c6a2f8d3419b7e0c22",
+  "run": "17482930561",
+  "mock": "mocks/002-acceso.html",
+  "build": "MP-B1-20260908-002",
+  "pagina": "index.html",
+  "fly": null,
+  "pendiente": [
+    "Decidir si el acceso lleva recuperación de contraseña",
+    "Activar Fly cuando haya que validar credenciales de verdad"
+  ],
+  "enlaces": [],
+  "notas": ""
+}

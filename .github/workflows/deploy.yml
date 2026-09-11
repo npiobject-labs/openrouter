@@ -1,0 +1,145 @@
+name: Desplegar backend en Fly.io
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'app/**'
+      - '.github/workflows/deploy.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: fly-deploy
+  cancel-in-progress: false
+
+jobs:
+  desplegar:
+    name: Construir y desplegar
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+      # Variable de repositorio opcional; si existe, manda sobre el nombre derivado.
+      FLY_APP_VAR: ${{ vars.FLY_APP }}
+    steps:
+      # Fly es opcional: sin secreto el workflow termina en verde con un aviso.
+      - name: Comprobar si Fly esta configurado
+        id: fly
+        run: |
+          if [ -z "${FLY_API_TOKEN}" ]; then
+            echo "configurado=false" >> "$GITHUB_OUTPUT"
+            echo "Fly no configurado: ver ARRANQUE.md, seccion Fly" >> "$GITHUB_STEP_SUMMARY"
+            echo "Fly no configurado: ver ARRANQUE.md, seccion Fly"
+          else
+            echo "configurado=true" >> "$GITHUB_OUTPUT"
+            echo "Token presente (valor oculto)."
+          fi
+
+      # Nombre de la app: variable FLY_APP si existe; si no, <repo>-<owner> en
+      # minusculas, saneado a [a-z0-9-] y recortado a 30 caracteres.
+      - name: Determinar el nombre de la app
+        id: app
+        if: steps.fly.outputs.configurado == 'true'
+        run: |
+          if [ -n "${FLY_APP_VAR}" ]; then
+            app="${FLY_APP_VAR}"
+            origen="variable de repositorio FLY_APP"
+          else
+            nombre="${GITHUB_REPOSITORY#*/}"
+            owner="${GITHUB_REPOSITORY%%/*}"
+            app="$(printf '%s-%s' "${nombre}" "${owner}" \
+              | tr '[:upper:]' '[:lower:]' \
+              | tr -c 'a-z0-9-' '-' \
+              | cut -c1-30 \
+              | sed 's/-*$//')"
+            origen="derivado de ${GITHUB_REPOSITORY}"
+          fi
+          if [ -z "${app}" ]; then
+            echo "::error::No se pudo determinar el nombre de la app de Fly."
+            exit 1
+          fi
+          echo "App de Fly: ${app} (${origen})"
+          echo "app=${app}" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout
+        if: steps.fly.outputs.configurado == 'true'
+        uses: actions/checkout@v5
+
+      - name: Instalar flyctl
+        if: steps.fly.outputs.configurado == 'true'
+        uses: superfly/flyctl-actions/setup-flyctl@master
+
+      - name: Crear la app si no existe
+        if: steps.fly.outputs.configurado == 'true'
+        env:
+          FLY_APP: ${{ steps.app.outputs.app }}
+        run: flyctl apps create "${FLY_APP}" --org desdemovil || true
+
+      - name: Fijar BUILD_ID con el SHA del commit
+        if: steps.fly.outputs.configurado == 'true'
+        env:
+          FLY_APP: ${{ steps.app.outputs.app }}
+        run: flyctl secrets set "BUILD_ID=${GITHUB_SHA}" --app "${FLY_APP}" --stage
+
+      - name: Desplegar en Fly.io
+        if: steps.fly.outputs.configurado == 'true'
+        env:
+          FLY_APP: ${{ steps.app.outputs.app }}
+        run: flyctl deploy app --app "${FLY_APP}" --remote-only --ha=false
+
+      - name: Verificar /salud
+        if: steps.fly.outputs.configurado == 'true'
+        env:
+          FLY_APP: ${{ steps.app.outputs.app }}
+          SHA: ${{ github.sha }}
+        run: |
+          url="https://${FLY_APP}.fly.dev/salud"
+          echo "Verificando ${url} (se espera build=${SHA})"
+          for intento in $(seq 1 10); do
+            respuesta="$(curl -fsS --max-time 20 "${url}" || true)"
+            echo "Intento ${intento}/10: ${respuesta:-<sin respuesta>}"
+            if printf '%s' "${respuesta}" | grep -q "${SHA}"; then
+              echo "OK: /salud responde con el build ${SHA}"
+              exit 0
+            fi
+            if [ "${intento}" -lt 10 ]; then
+              sleep 15
+            fi
+          done
+          echo "::error::/salud no devolvio el SHA ${SHA} tras 10 intentos (150 s)."
+          exit 1
+
+      # Lo que consume docs/holamundo.html desde Pages: cuerpo exacto y CORS.
+      - name: Verificar /holamundo
+        if: steps.fly.outputs.configurado == 'true'
+        env:
+          FLY_APP: ${{ steps.app.outputs.app }}
+        run: |
+          url="https://${FLY_APP}.fly.dev/holamundo"
+          cabeceras="$(curl -fsS --max-time 20 -D - -o /tmp/cuerpo "${url}")"
+          cuerpo="$(cat /tmp/cuerpo)"
+          echo "Respuesta: ${cuerpo}"
+          [ "${cuerpo}" = "holamundo" ] || { echo "::error::/holamundo devolvio '${cuerpo}'"; exit 1; }
+          printf '%s' "${cabeceras}" | grep -qi '^access-control-allow-origin: \*' \
+            || { echo "::error::/holamundo sin cabecera CORS"; exit 1; }
+          echo "OK: /holamundo responde 'holamundo' con CORS"
+
+      - name: Resumen del despliegue
+        if: success() && steps.fly.outputs.configurado == 'true'
+        env:
+          FLY_APP: ${{ steps.app.outputs.app }}
+        run: |
+          region="$(sed -n 's/^primary_region *= *"\(.*\)"/\1/p' app/fly.toml)"
+          {
+            echo "### Backend desplegado en Fly.io"
+            echo ""
+            echo "- App: \`${FLY_APP}\` (region \`${region}\`)"
+            echo "- URL: https://${FLY_APP}.fly.dev/"
+            echo "- Salud: https://${FLY_APP}.fly.dev/salud"
+            echo "- Hola mundo: https://${FLY_APP}.fly.dev/holamundo"
+            echo "- Comprobacion desde Pages: https://${GITHUB_REPOSITORY%%/*}.github.io/${GITHUB_REPOSITORY#*/}/holamundo.html"
+            echo "- Build (SHA): \`${GITHUB_SHA}\`"
+          } >> "$GITHUB_STEP_SUMMARY"

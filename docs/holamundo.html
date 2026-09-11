@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="build" content="DM-B3-20260910-002">
+  <!-- App de Fly: <repo>-<owner>, el mismo nombre que deriva deploy.yml.
+       Si el proyecto usa la variable FLY_APP con otro nombre, cambia este
+       content o abre la pagina con ?app=<nombre>. -->
+  <meta name="fly-app" content="desdemovil-npiobject-labs">
+  <title>DesdeMovil · comprobación del backend</title>
+  <style>
+    body { font-family: system-ui, -apple-system, sans-serif; margin: 0; padding: 2rem; background: #fafafa; color: #1a1a1a; }
+    main { max-width: 40rem; margin: 0 auto; }
+    h1 { font-size: 1.5rem; margin: 0 0 .5rem; }
+    p { color: #555; line-height: 1.5; }
+    code { background: #eee; padding: .15rem .35rem; border-radius: 3px; }
+    a { color: #0b6e7a; text-underline-offset: 2px; }
+    .prueba { margin: 1.5rem 0; padding: 1rem 1.25rem; background: #fff; border: 1px solid #e2e2e2; border-radius: 6px; }
+    .prueba h2 { font-size: 1rem; margin: 0 0 .5rem; color: #555; font-weight: 600; }
+    .valor { font-size: 1.6rem; font-weight: 700; color: #0b6e7a; word-break: break-all; }
+    .valor.espera { color: #888; font-weight: 400; font-size: 1rem; }
+    .valor.error { color: #b00020; font-weight: 400; font-size: 1rem; }
+    .pie { margin-top: 1.75rem; padding-top: 1.25rem; border-top: 1px solid #e2e2e2; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>DesdeMovil · comprobación del backend</h1>
+    <p>Pages llama al backend en Fly.io desde el navegador. Si las dos cajas se rellenan, el frontend y el backend hablan entre sí.</p>
+
+    <section class="prueba">
+      <h2>GET /holamundo</h2>
+      <div id="holamundo" class="valor espera">Despertando el backend…</div>
+    </section>
+
+    <section class="prueba">
+      <h2>GET /salud</h2>
+      <div id="salud" class="valor espera">Esperando…</div>
+      <p style="margin:.5rem 0 0">Build desplegado: <code id="build">–</code></p>
+    </section>
+
+    <p>Backend: <a id="url" href="#"></a> · Build de la página: <code>DM-B3-20260910-002</code></p>
+    <p class="pie"><a href="./">Volver al mock</a> · <a href="bitacora.html">Bitácora</a></p>
+  </main>
+  <script>
+    const meta = document.querySelector('meta[name="fly-app"]').content;
+    const parametros = new URLSearchParams(location.search);
+    const app = parametros.get('app') || meta;
+    // Servida desde el PC por tools/arrancar.ps1: el backend es el local, no el de Fly.
+    const enLocal = ['localhost', '127.0.0.1'].includes(location.hostname);
+    const base = enLocal
+      ? location.protocol + '//' + location.hostname + ':' + (parametros.get('api') || '8080')
+      : 'https://' + app + '.fly.dev';
+    const enlace = document.getElementById('url');
+    enlace.href = base; enlace.textContent = base;
+
+    function pinta(id, texto, clase) {
+      const el = document.getElementById(id);
+      el.className = 'valor' + (clase ? ' ' + clase : '');
+      el.textContent = texto;
+    }
+    // La máquina se apaga sola sin tráfico: la primera llamada puede tardar unos segundos.
+    const opciones = { signal: AbortSignal.timeout(30000) };
+
+    fetch(base + '/holamundo', opciones)
+      .then(r => r.ok ? r.text() : Promise.reject(new Error('HTTP ' + r.status)))
+      .then(t => pinta('holamundo', t))
+      .catch(e => pinta('holamundo', 'Error: ' + e.message, 'error'));
+
+    fetch(base + '/salud', opciones)
+      .then(r => r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status)))
+      .then(j => {
+        pinta('salud', j.ok ? 'ok' : 'ok=false', j.ok ? '' : 'error');
+        document.getElementById('build').textContent = j.build || '?';
+      })
+      .catch(e => pinta('salud', 'Error: ' + e.message, 'error'));
+  </script>
+</body>
+</html>

@@ -1,0 +1,232 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="build" content="DM-B3-20260909-010">
+<title>DesdeMovil · guía revisada</title>
+<style>
+  :root { color-scheme: light dark; --bg:#fafafa; --fg:#1a1a1a; --mut:#5b5b5b; --bd:#e0e0e0; --card:#fff; --acc:#0b6bcb; --ok:#1a7f37; --ko:#b42318; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#141414; --fg:#ededed; --mut:#a8a8a8; --bd:#2e2e2e; --card:#1c1c1c; --acc:#69b1ff; --ok:#3fb950; --ko:#ff7b72; }
+  }
+  * { box-sizing: border-box; }
+  body { font-family: system-ui, -apple-system, "Segoe UI", sans-serif; margin:0; padding:2rem 1.25rem 4rem; background:var(--bg); color:var(--fg); line-height:1.55; }
+  main { max-width: 46rem; margin: 0 auto; }
+  h1 { font-size: 1.6rem; margin: 0 0 .25rem; }
+  h2 { font-size: 1.15rem; margin: 2.25rem 0 .5rem; padding-top:.75rem; border-top:1px solid var(--bd); }
+  h3 { font-size: .98rem; margin: 1.25rem 0 .35rem; }
+  p, li { color: var(--fg); }
+  .sub { color: var(--mut); margin: 0 0 1.5rem; }
+  code { background: color-mix(in srgb, var(--fg) 8%, transparent); padding: .1rem .35rem; border-radius: 3px; font-size: .9em; }
+  pre { background: var(--card); border:1px solid var(--bd); border-radius:6px; padding:.75rem .9rem; overflow-x:auto; font-size:.88rem; }
+  pre code { background:none; padding:0; }
+  table { border-collapse: collapse; width:100%; display:block; overflow-x:auto; }
+  th, td { border:1px solid var(--bd); padding:.4rem .6rem; text-align:left; font-size:.92rem; vertical-align:top; }
+  th { background: var(--card); }
+  a { color: var(--acc); }
+  .nota { background:var(--card); border:1px solid var(--bd); border-left:3px solid var(--acc); border-radius:0 6px 6px 0; padding:.7rem .9rem; margin:1rem 0; font-size:.94rem; }
+  .ok { color: var(--ok); font-weight:600; } .ko { color: var(--ko); font-weight:600; }
+  ol, ul { padding-left: 1.25rem; }
+  nav ul { list-style:none; padding:0; display:flex; flex-wrap:wrap; gap:.35rem .9rem; font-size:.9rem; }
+  footer { margin-top:3rem; padding-top:1rem; border-top:1px solid var(--bd); color:var(--mut); font-size:.88rem; }
+</style>
+</head>
+<body>
+<main>
+
+<h1>DesdeMovil · guía revisada</h1>
+<p class="sub">El método «PC arranca, móvil continúa», después de probarlo de verdad. Arranque rápido en <a href="https://github.com/npiobject-labs/DesdeMovil/blob/main/ARRANQUE.md">ARRANQUE.md</a>.</p>
+
+<nav><ul>
+  <li><a href="#idea">La idea</a></li>
+  <li><a href="#eficiencia">¿Es la opción más eficiente?</a></li>
+  <li><a href="#prompt">El prompt de arranque</a></li>
+  <li><a href="#plantilla">Qué trae</a></li>
+  <li><a href="#init">Inicialización</a></li>
+  <li><a href="#sesion">Ciclo de una sesión</a></li>
+  <li><a href="#verificar">Qué vale como verificación</a></li>
+  <li><a href="#pages">Pages</a></li>
+  <li><a href="#fly">Fly</a></li>
+  <li><a href="#drive">Drive</a></li>
+  <li><a href="#pc">PC</a></li>
+  <li><a href="#errores">Errores</a></li>
+</ul></nav>
+
+<h2 id="idea">La idea</h2>
+<p>El repositorio es la única fuente de verdad: código, planificación y decisiones. El trabajo se hace en sesiones de <a href="https://claude.ai/code">claude.ai/code</a> con el repo seleccionado, desde el móvil o desde la web, con el PC apagado. El PC solo sirve para arrancar el proyecto y, si hace falta, para bajar una copia de lectura.</p>
+<p>Tres reglas gobiernan todo lo demás:</p>
+<ul>
+  <li><strong>Nada se edita fuera del repo.</strong> Ni en Drive, ni en la copia local. Si algo difiere, gana el repo.</li>
+  <li><strong>Nada se verifica desde la sesión.</strong> El sandbox no tiene salida a internet: quien comprueba un despliegue es el propio workflow, que sí la tiene. Y ni <code>curl</code> ni la herramienta de lectura web del agente alcanzan <code>*.github.io</code> ni <code>*.fly.dev</code>: la mirada final a la página es tuya.</li>
+  <li><strong>El camino es siempre nube → PC.</strong> Nunca al revés.</li>
+</ul>
+
+<h2 id="eficiencia">¿Es la opción más eficiente?</h2>
+<p>Depende de una sola pregunta: <strong>¿se puede verificar el proyecto entero desde un workflow de GitHub?</strong> Si la respuesta es sí, este flujo es difícil de batir para un desarrollador en solitario. Si es no, es la opción equivocada y conviene saberlo antes de empezar.</p>
+
+<h3>Lo que gana</h3>
+<ul>
+  <li><strong>Cero instalación y cero PC encendido.</strong> Cada sesión arranca con el repo clonado y las herramientas listas. El coste de contexto entre sesiones es nulo porque el contexto vive en <code>CLAUDE.md</code> y en <code>docs/planificacion/</code>, no en la memoria de nadie.</li>
+  <li><strong>La verificación es un contrato, no una opinión.</strong> El agente no puede decir «ya funciona»: tiene que citar SHA, URL y <code>build</code> de un run en <code>success</code>. Eso elimina la fuente principal de trabajo perdido, que es el «creo que está».</li>
+  <li><strong>Un proyecto nuevo son dos clics.</strong> Crear el repo desde la plantilla y cambiar un desplegable. Todo lo demás lo hace <code>init-plantilla.yml</code>, y falla el run si deja algún rastro.</li>
+  <li><strong>Lo opcional no estorba.</strong> Sin token de Fly —repo privado o fuera de la organización— <code>deploy.yml</code> termina en verde y no hace nada. Sin id de Drive, el paso se omite. No hay checks rojos permanentes por piezas que no usas.</li>
+</ul>
+
+<h3>Lo que cuesta</h3>
+<ul>
+  <li><strong>El bucle interno es lento.</strong> Cada verificación es push → run → consulta: entre uno y dos minutos para Pages, varios para el primer despliegue de Fly (compila Rust). En local serían segundos. Compensa solo si cada iteración lleva trabajo real; no compensa para ajustar un color.</li>
+  <li><strong>Revisar desde el móvil es incómodo.</strong> Leer un diff largo o un log de 500 líneas en una pantalla de seis pulgadas no es razonable. La consecuencia práctica es que el agente tiene que trabajar en incrementos pequeños y contar el resultado en cinco líneas, no en cincuenta.</li>
+  <li><strong>Lo que no cabe en un workflow no existe.</strong> Sin daemon de Docker en el sandbox, sin acceso a las URLs desplegadas, sin depuración interactiva. Un proyecto que necesite mirar una interfaz nativa, hardware o una herramienta local pesada no encaja.</li>
+  <li><strong>Los pasos manuales existen y muerden.</strong> Son dos, pero el segundo —cambiar el Source de Pages— se olvidó en el propio repo de la plantilla y nadie lo notó durante horas, porque los runs seguían en verde. Lo que no puede automatizarse tiene que poder <em>detectarse</em>.</li>
+</ul>
+
+<h3>Frente a las alternativas</h3>
+<table>
+  <thead><tr><th>Opción</th><th>Bucle interno</th><th>PC apagado</th><th>Verificación</th><th>Encaja cuando</th></tr></thead>
+  <tbody>
+    <tr><td>Claude Code en el PC</td><td>segundos</td><td class="ko">no</td><td>local, a ojo del humano</td><td>proyectos con herramientas locales pesadas, GUI, hardware, depuración interactiva</td></tr>
+    <tr><td><strong>Este flujo</strong> (sesión en la nube + workflows)</td><td>1–2 min</td><td class="ok">sí</td><td>por workflow, con contrato</td><td>web, estático, backends pequeños, documentación; todo lo que un runner de GitHub pueda comprobar</td></tr>
+    <tr><td>Híbrido: PC arranca, nube continúa</td><td>mixto</td><td class="ok">sí, tras el arranque</td><td>por workflow</td><td>lo mismo, cuando el arranque necesita algo local (secretos, decisiones de diseño, un prompt trabajado)</td></tr>
+    <tr><td>Codespaces / IDE remoto</td><td>segundos</td><td class="ok">sí</td><td>local en el remoto</td><td>proyectos grandes con tooling propio; cuesta dinero por hora y pierde el contrato de verificación</td></tr>
+  </tbody>
+</table>
+<p><strong>Veredicto:</strong> para desarrollo general de proyectos web y de documentación con un desarrollador solo, el híbrido es la opción más eficiente <em>de las que permiten apagar el PC</em>. No es la más rápida por iteración —eso es el PC—, pero es la que menos trabajo pierde, porque cada paso queda verificado y anotado en el repo. Elegirla para un proyecto que necesite bucles de segundos o herramientas locales es elegir mal.</p>
+<div class="nota">Regla práctica: si en la primera hora de proyecto ya sabes que vas a querer abrir un depurador, no uses este flujo. Si lo que vas a querer es «mira si esto se ve bien» y «comprueba que responde», es exactamente para esto.</div>
+
+<h2 id="prompt">El prompt de arranque</h2>
+<p>El flujo completo tiene tres piezas, y conviene no mezclarlas:</p>
+<ol>
+  <li><strong>El prompt del proyecto</strong>: qué se construye, para quién, con qué criterio de terminado. Es lo que un generador de prompts —o tú— redacta en el PC. Es único por proyecto.</li>
+  <li><strong>Las reglas del método</strong>: cómo se trabaja, qué vale como verificación, cómo se cierra una sesión. Son las mismas para todos los proyectos y <strong>ya viven en <code>CLAUDE.md</code></strong>, que el agente lee solo al abrir el repo.</li>
+  <li><strong>El primer mensaje de la sesión</strong>: corto, porque las otras dos piezas ya están donde tienen que estar.</li>
+</ol>
+<p>El error a evitar es pegar las reglas del método dentro del prompt del proyecto. Duplican lo que hay en <code>CLAUDE.md</code>, se desactualizan y alargan un texto que se va a leer en un móvil. <strong>El prompt del proyecto describe el qué; el repo ya sabe el cómo.</strong></p>
+
+<h3>Primera sesión de un repo recién creado</h3>
+<pre><code>Verifica que este proyecto quedó inicializado desde la plantilla y que Pages responde:
+run de init-plantilla.yml en success, sin residuos, Parámetros de CLAUDE.md rellenada,
+docs/plantilla/ con la historia y docs/planificacion/ limpia. Si el Source de Pages
+sigue en «Deploy from a branch» (verás un run «pages build and deployment» con
+Build with Jekyll), dímelo: ese paso es mío. Cuando esté todo, dame SHA, URL y build.</code></pre>
+
+<h3>Sesiones siguientes</h3>
+<pre><code>&lt;el prompt del proyecto, o la tarea concreta de hoy&gt;
+
+Trabaja según CLAUDE.md. Incrementos pequeños, cada uno con push a main y verificado
+por el run del workflow antes de avisar. Cierra con el resumen de cinco líneas.</code></pre>
+<p>Eso es todo lo que hace falta añadir. Si el generador de prompts produce algo más largo que esto para la parte del método, está repitiendo <code>CLAUDE.md</code>.</p>
+
+<h2 id="plantilla">Qué trae la plantilla</h2>
+<table>
+  <thead><tr><th>Pieza</th><th>Para qué</th><th>Obligatorio</th></tr></thead>
+  <tbody>
+    <tr><td><code>docs/</code> + <code>pages.yml</code></td><td>Mock estático publicado en GitHub Pages en cada push a <code>main</code>.</td><td>Sí</td></tr>
+    <tr><td><code>init-plantilla.yml</code></td><td>Deja el repo recién creado entero con su nombre y se apaga solo.</td><td>Sí (una vez)</td></tr>
+    <tr><td><code>CLAUDE.md</code></td><td>Las reglas del método y los parámetros del proyecto. Es lo que el agente lee al empezar.</td><td>Sí</td></tr>
+    <tr><td><code>app/</code> + <code>deploy.yml</code></td><td>Backend en Rust (axum + tokio) desplegado en Fly.io, con verificación de <code>/salud</code>.</td><td>No</td></tr>
+    <tr><td>Carpeta de Drive</td><td>Copia de seguridad de <code>docs/planificacion/</code> al cerrar sesión.</td><td>No</td></tr>
+    <tr><td><code>tools/*.ps1</code></td><td>Aterrizar una copia de lectura en el PC y saber si está al día.</td><td>No</td></tr>
+  </tbody>
+</table>
+
+<h2 id="init">Inicialización</h2>
+<p>Crear el repo con <em>Use this template</em> y cambiar el desplegable de Pages: esos son los dos pasos manuales, y son los únicos. El resto lo hace <code>init-plantilla.yml</code> en el primer push —trece segundos después de crear el repo, en la prueba real— sin nada que rellenar.</p>
+<table>
+  <thead><tr><th>Qué deriva</th><th>De dónde</th><th>Dónde lo aplica</th></tr></thead>
+  <tbody>
+    <tr><td>Nombre y owner</td><td><code>github.repository</code></td><td><code>CLAUDE.md</code>, <code>README.md</code>, <code>ARRANQUE.md</code>, <code>docs/*.html</code>, <code>tools/*.ps1</code>, <code>app/src/main.rs</code></td></tr>
+    <tr><td>Slug del paquete</td><td>nombre en minúsculas, saneado a <code>[a-z0-9-]</code></td><td><code>app/Cargo.toml</code>, <code>app/Cargo.lock</code>, <code>app/Dockerfile</code> (<code>&lt;slug&gt;-backend</code>)</td></tr>
+    <tr><td>Usuario del runtime</td><td>slug sin guiones</td><td><code>app/Dockerfile</code></td></tr>
+    <tr><td>Prefijo del <code>build</code></td><td>iniciales (<code>CasaVerde</code> → <code>CV-B1</code>)</td><td><code>CLAUDE.md</code>, <code>docs/*.html</code></td></tr>
+  </tbody>
+</table>
+<p>Además rellena la sección <strong>Parámetros</strong> de <code>CLAUDE.md</code> dejando vacío el id de Drive, aparta la planificación heredada a <code>docs/plantilla/</code> y reordena <code>Cargo.lock</code>, que el renombrado deja fuera del orden que mantiene cargo.</p>
+<div class="nota">El checklist no es una lista que revisar a ojo: el último paso hace <code>grep</code> de todo lo que huela a plantilla fuera de <code>docs/plantilla/</code> y <strong>falla el run</strong> si encuentra algo, diciendo fichero y línea.</div>
+<h3>Por qué no se borra a sí mismo</h3>
+<p>Porque no puede. <code>GITHUB_TOKEN</code> no tiene permiso para crear ni modificar nada bajo <code>.github/workflows/</code>, y si el commit toca un solo fichero de esa carpeta GitHub <strong>rechaza el push entero</strong>: se perdería toda la inicialización. Por eso el workflow no edita ni borra nada de ahí; borra el marcador <code>.plantilla-pendiente</code> y se deshabilita por la API. Queda en el repo, apagado.</p>
+<h3>El primer run sale en rojo</h3>
+<p><em>Use this template</em> dispara los tres workflows con el commit inicial, antes de que hayas tocado Settings. Cae <code>pages.yml</code> en <code>Configure Pages</code>; <code>deploy.yml</code> despliega ya, con el token heredado de la organización; <code>init-plantilla.yml</code> hace su trabajo y relanza Pages al acabar. Un solo run rojo, y no es un problema.</p>
+
+<h2 id="sesion">Ciclo de una sesión</h2>
+<ol>
+  <li>Abres claude.ai/code con el repo seleccionado y pegas el prompt del proyecto o la tarea del día.</li>
+  <li>El agente lee <code>CLAUDE.md</code> y trabaja en incrementos pequeños.</li>
+  <li>Cada incremento: push a <code>main</code> → los workflows despliegan y <em>verifican</em>.</li>
+  <li>El agente consulta la API de GitHub Actions y no avisa hasta que el run del SHA está en <code>success</code>.</li>
+  <li>Cierre: resumen de cinco líneas en <code>docs/planificacion/sesiones/AAAAMMDD-HHMM.md</code>, entrada nueva en <code>docs/bitacora/AAAAMMDD-HHMM.json</code> (publicada en <a href="bitacora.html">bitacora.html</a>), y copia a Drive si está configurado.</li>
+</ol>
+<p><code>docs/planificacion/</code> es la carpeta del proyecto; en un repo generado arranca vacía, con la historia de la plantilla apartada en <code>docs/plantilla/</code>. Ahí va todo lo que la próxima sesión necesita saber: es la memoria del proyecto.</p>
+<div class="nota">Un aviso de «ya puedes probarlo» sin SHA, URL y número de <code>build</code> no vale. Es la única señal de que la verificación se hizo de verdad.</div>
+
+<h2 id="verificar">Qué vale como verificación, y qué no</h2>
+<table>
+  <thead><tr><th>Señal</th><th>Qué prueba</th><th>Qué no prueba</th></tr></thead>
+  <tbody>
+    <tr><td><code>pages.yml</code> en <code>success</code></td><td>que el artefacto de <code>docs/</code> se subió y se creó un despliegue</td><td>que el sitio lo esté <em>sirviendo</em>. Si el Source sigue en rama, el constructor antiguo lo pisa y el run sigue verde</td></tr>
+    <tr><td>Ausencia de runs <code>pages build and deployment</code></td><td>que el Source está en «GitHub Actions»</td><td>—</td></tr>
+    <tr><td><code>deploy.yml</code> en <code>success</code> con <em>Verificar /salud</em></td><td>que Fly sirve el SHA exacto del commit: el workflow hace <code>curl</code> y falla si no cuadra</td><td>que la página de <code>/</code> se vea bien: eso sigue siendo tuyo</td></tr>
+    <tr><td>Un ensayo en el sandbox</td><td>la lógica del script</td><td>los permisos del token con el que corre en GitHub. El fallo del push de la inicialización solo salió en un repo real</td></tr>
+    <tr><td>«Lo he revisado y está bien»</td><td>nada</td><td>todo</td></tr>
+  </tbody>
+</table>
+<p><code>pages.yml</code> solo se puede verificar en <code>main</code>: el entorno <code>github-pages</code> únicamente despliega desde la rama por defecto. <code>deploy.yml</code> acepta cualquier rama.</p>
+
+<h2 id="pages">Pages</h2>
+<p><code>pages.yml</code> publica el contenido de <code>docs/</code> en cada push a <code>main</code>. El paso manual es cambiar, una vez por repo, <strong>Settings → Pages → Source</strong> de «Deploy from a branch» a «GitHub Actions». Si se deja como viene, el enlace funciona pero sirve el README en vez del mock, y cualquier <code>docs/x.html</code> da 404 en <code>/x.html</code> porque el sitio cuelga de la raíz del repo.</p>
+<p>Si el workflow corre antes del cambio falla con <code>Create Pages site failed. Error: Resource not accessible by integration</code>. El <code>enablement: true</code> de <code>configure-pages</code> no lo evita: el token del job no puede crear el sitio.</p>
+<p><code>docs/index.html</code> es el mock vivo; los anteriores se archivan en <code>docs/mocks/NNN-nombre.html</code>. Cada uno lleva <code>&lt;meta name="build"&gt;</code> con un número nuevo, que es lo que se cita al avisar. El sitio es público: ahí no van claves, endpoints internos ni datos reales.</p>
+
+<h2 id="fly">Fly (opcional)</h2>
+<p><code>deploy.yml</code> mira primero si existe el secreto <code>FLY_API_TOKEN</code>. Ya no se crea uno por proyecto: es un <strong>secreto de la organización <code>npiobject-labs</code></strong> y lo heredan todos sus repos <strong>públicos</strong>, así que el workflow despliega sin que actives nada. En un repo privado (plan Free) o fuera de la organización el secreto no llega, y entonces sí termina en verde con el aviso «Fly no configurado» sin desplegar nada.</p>
+<h3>Nombre de la app</h3>
+<p>Sale de la variable de repositorio <code>FLY_APP</code> si existe; si no, <code>&lt;repo&gt;-&lt;owner&gt;</code> en minúsculas, saneado y recortado a 30 caracteres. El nombre es <strong>único en todo Fly.io</strong>: si está cogido por otra cuenta, <code>flyctl apps create</code> lo calla con <code>|| true</code> y el fallo asoma más tarde, en el <code>deploy</code>, con un mensaje que no apunta a la causa. El sufijo del owner existe para que eso no pase.</p>
+<h3>Verificación</h3>
+<p>El backend expone <code>GET /salud</code> con <code>{"ok":true,"build":"&lt;SHA&gt;"}</code>. El último paso del despliegue hace <code>curl</code> hasta diez veces y falla el run si la respuesta no contiene el SHA del commit. No hay forma de que un despliegue roto pase por bueno.</p>
+<div class="nota">El primer despliegue compila Rust en remoto y tarda varios minutos. Los siguientes van más rápido por la caché del builder. La máquina se para sola sin tráfico: la primera visita tras un rato tarda un segundo en despertarla.</div>
+<p>El backend sirve texto plano en <code>/</code>. Si quieres que sirva el mock, hay que llevar <code>docs/index.html</code> al contexto de build (<code>app/</code>) desde el workflow: se probó en un repo de ensayo y funciona, pero acopla dos piezas que en la plantilla son independientes a propósito.</p>
+
+<h2 id="drive">Drive (opcional)</h2>
+<p>Solo destino de copias, nunca origen. Se activa poniendo el id de una carpeta normal de <em>Mi unidad</em> en la fila «Carpeta de Drive (id)» de la sección <strong>Parámetros</strong> de <code>CLAUDE.md</code>. Con la fila vacía, el paso se omite sin comentarlo.</p>
+<ul>
+  <li>Solo se escribe al cerrar sesión, y solo copias de lo que ya está en el repo.</li>
+  <li>Solo crear o sobrescribir por nombre: nunca borrar ni renombrar. El conector no actualiza contenido, así que en la práctica cada versión nueva va con sufijo <code>-v2</code>, <code>-v3</code>.</li>
+  <li>Sin conversión a formato Google (<code>disableConversionToGoogleType=true</code>).</li>
+  <li>Tiene que ser una carpeta normal, no un «Proyecto» de Drive: en esos el conector no puede escribir.</li>
+</ul>
+
+<h2 id="pc">Aterrizar en el PC</h2>
+<pre><code>&amp; ([scriptblock]::Create((irm https://raw.githubusercontent.com/npiobject-labs/DesdeMovil/main/tools/aterrizar.ps1)))</code></pre>
+<p>Crea <code>%USERPROFILE%\C - Desarrollo\DesdeMovil\repo</code> con un clon de <code>main</code>. Es idempotente y sobrescribe sin preguntar (<code>reset --hard</code> + <code>clean -fdx</code>): la copia local es un espejo de solo lectura. Si <code>repo\</code> existe con ficheros y no es un clon, no toca nada, lista lo que hay y termina con error. <code>tools\estado.ps1</code> responde a «¿estoy al día?». Ambos aceptan <code>-Proyecto</code>, <code>-Owner</code>, <code>-Remote</code>, <code>-Root</code> y <code>-Rama</code>.</p>
+
+<h2 id="errores">Errores frecuentes</h2>
+<table>
+  <thead><tr><th>Síntoma</th><th>Causa</th></tr></thead>
+  <tbody>
+    <tr><td>Pages sirve el README, no el mock; <code>docs/x.html</code> da 404 en <code>/x.html</code></td><td>Source sigue en «Deploy from a branch». Señal: un run <code>pages build and deployment</code> con <code>Build with Jekyll</code> tras cada push. Los runs verdes de <code>pages.yml</code> no lo detectan.</td></tr>
+    <tr><td><code>Create Pages site failed… Resource not accessible by integration</code></td><td>Pages sin activar aún. El <code>enablement: true</code> del workflow no basta. Cambia el Source y relanza.</td></tr>
+    <tr><td>El repo nuevo sigue con el nombre de la plantilla</td><td><code>init-plantilla.yml</code> no llegó a lanzarse o falló: mira su run. Relanzar: Actions → Inicializar plantilla → Run workflow.</td></tr>
+    <tr><td><code>init-plantilla.yml</code> falla en «Comprobar que no queda ningun residuo»</td><td>Quedó algo de la plantilla fuera de <code>docs/plantilla/</code>. El log lista fichero y línea.</td></tr>
+    <tr><td><code>init-plantilla.yml</code> falla en «Commit y push» con <code>without workflows permission</code></td><td>El commit toca algo bajo <code>.github/workflows/</code>; <code>GITHUB_TOKEN</code> no puede y GitHub rechaza el push entero.</td></tr>
+    <tr><td><code>deploy.yml</code> verde pero sin URL</td><td>Camino «Fly no configurado»: el secreto de organización <code>FLY_API_TOKEN</code> no llega al repo, por privado o por estar fuera de <code>npiobject-labs</code>.</td></tr>
+    <tr><td>Fly despliega pero la app no es tuya</td><td>Nombre de app cogido en Fly.io; <code>apps create</code> lo calla. Define la variable <code>FLY_APP</code>.</td></tr>
+    <tr><td><code>/salud</code> devuelve otro SHA</td><td>Estás mirando un despliegue anterior, o la máquina despertando; comprueba el run del SHA que enviaste.</td></tr>
+    <tr><td>El mock no cambia al recargar</td><td>Caché del navegador. Mira el <code>build</code> en el código fuente; recarga forzada.</td></tr>
+    <tr><td>Un diff en <code>Cargo.lock</code> que no has hecho, la primera vez que compilas</td><td>Ya no debería pasar: la inicialización reordena el fichero. Si pasa, es un proyecto generado antes de esa corrección.</td></tr>
+    <tr><td><code>CONNECT tunnel failed, 403</code> o «egress blocked» en la sesión</td><td>Normal: el sandbox no alcanza Pages ni Fly, ni con <code>curl</code> ni con la lectura web. Verifica por la API de Actions; la página la miras tú.</td></tr>
+  </tbody>
+</table>
+
+<h2>De dónde sale esto</h2>
+<p>Todo lo de arriba se probó, y lo que falló está contado con sus runs: <a href="https://github.com/npiobject-labs/DesdeMovil/blob/main/docs/planificacion/portado-hijos.md">portado-hijos.md</a> (lo que se aprendió de los dos primeros proyectos generados), <a href="https://github.com/npiobject-labs/DesdeMovil/blob/main/docs/planificacion/prueba-init.md">prueba-init.md</a> (la primera inicialización real y el fallo del push) y los resúmenes de <code>docs/planificacion/sesiones/</code>.</p>
+
+<footer>
+  <a href="https://github.com/npiobject-labs/DesdeMovil">npiobject-labs/DesdeMovil</a> ·
+  <a href="index.html">mock</a> ·
+  <a href="guiaNew.html">guía paso a paso</a> ·
+  <a href="https://github.com/npiobject-labs/DesdeMovil/blob/main/CLAUDE.md">CLAUDE.md</a>
+</footer>
+
+</main>
+</body>
+</html>

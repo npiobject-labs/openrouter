@@ -1,0 +1,17 @@
+[package]
+# PLANTILLA: si cambias este nombre, cambia tambien la ruta del binario en
+# app/Dockerfile (COPY --from=builder .../desdemovil-backend).
+name = "desdemovil-backend"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+axum = "0.8"
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "signal"] }
+serde_json = "1"
+
+[profile.release]
+opt-level = "z"
+lto = true
+codegen-units = 1
+strip = true
