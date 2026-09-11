@@ -113,3 +113,27 @@ Ideas diferenciales:
   medición y en la reutilización, no en la conversación.
 - **Guardar el contenido de los prompts por defecto.** Solo metadatos; el contenido,
   opcional y nunca en el repositorio público.
+
+## Entrada 03 — 2026-09-11 — Decisión de naturaleza del producto
+
+El usuario acepta las sugerencias de la entrada 02 como material a tener en cuenta en el
+desarrollo, y fija el rumbo: **esto no es una app, es un conjunto de servicios pensados
+para ser llamados por otras apps**. Confirmado por ambas partes.
+
+Consecuencias que arrastra esa decisión (a resolver en planificación):
+
+- **El contrato manda.** Lo primero que se congela es la forma de los endpoints y su
+  versionado (`/v1/...`). El código de dentro puede cambiar; la superficie, no.
+- **La interfaz web deja de ser el producto** y pasa a ser consola de operación y cliente
+  de referencia: sirve para probar, ver el catálogo y leer el consumo, no para «usar la
+  app».
+- **Autenticación entre app y servicio.** Cada app consumidora necesita su propia
+  credencial, distinta de la clave de OpenRouter, que nunca sale del servicio.
+- **Identidad de app en cada llamada.** Sin una etiqueta por app no hay consumo por app,
+  ni presupuestos, ni facturación interna.
+- **El presupuesto es un servicio más**, consultable: la app destino puede preguntar si
+  le queda margen antes de gastar.
+- **El cliente mínimo** (JavaScript y crate de Rust) sube de prioridad: es la forma real
+  en que otras apps consumirán esto.
+- **Estabilidad por encima de funcionalidad.** Si una app depende del servicio, un cambio
+  incompatible rompe a terceros; toca disciplina de versiones desde el principio.
