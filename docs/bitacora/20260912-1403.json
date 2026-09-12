@@ -1,0 +1,84 @@
+{
+  "fecha": "2026-09-12T14:03:00+02:00",
+  "titulo": "Contrato de la API publicado y etapa 3: medición por llamada",
+  "objetivo": "Dejar los servicios de las etapas 1 y 2 usables por otra aplicación: un solo formato de error, documentación generada desde el contrato, y la etapa 3 para saber qué consumió cada llamada.",
+  "prompts": [
+    {
+      "texto": "Hay abierta otra sesión en el local aquí en open router la puedes ver?",
+      "nota": "No habia sesion local: habia otra sesion en la nube sobre el mismo repo, que quedo en reposo poco despues."
+    },
+    {
+      "texto": "Espera no hagas nada"
+    },
+    {
+      "texto": "Hola, podrás leer donde nos hemos quedado en la sesión en local?"
+    },
+    {
+      "texto": "He hecho consultas a modelos de pago y funcionan los modelos gratuitos de momento los dejamos"
+    },
+    {
+      "texto": "Quiero saber si la etapa 1 y 2 es fácilmente y amable desde una segunda aplicación o sea si hay una satis mediante las cuales se puede hacer que se pueden hacer esas llamadas a los servicios que ofrecen la etapa 1 y 2",
+      "nota": "Dictado por voz: \"una satis\" es \"unas APIs\"."
+    },
+    {
+      "texto": "Eh crees que el tener dos formatos de errores puede hacer que en las apps donde se utilice estas estas APIs de open router puedan traer problemas si es así si puede haber problemas habrá que reparar eso por otra parte eh el stream deseará en otra opción más adelante y con una sola clave de momento lo dejamos así"
+    },
+    {
+      "texto": "Primero genera la argumentación para las APIs de esta app piensa que las nuevas etapas van a aportar o van a traer nuevas APIs luego va a ser un documento o un HTML dinámico lo que tú consideres oportuno pero las APIs tienen que tener documentación para poder ser utilizadas por otras apps"
+    },
+    {
+      "texto": "Fusiona el PR y arranca la etapa 3"
+    },
+    {
+      "texto": "Fusionalo ya y lo compruebas sobre pages"
+    },
+    {
+      "texto": "Cierra la sesión con el resumen en dock etcétera etcétera y la entrada de bitácora"
+    }
+  ],
+  "cambios": [
+    "app/src/error.rs: sobre unico de error con message, code y type en ingles, el cuerpo original del proveedor en upstream y el id de uso como cabecera cuando el fallo ocurrio dentro de una llamada medida.",
+    "app/src/openrouter.rs: los rechazos de OpenRouter se traducen al sobre propio conservando su codigo de estado; metodo nuevo para consultar /generation y reconciliar el coste.",
+    "app/src/uso.rs: registro por llamada, anillo de las ultimas 1000 en memoria, estimacion de coste con los precios del catalogo y fecha ISO sin dependencias nuevas. Cuatro pruebas unitarias.",
+    "app/src/rutas/uso.rs: GET /v1/uso y GET /v1/uso/{id}, con 404 uso_desconocido.",
+    "app/src/rutas/chat.rs: mide cada llamada, la anota aunque falle, devuelve X-Uso-Id y lanza la reconciliacion en segundo plano.",
+    "app/src/catalogo.rs: precio de un modelo desde la copia en memoria, para estimar sin llamar a nadie.",
+    "app/src/main.rs: rutas de uso y X-Uso-Id expuesta en el CORS.",
+    "docs/openapi.json: contrato publicado y fuente unica, version 0.3.0, siete rutas con esquemas y ejemplos, once codigos de error y la hoja de ruta de las ocho etapas.",
+    "docs/api.html: documentacion que se pinta sola desde el contrato, sin dependencias externas, con ejemplos en curl, Python y JavaScript y URL base intercambiable.",
+    "docs/consola.html: ficha de respuesta con proveedor e id de registro y coste que se refina solo; panel nuevo con las ultimas llamadas medidas.",
+    ".github/workflows/deploy.yml: verifica el sobre de error con dos casos sin gasto y la forma de /v1/uso.",
+    "CLAUDE.md: reglas del sobre unico de error, de la medicion por llamada y del contrato como fuente unica de la documentacion."
+  ],
+  "sha": "e175912",
+  "sha_completo": "e1759129b50e175c2c3fe7b68917862be9f16c4f",
+  "run": "34690228724",
+  "mock": null,
+  "build": "OP-B1-20260912-011",
+  "pagina": "api.html",
+  "fly": "https://openrouter-npiobject-labs.fly.dev/salud",
+  "pendiente": [
+    "Probar desde la consola una consulta real y ver si el coste pasa de estimado a openrouter: confirmaria el supuesto de total_cost y provider_name",
+    "Etapa 4: persistencia en SQLite, agregados y exportacion",
+    "Drive: carpeta antigua de la cuenta vieja, carpeta 08 Openrouter y plan-etapas.md duplicado"
+  ],
+  "enlaces": [
+    {
+      "texto": "Documentacion de la API",
+      "url": "https://npiobject-labs.github.io/openrouter/api.html"
+    },
+    {
+      "texto": "Consola del servicio",
+      "url": "https://npiobject-labs.github.io/openrouter/consola.html"
+    },
+    {
+      "texto": "Pull request del contrato y los errores",
+      "url": "https://github.com/npiobject-labs/openrouter/pull/11"
+    },
+    {
+      "texto": "Pull request de la etapa 3",
+      "url": "https://github.com/npiobject-labs/openrouter/pull/12"
+    }
+  ],
+  "notas": "Los prompts son transcripcion literal, varios dictados por voz y con erratas de dictado que se han dejado tal cual; las notas aclaran lo que quisieron decir. Sin mock nuevo: ni la consola ni la pagina de documentacion son mocks. El cambio del formato de error es incompatible y se hizo ahora porque el unico consumidor era la propia consola. Ningun valor de clave aparece aqui ni en el repositorio."
+}
