@@ -179,6 +179,31 @@ jobs:
           echo "::error::/v1/estado no confirmo la conexion con OpenRouter (ultimo HTTP ${codigo})."
           exit 1
 
+      # El catalogo: confirma que la ruta responde y trae modelos de verdad.
+      - name: Verificar /v1/models
+        if: steps.fly.outputs.configurado == 'true'
+        env:
+          FLY_APP: ${{ steps.app.outputs.app }}
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          SERVICIO_CLAVE: ${{ secrets.SERVICIO_CLAVE }}
+        run: |
+          if [ -z "${SERVICIO_CLAVE}" ] || [ -z "${OPENROUTER_API_KEY}" ]; then
+            echo "Secretos del servicio incompletos: no se comprueba /v1/models."
+            exit 0
+          fi
+          url="https://${FLY_APP}.fly.dev/v1/models"
+          codigo="$(curl -s -o /tmp/modelos -w '%{http_code}' --max-time 40 \
+            -H "Authorization: Bearer ${SERVICIO_CLAVE}" "${url}" || true)"
+          echo "HTTP ${codigo}"
+          if [ "${codigo}" != "200" ]; then
+            echo "::error::/v1/models respondio ${codigo}."
+            exit 1
+          fi
+          # Solo el recuento: el catalogo entero son cientos de lineas.
+          python3 -c "import json,sys; d=json.load(open('/tmp/modelos')); n=len(d.get('data',[])); print('Catalogo:', n, 'modelos, total', d.get('total')); sys.exit(0 if n else 1)" \
+            || { echo "::error::el catalogo vino vacio o ilegible"; exit 1; }
+          echo "OK: el catalogo trae modelos"
+
       - name: Resumen del despliegue
         if: success() && steps.fly.outputs.configurado == 'true'
         env:
@@ -193,6 +218,7 @@ jobs:
             echo "- Salud: https://${FLY_APP}.fly.dev/salud"
             echo "- Hola mundo: https://${FLY_APP}.fly.dev/holamundo"
             echo "- Estado del servicio: https://${FLY_APP}.fly.dev/v1/estado (requiere clave)"
+            echo "- Catalogo: https://${FLY_APP}.fly.dev/v1/models (requiere clave)"
             echo "- Comprobacion desde Pages: https://${GITHUB_REPOSITORY%%/*}.github.io/${GITHUB_REPOSITORY#*/}/holamundo.html"
             echo "- Consola: https://${GITHUB_REPOSITORY%%/*}.github.io/${GITHUB_REPOSITORY#*/}/consola.html"
             echo "- Build (SHA): \`${GITHUB_SHA}\`"
