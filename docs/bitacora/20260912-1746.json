@@ -1,0 +1,79 @@
+{
+  "fecha": "2026-09-12T17:46:00+02:00",
+  "titulo": "Etapa 4: histórico en disco, y prueba con un BOM real",
+  "objetivo": "Que el histórico de llamadas no se pierda al reiniciar, añadir totales y exportación, y dejar preparada una prueba de punta a punta con un fichero de materiales real, pensada para una futura aplicación de presupuestos.",
+  "prompts": [
+    {
+      "texto": "Empieza la etapa 4"
+    },
+    {
+      "texto": "Fusiona PR14"
+    },
+    {
+      "texto": "Dame un resumen ejecutivo de lo que has hecho un resumen corto"
+    },
+    {
+      "texto": "Cuál es el coste de tener un SQL elite en fly",
+      "nota": "Dictado por voz: \"SQL elite\" es SQLite. Se respondió con el coste del volumen y, sobre todo, con el coste no monetario: una sola máquina y una sola región."
+    },
+    {
+      "texto": "Dime lo que falta por hacer que fases FALTan y no sé no sé cómo podía probarlo en una aplicación externa la ideal para lo que estoy pensando es para la gestión de presupuestos en el que al entrar o subir un bom hay que analizarlo ese fichero para ver dónde están los campos claves que necesita la aplicación para poder presupuestar o valorar ese BOM"
+    },
+    {
+      "texto": "Cual harías tú primero",
+      "nota": "Entre montar el ejemplo ejecutable o adelantar la validación de esquema con reintento. Se recomendó el ejemplo: la validación resuelve un problema que aún no se ha medido."
+    },
+    {
+      "texto": "[adjunta un BOM de electrónica] Este es el Bond para el que quiero que prepares una prueba y la prueba ha de ser bien explicada y sencilla imagino que tendré que hacerla en local en el ordenador porque será más fácil hacer ejecutables en powerShell",
+      "nota": "El fichero adjunto no se ha subido al repositorio ni se citan sus datos aquí."
+    },
+    {
+      "texto": "Fusiona y cierra la sesión"
+    }
+  ],
+  "cambios": [
+    "app/src/uso.rs: el anillo en memoria pasa a SQLite en modo WAL con una sola conexion bajo mutex; resumen agrupado por dia o por modelo, consulta por intervalo y fallback a memoria si el fichero no se puede abrir.",
+    "app/src/rutas/uso.rs: GET /v1/uso/resumen y GET /v1/uso/exportar en JSON o CSV, con un hasta de solo fecha que cuenta el dia entero.",
+    "app/src/rutas/estado.rs: /v1/estado dice donde vive el historico y cuantas llamadas guarda.",
+    "app/src/config.rs y main.rs: BD_RUTA configurable y rutas nuevas montadas antes de la de id.",
+    "app/Cargo.toml y Dockerfile: rusqlite con SQLite compilado dentro, compilador C en la etapa de construccion y /datos con dueño antes de dejar de ser root.",
+    "app/fly.toml: seccion de montaje del volumen del historico.",
+    ".github/workflows/deploy.yml: crea el volumen si no existe comprobando antes que no este, y falla el run si el historico no acaba en disco.",
+    "docs/consola.html: panel de Resumen con agrupacion, intervalo, totales y descarga del CSV.",
+    "docs/openapi.json: version 0.4.0 con las dos rutas nuevas, el estado ampliado y la etapa 4 entregada.",
+    "tools/probar-bom.ps1: prueba de punta a punta con un fichero de materiales, que lee .xlsx sin Excel ni modulos.",
+    "docs/planificacion/prueba-bom.md: guia paso a paso de esa prueba.",
+    "CLAUDE.md: reglas del historico en volumen y de la herramienta nueva."
+  ],
+  "sha": "8514110",
+  "sha_completo": "851411051ab942c1092cc6f2b291068be1f20ecf",
+  "run": "34694870385",
+  "mock": null,
+  "build": "OP-B1-20260912-012",
+  "pagina": "consola.html",
+  "fly": "https://openrouter-npiobject-labs.fly.dev/salud",
+  "pendiente": [
+    "Lanzar una consulta real desde el PC y ver el coste pasar de estimado a openrouter: es lo unico que gasta credito y que ningun workflow puede verificar",
+    "Etapa 5: claves por aplicacion, imprescindible antes de dar acceso a una aplicacion de presupuestos",
+    "Drive: carpeta antigua de la cuenta vieja, carpeta 08 Openrouter y plan-etapas.md duplicado"
+  ],
+  "enlaces": [
+    {
+      "texto": "Consola con el panel de Resumen",
+      "url": "https://npiobject-labs.github.io/openrouter/consola.html"
+    },
+    {
+      "texto": "Documentacion de la API",
+      "url": "https://npiobject-labs.github.io/openrouter/api.html"
+    },
+    {
+      "texto": "Pull request de la etapa 4",
+      "url": "https://github.com/npiobject-labs/openrouter/pull/14"
+    },
+    {
+      "texto": "Pull request de la prueba del BOM",
+      "url": "https://github.com/npiobject-labs/openrouter/pull/15"
+    }
+  ],
+  "notas": "Segunda sesion del mismo dia, continuacion de la de las 14:03. Prompts transcritos literalmente, varios dictados por voz; las notas aclaran lo que quisieron decir. El BOM que el usuario adjunto no se subio al repositorio ni aparecen aqui sus datos. Al probar el script salio un fallo real de PowerShell: el parametro -Filas y la variable con las filas leidas eran la misma variable porque no distingue mayusculas."
+}
