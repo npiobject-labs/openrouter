@@ -92,6 +92,19 @@ impl Modelo {
     }
 }
 
+impl Catalogo {
+    /// Precio de un modelo en dólares por millón, de la copia en memoria. Se
+    /// usa para estimar el coste de una llamada; devuelve `None` si el
+    /// catálogo aún no se ha traído o el modelo no está.
+    pub fn precio(&self, id: &str) -> Option<(f64, f64)> {
+        let lista = self.caducada()?;
+        lista
+            .iter()
+            .find(|m| m.id == id)
+            .map(|m| (m.entrada, m.salida))
+    }
+}
+
 /// Qué filtros admite `GET /v1/models`.
 #[derive(Default)]
 pub struct Filtros {

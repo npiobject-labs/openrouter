@@ -204,6 +204,35 @@ jobs:
             || { echo "::error::el catalogo vino vacio o ilegible"; exit 1; }
           echo "OK: el catalogo trae modelos"
 
+      - name: Verificar /v1/uso
+        if: steps.fly.outputs.configurado == 'true'
+        env:
+          FLY_APP: ${{ steps.app.outputs.app }}
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          SERVICIO_CLAVE: ${{ secrets.SERVICIO_CLAVE }}
+        run: |
+          if [ -z "${SERVICIO_CLAVE}" ] || [ -z "${OPENROUTER_API_KEY}" ]; then
+            echo "Secretos del servicio incompletos: no se comprueba /v1/uso."
+            exit 0
+          fi
+          # El registro esta vacio tras desplegar, asi que solo se comprueba la
+          # forma: la etapa 3 no puede verificarse gastando credito.
+          url="https://${FLY_APP}.fly.dev/v1/uso?n=5"
+          codigo="$(curl -s -o /tmp/uso.json -w '%{http_code}' --max-time 20 \
+            -H "Authorization: Bearer ${SERVICIO_CLAVE}" "${url}" || true)"
+          echo "HTTP ${codigo}"
+          if [ "${codigo}" != "200" ]; then
+            echo "::error::/v1/uso respondio ${codigo}."
+            cat /tmp/uso.json || true
+            exit 1
+          fi
+          if ! jq -e '.object == "list" and (.data | type == "array") and (.total | type == "number")' /tmp/uso.json > /dev/null; then
+            echo "::error::/v1/uso no devolvio la lista esperada."
+            cat /tmp/uso.json || true
+            exit 1
+          fi
+          echo "OK: registro de uso con $(jq -r '.total' /tmp/uso.json) llamadas"
+
       - name: Verificar el formato de error
         if: steps.fly.outputs.configurado == 'true'
         env:
@@ -250,6 +279,7 @@ jobs:
             echo "- Hola mundo: https://${FLY_APP}.fly.dev/holamundo"
             echo "- Estado del servicio: https://${FLY_APP}.fly.dev/v1/estado (requiere clave)"
             echo "- Catalogo: https://${FLY_APP}.fly.dev/v1/models (requiere clave)"
+            echo "- Uso: https://${FLY_APP}.fly.dev/v1/uso (requiere clave)"
             echo "- Comprobacion desde Pages: https://${GITHUB_REPOSITORY%%/*}.github.io/${GITHUB_REPOSITORY#*/}/holamundo.html"
             echo "- Consola: https://${GITHUB_REPOSITORY%%/*}.github.io/${GITHUB_REPOSITORY#*/}/consola.html"
             echo "- Build (SHA): \`${GITHUB_SHA}\`"

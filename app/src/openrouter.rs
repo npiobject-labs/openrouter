@@ -119,6 +119,33 @@ impl Cliente {
         }
         Ok(cuerpo)
     }
+
+    /// `GET /generation?id=`: la contabilidad real de una generación ya
+    /// terminada. Tampoco gasta crédito.
+    ///
+    /// [SUPUESTO] el coste viene en `total_cost` y el proveedor en
+    /// `provider_name`, dentro de `data`. Plan B si cambian esos nombres: el
+    /// registro se queda con el coste estimado del catálogo, que es lo que ya
+    /// hace cuando esta llamada falla.
+    pub async fn generacion(&self, id: &str) -> Result<Value, ErrorApi> {
+        let respuesta = self
+            .http
+            .get(format!("{}/generation", self.base))
+            .query(&[("id", id)])
+            .bearer_auth(self.clave()?)
+            .timeout(ESPERA_CORTA)
+            .send()
+            .await
+            .map_err(|e| sin_alcanzar("no se pudo consultar la generación", e))?;
+
+        let estado = respuesta.status();
+        let cuerpo: Value = respuesta.json().await.map_err(respuesta_ilegible)?;
+
+        if !estado.is_success() {
+            return Err(ErrorApi::de_openrouter(estado, cuerpo));
+        }
+        Ok(cuerpo.get("data").cloned().unwrap_or(cuerpo))
+    }
 }
 
 fn sin_alcanzar(que: &str, e: reqwest::Error) -> ErrorApi {

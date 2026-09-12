@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="build" content="OP-B1-20260912-010">
+<meta name="build" content="OP-B1-20260912-011">
 <!-- App de Fly: <repo>-<owner>, el mismo nombre que deriva deploy.yml.
      Con otro nombre, cambia este content o abre la pagina con ?app=<nombre>. -->
 <meta name="fly-app" content="openrouter-npiobject-labs">
@@ -56,6 +56,14 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-vis
 .respuesta{white-space:pre-wrap;line-height:1.6;margin:0;color:var(--tinta);min-height:1.5rem}
 pre{background:var(--hundido);border-radius:6px;padding:.75rem .9rem;overflow-x:auto;font-family:var(--mono);font-size:.78rem;margin:0;white-space:pre-wrap;word-break:break-word}
 details summary{cursor:pointer;color:var(--suave);font-size:.85rem}
+table{border-collapse:collapse;width:100%;font-size:.82rem}
+.tabla{overflow-x:auto}
+th,td{text-align:left;padding:.35rem .5rem;border-bottom:1px solid var(--borde);white-space:nowrap}
+th{font-size:.7rem;text-transform:uppercase;letter-spacing:.06em;color:var(--suave);font-weight:600}
+td{font-family:var(--mono);font-size:.78rem;font-variant-numeric:tabular-nums}
+td.texto{font-family:var(--sans);font-size:.82rem}
+tr:last-child td{border-bottom:none}
+td.fallo{color:var(--corte)}
 footer{display:flex;flex-wrap:wrap;gap:.4rem 1.2rem;font-size:.8rem;color:var(--suave);border-top:1px solid var(--borde);padding-top:1rem}
 </style>
 </head>
@@ -63,7 +71,7 @@ footer{display:flex;flex-wrap:wrap;gap:.4rem 1.2rem;font-size:.8rem;color:var(--
 <main>
   <header>
     <h1>openrouter <span>· consola</span></h1>
-    <p>Cliente de referencia del servicio. Etapas 1 y 2: conexión, catálogo de modelos y consulta.</p>
+    <p>Cliente de referencia del servicio. Etapas 1 a 3: conexión, catálogo de modelos, consulta y medición de lo que cuesta.</p>
   </header>
 
   <section class="panel">
@@ -138,6 +146,8 @@ footer{display:flex;flex-wrap:wrap;gap:.4rem 1.2rem;font-size:.8rem;color:var(--
       <div><dt>Modelo servido</dt><dd id="u-modelo">–</dd></div>
       <div><dt>Fin</dt><dd id="u-fin">–</dd></div>
       <div><dt>Tardó</dt><dd id="u-lat">–</dd></div>
+      <div><dt>Proveedor</dt><dd id="u-prov">–</dd></div>
+      <div><dt>Registro</dt><dd id="u-id">–</dd></div>
     </dl>
     <details>
       <summary>JSON crudo</summary>
@@ -145,8 +155,21 @@ footer{display:flex;flex-wrap:wrap;gap:.4rem 1.2rem;font-size:.8rem;color:var(--
     </details>
   </section>
 
+  <section class="panel">
+    <h2>Uso <span class="estado" id="uso-estado">sin cargar</span></h2>
+    <p>Las últimas llamadas que ha servido el backend, con lo que costó cada una. Se guardan las últimas mil en memoria y se pierden si la máquina se reinicia: la persistencia es la etapa 4.</p>
+    <div class="fila">
+      <span style="flex:1"></span>
+      <button id="btn-uso">Actualizar</button>
+    </div>
+    <div class="tabla"><table>
+      <thead><tr><th>Hora</th><th>Modelo</th><th>Tokens</th><th>Coste</th><th>Tardó</th><th>Estado</th></tr></thead>
+      <tbody id="uso-filas"><tr><td colspan="6" class="texto">Pulsa «Actualizar» para traer el registro.</td></tr></tbody>
+    </table></div>
+  </section>
+
   <footer>
-    <span>Build <code>OP-B1-20260912-010</code></span>
+    <span>Build <code>OP-B1-20260912-011</code></span>
     <span>Backend: <a id="url-backend" href="#">–</a></span>
     <a href="api.html">Documentación de la API</a>
     <a href="./">Mock de todas las etapas</a>
@@ -330,6 +353,69 @@ footer{display:flex;flex-wrap:wrap;gap:.4rem 1.2rem;font-size:.8rem;color:var(--
     $(id).addEventListener('change', function(){ cargarCatalogo(false); });
   });
 
+  // --- uso ----------------------------------------------------------------
+  function dinero6(v){ return v == null ? '–' : Number(v).toFixed(6) + ' $'; }
+  // Por debajo del segundo, los milisegundos dicen algo; "0.00 s" no dice nada.
+  function duracion(ms){ return ms < 1000 ? Math.round(ms) + ' ms' : (ms / 1000).toFixed(2) + ' s'; }
+
+  // Trae el registro de una llamada y, mientras el coste siga siendo la
+  // estimacion del catalogo, vuelve a mirar: la reconciliacion con OpenRouter
+  // tarda un par de segundos en llegar.
+  function refinaUso(id, intentos){
+    llama('/v1/uso/' + encodeURIComponent(id)).then(function(res){
+      var r = res.datos;
+      texto('u-coste', dinero6(r.coste));
+      texto('u-entrada', r.tokens_entrada + ' tok');
+      texto('u-salida', r.tokens_salida + ' tok');
+      texto('u-prov', r.proveedor || '–');
+      texto('u-lat', duracion(r.latencia_ms));
+      texto('u-id', r.id + (r.coste_origen === 'openrouter' ? '' : ' · ' + r.coste_origen));
+      if (r.coste_origen !== 'openrouter' && intentos > 0){
+        setTimeout(function(){ refinaUso(id, intentos - 1); }, 2500);
+      }
+    }).catch(function(){ /* la ficha ya tiene lo que trajo la respuesta */ });
+  }
+
+  function cargarUso(){
+    var boton = $('btn-uso');
+    boton.disabled = true;
+    pinta('uso-estado', 'cargando…', '');
+    llama('/v1/uso?n=25').then(function(res){
+      var filas = res.datos.data;
+      var cuerpo = $('uso-filas');
+      cuerpo.textContent = '';
+      if (!filas.length){
+        var vacia = document.createElement('tr');
+        var celda = document.createElement('td');
+        celda.colSpan = 6; celda.className = 'texto';
+        celda.textContent = 'Todavía no se ha servido ninguna llamada.';
+        vacia.appendChild(celda); cuerpo.appendChild(vacia);
+      }
+      filas.forEach(function(r){
+        var tr = document.createElement('tr');
+        [
+          { v: r.fecha.slice(11, 19) },
+          { v: r.modelo_servido || r.modelo_pedido, clase: 'texto' },
+          { v: r.tokens_entrada + ' + ' + r.tokens_salida },
+          { v: dinero6(r.coste) },
+          { v: duracion(r.latencia_ms) },
+          { v: r.estado + (r.motivo_fin ? ' · ' + r.motivo_fin : ''), clase: r.estado >= 400 ? 'fallo' : '' }
+        ].forEach(function(celda){
+          var td = document.createElement('td');
+          if (celda.clase) td.className = celda.clase;
+          td.textContent = celda.v;
+          tr.appendChild(td);
+        });
+        cuerpo.appendChild(tr);
+      });
+      pinta('uso-estado', res.datos.total + ' en memoria', 'ok');
+    }).catch(function(e){
+      pinta('uso-estado', e.message, 'mal');
+    }).finally(function(){ boton.disabled = false; });
+  }
+
+  $('btn-uso').addEventListener('click', cargarUso);
+
   // --- consulta -----------------------------------------------------------
   $('btn-enviar').addEventListener('click', function(){
     var boton = this;
@@ -361,10 +447,22 @@ footer{display:flex;flex-wrap:wrap;gap:.4rem 1.2rem;font-size:.8rem;color:var(--
       texto('u-lat', tardo);
       $('ficha-uso').hidden = false;
       texto('crudo', JSON.stringify(j, null, 2));
+
+      // El servicio mide mejor que nosotros: su registro trae el coste, y al
+      // cabo de un par de segundos el que factura OpenRouter en vez del
+      // estimado. La cabecera dice que registro mirar.
+      var idUso = res.respuesta.headers.get('X-Uso-Id');
+      if (idUso){
+        texto('u-id', idUso);
+        refinaUso(idUso, 3);
+      }
     }).catch(function(e){
       texto('respuesta', 'Error' + (e.codigo ? ' ' + e.codigo : '') + (e.clave ? ' ' + e.clave : '') + ': ' + e.message);
       texto('crudo', e.cuerpo ? JSON.stringify(e.cuerpo, null, 2) : '–');
-    }).finally(function(){ boton.disabled = false; });
+    }).finally(function(){
+      boton.disabled = false;
+      if ($('uso-estado').textContent !== 'sin cargar') setTimeout(cargarUso, 300);
+    });
   });
 })();
 </script>

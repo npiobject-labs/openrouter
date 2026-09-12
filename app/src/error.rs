@@ -1,5 +1,11 @@
-use axum::{http::StatusCode, response::IntoResponse, Json};
+use axum::{
+    http::{HeaderValue, StatusCode},
+    response::IntoResponse,
+    Json,
+};
 use serde_json::{json, Value};
+
+use crate::rutas::uso::CABECERA_USO;
 
 /// Error de la API. Sale siempre con el mismo sobre, venga de aquí o de
 /// OpenRouter, porque una app que llama no tiene por qué saber dónde falló:
@@ -21,11 +27,14 @@ pub struct ErrorApi {
     /// El cuerpo tal cual lo mandó OpenRouter, cuando el fallo fue suyo. Sirve
     /// para depurar sin tener que mirar los logs del backend.
     pub upstream: Option<Value>,
+    /// Id del registro de uso, cuando el fallo ocurrió dentro de una llamada
+    /// medida: un error también consumió tiempo y merece quedar anotado.
+    pub uso: Option<String>,
 }
 
 impl ErrorApi {
     pub fn nuevo(estado: StatusCode, codigo: &'static str, mensaje: impl Into<String>) -> Self {
-        Self { estado, codigo, mensaje: mensaje.into(), upstream: None }
+        Self { estado, codigo, mensaje: mensaje.into(), upstream: None, uso: None }
     }
 
     pub fn sin_configurar(que: &str) -> Self {
@@ -47,11 +56,17 @@ impl ErrorApi {
             mensaje: mensaje_de(&cuerpo)
                 .unwrap_or_else(|| format!("OpenRouter respondió {estado} sin explicar el motivo.")),
             upstream: Some(cuerpo),
+            uso: None,
         }
     }
 
     pub fn con_upstream(mut self, cuerpo: Value) -> Self {
         self.upstream = Some(cuerpo);
+        self
+    }
+
+    pub fn con_uso(mut self, id: &str) -> Self {
+        self.uso = Some(id.to_string());
         self
     }
 }
@@ -96,6 +111,10 @@ impl IntoResponse for ErrorApi {
             error["upstream"] = upstream;
         }
 
-        (self.estado, Json(json!({ "ok": false, "error": error }))).into_response()
+        let cuerpo = Json(json!({ "ok": false, "error": error }));
+        match self.uso.and_then(|id| HeaderValue::from_str(&id).ok()) {
+            Some(id) => (self.estado, [(CABECERA_USO, id)], cuerpo).into_response(),
+            None => (self.estado, cuerpo).into_response(),
+        }
     }
 }
