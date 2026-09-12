@@ -2,9 +2,9 @@
   "openapi": "3.1.0",
   "info": {
     "title": "openrouter · servicio",
-    "version": "0.3.0",
+    "version": "0.4.0",
     "summary": "Pasarela propia sobre OpenRouter, pensada para ser llamada por otras aplicaciones.",
-    "description": "Esto no es una aplicación con interfaz: es un conjunto de servicios HTTP. La clave de OpenRouter vive solo en el backend y nunca sale de él; las apps consumidoras usan una clave de servicio propia.\n\nEl contrato sigue el de la API de OpenAI donde existe equivalente, así que cualquier cliente de OpenAI funciona cambiando la URL base. Lo propio del servicio va en rutas propias y en cabeceras `X-...`. Una ruta publicada no se rompe: lo incompatible iría a `/v2/`.\n\nLa versión de este documento acompaña a la etapa entregada: `0.3.0` es la etapa 3.",
+    "description": "Esto no es una aplicación con interfaz: es un conjunto de servicios HTTP. La clave de OpenRouter vive solo en el backend y nunca sale de él; las apps consumidoras usan una clave de servicio propia.\n\nEl contrato sigue el de la API de OpenAI donde existe equivalente, así que cualquier cliente de OpenAI funciona cambiando la URL base. Lo propio del servicio va en rutas propias y en cabeceras `X-...`. Una ruta publicada no se rompe: lo incompatible iría a `/v2/`.\n\nLa versión de este documento acompaña a la etapa entregada: `0.4.0` es la etapa 4.",
     "license": {
       "name": "Uso interno"
     }
@@ -118,7 +118,9 @@
                     "usage": 0.0123,
                     "limit": 5,
                     "is_free_tier": false
-                  }
+                  },
+                  "almacen": "sqlite",
+                  "registros": 128
                 }
               }
             }
@@ -341,7 +343,7 @@
           "Uso"
         ],
         "summary": "Últimas llamadas",
-        "description": "El registro de las últimas llamadas, de la más reciente a la más antigua.\n\nSon las últimas mil, en memoria: se pierden si la máquina se reinicia. La persistencia y los agregados llegan en la etapa 4.",
+        "description": "El registro de las últimas llamadas, de la más reciente a la más antigua.\n\nDesde la etapa 4 salen del histórico en disco, así que sobreviven a un reinicio. Para ventanas de tiempo y totales, `/v1/uso/resumen`; para llevarse los datos, `/v1/uso/exportar`.",
         "parameters": [
           {
             "name": "n",
@@ -417,7 +419,7 @@
           "Uso"
         ],
         "summary": "Una llamada concreta",
-        "description": "El registro que corresponde a un `X-Uso-Id`.\n\nEl coste llega primero estimado con los precios del catálogo y, un par de segundos después, reconciliado con lo que factura OpenRouter. El campo `coste_origen` dice cuál de los dos estás viendo, así que una aplicación que quiera el dato bueno puede volver a preguntar.",
+        "description": "El registro que corresponde a un `X-Uso-Id`.\n\nDesde la etapa 4 el histórico está en disco y no caduca.\n\nEl coste llega primero estimado con los precios del catálogo y, un par de segundos después, reconciliado con lo que factura OpenRouter. El campo `coste_origen` dice cuál de los dos estás viendo, así que una aplicación que quiera el dato bueno puede volver a preguntar.",
         "parameters": [
           {
             "name": "id",
@@ -461,7 +463,7 @@
             "$ref": "#/components/responses/NoAutorizado"
           },
           "404": {
-            "description": "No hay registro con ese id: nunca existió, o ya salió del anillo de las últimas mil.",
+            "description": "No hay registro con ese id.",
             "content": {
               "application/json": {
                 "schema": {
@@ -477,6 +479,228 @@
                 }
               }
             }
+          }
+        }
+      }
+    },
+    "/v1/uso/resumen": {
+      "get": {
+        "tags": [
+          "Uso"
+        ],
+        "summary": "Totales por día o por modelo",
+        "description": "Cuántas llamadas, cuántas fallaron, cuántos tokens y cuánto coste, agrupado por día o por modelo.\n\nEs la ruta que responde a «cuánto llevo gastado este mes» sin traerse el histórico entero.",
+        "parameters": [
+          {
+            "name": "desde",
+            "in": "query",
+            "description": "Fecha o instante ISO desde el que contar, inclusive. Vale `2026-09-12` o `2026-09-12T14:00:00Z`.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "2026-09-01"
+          },
+          {
+            "name": "hasta",
+            "in": "query",
+            "description": "Hasta cuándo, inclusive. Una fecha suelta cuenta el día entero.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "2026-09-30"
+          },
+          {
+            "name": "agrupar",
+            "in": "query",
+            "description": "`dia` (por defecto) o `modelo`.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "dia",
+                "modelo"
+              ],
+              "default": "dia"
+            },
+            "example": "modelo"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Un grupo por día o por modelo, más los totales del intervalo.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "object": {
+                      "type": "string",
+                      "const": "list"
+                    },
+                    "agrupar": {
+                      "type": "string",
+                      "enum": [
+                        "dia",
+                        "modelo"
+                      ]
+                    },
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "grupo": {
+                            "type": "string",
+                            "description": "El día o el modelo."
+                          },
+                          "llamadas": {
+                            "type": "integer"
+                          },
+                          "fallos": {
+                            "type": "integer",
+                            "description": "Las que acabaron en 400 o más."
+                          },
+                          "tokens_entrada": {
+                            "type": "integer"
+                          },
+                          "tokens_salida": {
+                            "type": "integer"
+                          },
+                          "coste": {
+                            "type": "number",
+                            "description": "Dólares."
+                          },
+                          "latencia_media_ms": {
+                            "type": "integer"
+                          }
+                        }
+                      }
+                    },
+                    "totales": {
+                      "type": "object",
+                      "description": "La suma de todos los grupos."
+                    }
+                  }
+                },
+                "example": {
+                  "object": "list",
+                  "agrupar": "modelo",
+                  "data": [
+                    {
+                      "grupo": "google/gemini-2.5-flash-lite",
+                      "llamadas": 12,
+                      "fallos": 1,
+                      "tokens_entrada": 9000,
+                      "tokens_salida": 4200,
+                      "coste": 0.0063,
+                      "latencia_media_ms": 1520
+                    }
+                  ],
+                  "totales": {
+                    "llamadas": 12,
+                    "fallos": 1,
+                    "tokens_entrada": 9000,
+                    "tokens_salida": 4200,
+                    "coste": 0.0063
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/NoAutorizado"
+          }
+        }
+      }
+    },
+    "/v1/uso/exportar": {
+      "get": {
+        "tags": [
+          "Uso"
+        ],
+        "summary": "Exportar el histórico",
+        "description": "El histórico de un intervalo, en JSON o en CSV.\n\nEl CSV llega con `Content-Disposition`, así que un navegador lo guarda como fichero. Ojo: la ruta exige la clave en la cabecera, de modo que un enlace suelto no sirve; hay que traerlo con una petición y guardarlo desde ahí.",
+        "parameters": [
+          {
+            "name": "desde",
+            "in": "query",
+            "description": "Fecha o instante ISO desde el que contar, inclusive. Vale `2026-09-12` o `2026-09-12T14:00:00Z`.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "2026-09-01"
+          },
+          {
+            "name": "hasta",
+            "in": "query",
+            "description": "Hasta cuándo, inclusive. Una fecha suelta cuenta el día entero.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "2026-09-30"
+          },
+          {
+            "name": "formato",
+            "in": "query",
+            "description": "`json` (por defecto) o `csv`.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "json",
+                "csv"
+              ],
+              "default": "json"
+            },
+            "example": "csv"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Los registros del intervalo, de la más antigua a la más reciente.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "object": {
+                      "type": "string",
+                      "const": "list"
+                    },
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Registro"
+                      }
+                    }
+                  }
+                }
+              },
+              "text/csv": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Formato desconocido.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "ok": false,
+                  "error": {
+                    "message": "Formato xml desconocido: usa csv o json.",
+                    "code": "formato_invalido",
+                    "type": "invalid_request_error"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/NoAutorizado"
           }
         }
       }
@@ -532,13 +756,27 @@
             "type": "object",
             "description": "Etiqueta, uso y límite de la clave, tal como los devuelve OpenRouter.",
             "additionalProperties": true
+          },
+          "almacen": {
+            "type": "string",
+            "enum": [
+              "sqlite",
+              "memoria"
+            ],
+            "description": "Dónde se guarda el histórico. `sqlite` es el volumen en disco, que sobrevive a los reinicios; `memoria` significa que el volumen no se pudo abrir y el histórico se perderá al reiniciar."
+          },
+          "registros": {
+            "type": "integer",
+            "description": "Llamadas guardadas ahora mismo."
           }
         },
         "required": [
           "ok",
           "build",
           "modelo_defecto",
-          "clave"
+          "clave",
+          "almacen",
+          "registros"
         ]
       },
       "Modelo": {
@@ -1032,7 +1270,12 @@
     {
       "code": "uso_desconocido",
       "http": 404,
-      "cuando": "Se pidió un registro de uso que no existe o ya salió del anillo de las últimas mil."
+      "cuando": "Se pidió un registro de uso que no existe."
+    },
+    {
+      "code": "formato_invalido",
+      "http": 400,
+      "cuando": "La exportación se pidió en un formato que no es csv ni json."
     }
   ],
   "x-etapas": [
@@ -1083,7 +1326,7 @@
     {
       "numero": 4,
       "titulo": "Persistencia y agregados",
-      "estado": "siguiente",
+      "estado": "entregada",
       "rutas": [
         {
           "metodo": "GET",
@@ -1094,12 +1337,12 @@
           "ruta": "/v1/uso/exportar"
         }
       ],
-      "nota": "El histórico deja de perderse al reiniciar. Totales por día y por modelo, y exportación en CSV o JSON."
+      "nota": "El histórico deja de perderse al reiniciar: vive en un volumen de Fly con SQLite. Totales por día y por modelo, y exportación en CSV o JSON. /v1/estado dice dónde está guardado y cuántas llamadas hay."
     },
     {
       "numero": 5,
       "titulo": "Aplicaciones consumidoras",
-      "estado": "planificada",
+      "estado": "siguiente",
       "rutas": [
         {
           "metodo": "POST",

@@ -59,7 +59,7 @@ pub async fn chat(
 
     let reloj = Instant::now();
     let resultado = servicio.openrouter.chat(cuerpo).await;
-    registro.latencia_ms = reloj.elapsed().as_millis() as u64;
+    registro.latencia_ms = reloj.elapsed().as_millis() as i64;
 
     match resultado {
         Ok(respuesta) => {
