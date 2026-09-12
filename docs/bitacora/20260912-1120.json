@@ -1,0 +1,48 @@
+{
+  "fecha": "2026-09-12T11:20:00+02:00",
+  "titulo": "Plan por etapas y etapa 1: el servicio habla con OpenRouter",
+  "objetivo": "Convertir las ideas de entrada en un plan por etapas y entregar la primera: conexion con OpenRouter y una consulta a un modelo, con un frontend basico para probarlo.",
+  "prompts": [
+    { "texto": "que sabes del proyecto hasta ahora?" },
+    { "texto": "Elimina Vigilancia de gasto: vigilancia-fly.yml. Dime un resumen de la conversacion que tuvimos ayer" },
+    { "texto": "Te estoy pidiendo un resumen del fichero de Drive ideas-entrada.md" },
+    { "texto": "genera una planificacion en varias etapas, de forma que la primera etapa sea unicamente la conexion a open router y la utilizacion de un modelo de lenguaje. el resto de las etapas seran progresivas y queda a tu disposicion. La idea es generar un servicio al que podamos ir añadiendo funcionalidades (APIs), el frontend que sea basico para poder probar los servicios. Guarda planificacion en Drive." },
+    { "texto": "genera primero un mock de como se veria el frontend de todas las etapas" },
+    { "texto": "como puedo llamar a docs/index.html para ver en navegador?" },
+    { "texto": "merge del pull request #4 a main" },
+    { "texto": "empieza la etapa 1" },
+    { "texto": "ayudame a crear los dos secretos", "nota": "Siguieron varios intercambios cortos guiando paso a paso la creacion de SERVICIO_CLAVE y OPENROUTER_API_KEY en GitHub." },
+    { "texto": "puedo copiar la clave en carpeta openrouter de drive?", "nota": "Se desaconsejo: el conector de Drive lee esa carpeta y una credencial ahi acabaria en el contexto de sesiones futuras. Se guardo en local, fuera del repositorio." },
+    { "texto": "funciona, cierra sesion" }
+  ],
+  "cambios": [
+    "docs/planificacion/plan-etapas.md: ocho etapas progresivas derivadas de ideas-entrada.md y de la decision de que esto es un conjunto de servicios llamados por otras apps, no una app.",
+    "docs/index.html: mock de la consola con las seis secciones que el plan va añadiendo y cada pieza marcada con su etapa; el mock 0 se archiva en docs/mocks/001-mock-0.html.",
+    ".github/workflows/vigilancia-fly.yml: eliminado a peticion del usuario; desaparece la alerta semanal de maquinas de Fly encendidas.",
+    "app/src: backend partido en modulos (config, error, auth, openrouter, rutas) con GET /v1/estado y POST /v1/chat/completions.",
+    "app/src/auth.rs: todo /v1 exige Authorization Bearer con la clave de servicio, comparada en tiempo constante; sin ese secreto el servicio responde 503 en vez de quedar abierto.",
+    "app/src/main.rs: el CORS pasa a una capa de tower-http que envuelve el router, para que el preflight se resuelva antes de la comprobacion de clave.",
+    "docs/consola.html: cliente de referencia del servicio, con estado de la conexion, prompt, respuesta y ficha de uso.",
+    ".github/workflows/deploy.yml: vuelca los secretos del servicio a Fly y verifica /v1/estado cuando estan configurados.",
+    "CLAUDE.md y tools/arrancar.ps1: documentado el contrato /v1, los secretos y el aviso al arrancar en local sin claves."
+  ],
+  "sha": "dd5e27e",
+  "sha_completo": "dd5e27e671f30edbb128df7880aae7cbc7acdde1",
+  "run": "34685500997",
+  "mock": "mocks/001-mock-0.html",
+  "build": "OP-B1-20260912-005",
+  "pagina": "consola.html",
+  "fly": "https://openrouter-npiobject-labs.fly.dev/salud",
+  "pendiente": [
+    "Lanzar la primera consulta real a un modelo desde la consola: solo se ha comprobado la conexion",
+    "Etapa 2: catalogo de modelos con cache y selector en la consola",
+    "Decidir que hacer con la carpeta antigua de Drive y con la carpeta 08 Openrouter"
+  ],
+  "enlaces": [
+    { "texto": "Plan por etapas", "url": "https://github.com/npiobject-labs/openrouter/blob/main/docs/planificacion/plan-etapas.md" },
+    { "texto": "Pull request de la etapa 1", "url": "https://github.com/npiobject-labs/openrouter/pull/5" },
+    { "texto": "Pull request del plan y el mock", "url": "https://github.com/npiobject-labs/openrouter/pull/4" },
+    { "texto": "Consola del servicio", "url": "https://npiobject-labs.github.io/openrouter/consola.html" }
+  ],
+  "notas": "Los prompts de la creacion de secretos se resumen en uno: fueron varios intercambios cortos de ida y vuelta. Ningun valor de clave aparece aqui ni en el repositorio; las claves viven como secretos de GitHub y como secretos de Fly."
+}
