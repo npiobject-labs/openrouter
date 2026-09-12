@@ -20,6 +20,7 @@ param(
   [int]$Filas = 6,
   [switch]$Comparar,
   [double]$Tope = 0.02,
+  [int]$MaxSalida = 700,
   [switch]$SoloMuestra
 )
 $ErrorActionPreference = 'Stop'
@@ -153,6 +154,24 @@ if (-not $Clave) {
 }
 if (-not $Clave) { Malo "sin clave no se puede llamar al servicio"; exit 1 }
 
+# Los nombres exactos de las columnas, delante: sin esto un modelo pequeño
+# responde null a campos que estan a la vista.
+$columnas = ($utiles | ForEach-Object { Recorta $cabecera[$_] }) -join ' | '
+
+$sistema = @'
+Eres un analista de listas de materiales de electronica. Recibes la cabecera y
+unas filas de un BOM y dices que columna corresponde a cada campo necesario
+para presupuestarlo.
+
+Reglas:
+- Responde con el nombre EXACTO de una columna de la lista de columnas
+  disponibles, copiado tal cual, con sus espacios.
+- Usa null solo si esa informacion no esta en ninguna columna. Antes de poner
+  null, comprueba la lista entera: casi siempre hay una columna equivalente
+  aunque no se llame igual.
+- No inventes columnas que no esten en la lista.
+'@
+
 # --- 3. preguntar al servicio -----------------------------------------------
 
 # Una peticion HTTP con la clave, devolviendo cuerpo y cabeceras.
@@ -209,9 +228,10 @@ if (-not $Modelo -and -not $Comparar) {
 # nombres escritos a mano, que cambian cada pocos meses. Con una cabecera y
 # unas filas, hasta el modelo caro cuesta centesimas de centimo.
 if ($Comparar -and -not $Modelo) {
-  # La muestra ronda estos tamaños; sirve para estimar antes de gastar.
-  $entradaAprox = 800
-  $salidaAprox  = 200
+  # [SUPUESTO] unos tres caracteres por token. Plan B si se queda corta: el
+  # coste real de cada llamada sale luego en la tabla, medido por el servicio.
+  $entradaAprox = [math]::Ceiling(($sistema.Length + $columnas.Length + $muestra.Length) / 3)
+  $salidaAprox  = $MaxSalida
 
   $catalogo = @((Llamar '/v1/models').datos.data |
     Where-Object { $_.json -and -not $_.gratis } |
@@ -250,52 +270,36 @@ $esquema = @{
         columnas = @{
           type = 'object'
           additionalProperties = $false
-          description = 'Nombre exacto de la columna del fichero, o null si no existe.'
+          description = 'Nombre exacto de una columna del fichero, tal cual, o null. Nunca una explicacion.'
           required = @('referencia_fabricante', 'descripcion', 'cantidad', 'designadores', 'proveedor', 'precio_unitario', 'alternativo')
           properties = @{
-            referencia_fabricante = @{ type = @('string', 'null') }
-            descripcion           = @{ type = @('string', 'null') }
-            cantidad              = @{ type = @('string', 'null') }
-            designadores          = @{ type = @('string', 'null'); description = 'Posiciones en la placa, como C1, C2, R5.' }
-            proveedor             = @{ type = @('string', 'null') }
-            precio_unitario       = @{ type = @('string', 'null') }
-            alternativo           = @{ type = @('string', 'null') }
+            referencia_fabricante = @{ type = @('string', 'null'); maxLength = 80 }
+            descripcion           = @{ type = @('string', 'null'); maxLength = 80 }
+            cantidad              = @{ type = @('string', 'null'); maxLength = 80 }
+            designadores          = @{ type = @('string', 'null'); maxLength = 80; description = 'Posiciones en la placa, como C1, C2, R5.' }
+            proveedor             = @{ type = @('string', 'null'); maxLength = 80 }
+            precio_unitario       = @{ type = @('string', 'null'); maxLength = 80 }
+            alternativo           = @{ type = @('string', 'null'); maxLength = 80 }
           }
         }
         faltan_para_presupuestar = @{
           type = 'array'
-          items = @{ type = 'string' }
+          items = @{ type = 'string'; maxLength = 60 }
+          maxItems = 6
           description = 'Datos imprescindibles para valorar el BOM que este fichero no trae.'
         }
         confianza = @{ type = 'number'; description = 'De 0 a 1.' }
-        notas     = @{ type = 'string';  description = 'Una frase sobre lo dudoso del mapeo.' }
+        notas     = @{ type = 'string'; maxLength = 300; description = 'Una sola frase sobre lo dudoso del mapeo.' }
       }
     }
   }
 }
 
-# Los nombres exactos de las columnas, delante: sin esto un modelo pequeño
-# responde null a campos que estan a la vista.
-$columnas = ($utiles | ForEach-Object { Recorta $cabecera[$_] }) -join ' | '
-
-$sistema = @'
-Eres un analista de listas de materiales de electronica. Recibes la cabecera y
-unas filas de un BOM y dices que columna corresponde a cada campo necesario
-para presupuestarlo.
-
-Reglas:
-- Responde con el nombre EXACTO de una columna de la lista de columnas
-  disponibles, copiado tal cual, con sus espacios.
-- Usa null solo si esa informacion no esta en ninguna columna. Antes de poner
-  null, comprueba la lista entera: casi siempre hay una columna equivalente
-  aunque no se llame igual.
-- No inventes columnas que no esten en la lista.
-'@
-
 function Analiza($modelo) {
   Aviso "preguntando a $modelo..."
   $peticion = @{
     model = $modelo
+    max_tokens = $MaxSalida
     response_format = $esquema
     messages = @(
       @{ role = 'system'; content = $sistema }
@@ -312,8 +316,13 @@ function Analiza($modelo) {
   try {
     $mapeo = $contenido | ConvertFrom-Json
   } catch {
-    Malo "$modelo no devolvio JSON valido. Esto es lo que dijo:"
-    Write-Host $contenido
+    $fin = $respuesta.datos.choices[0].finish_reason
+    if ($fin -eq 'length') {
+      Malo "$modelo se paso del limite de $MaxSalida tokens y la respuesta quedo cortada. Sube -MaxSalida si crees que le hace falta."
+    } else {
+      Malo "$modelo no devolvio JSON valido (fin: $fin). Esto es lo que dijo:"
+      Write-Host $contenido
+    }
     return $null
   }
   return @{ modelo = $modelo; mapeo = $mapeo; uso = $idUso }
@@ -386,7 +395,8 @@ if ($resultados.Count -gt 1) {
     foreach ($r in $resultados) {
       # El nombre corto del modelo basta para distinguirlos en la tabla.
       $corto = ($r.modelo -split '/')[-1]
-      $valor = $r.mapeo.columnas.$campo
+      $valor = "$($r.mapeo.columnas.$campo)"
+      if ($valor.Length -gt 40) { $valor = $valor.Substring(0, 37) + '...' }
       $fila[$corto] = if ($valor) { $valor } else { '-' }
     }
     [pscustomobject]$fila
