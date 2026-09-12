@@ -37,14 +37,19 @@ La carpeta local del PC es un espejo de solo lectura. Nunca la trates como orige
 | Bitácora (Pages) | https://npiobject-labs.github.io/openrouter/bitacora.html | idem; el índice lo genera `pages.yml` |
 | Backend (Fly.io, opcional) | `https://<app de Fly>.fly.dev/` · `/salud` · `/holamundo` | `.github/workflows/deploy.yml` en push a `main` que toque `app/**` |
 | Comprobación del backend (Pages) | https://npiobject-labs.github.io/openrouter/holamundo.html | página estática que llama a `/holamundo` y `/salud` desde el navegador |
+| Consola del servicio (Pages) | https://npiobject-labs.github.io/openrouter/consola.html | cliente de referencia; pide la clave de servicio y llama a `/v1/...` |
 
 Pages está siempre activo. Fly también: `FLY_API_TOKEN` es un secreto de la organización `npiobject-labs` y lo heredan sus repos **públicos**, así que `deploy.yml` despliega sin configurar nada. Si el repo fuera privado (plan Free) o viviera fuera de la organización, el secreto no llega y `deploy.yml` termina en verde con el aviso "Fly no configurado" sin desplegar nada.
 
 ## Código
 
 - Todo cambio termina en commit + push a `main`. Mensajes de commit en español, imperativo.
-- Backend en `app/` (Rust, axum + tokio). `GET /` devuelve texto plano; `GET /salud` devuelve `{"ok":true,"build":"<BUILD_ID>"}`, donde `BUILD_ID` es el SHA que inyecta el workflow.
+- Backend en `app/` (Rust, axum + tokio + reqwest). `GET /` devuelve texto plano; `GET /salud` devuelve `{"ok":true,"build":"<BUILD_ID>",...}`, donde `BUILD_ID` es el SHA que inyecta el workflow, más si hay clave de OpenRouter y de servicio configuradas.
+- El contrato del servicio vive bajo `/v1/`, compatible con la API de OpenAI donde hay equivalente. Publicada una ruta, no se rompe: lo incompatible iría a `/v2/`. Hoy existen `GET /v1/estado` (consulta la clave en OpenRouter, no gasta crédito) y `POST /v1/chat/completions` (proxy fino, sin streaming hasta la etapa 7).
+- **Todo `/v1` exige `Authorization: Bearer <SERVICIO_CLAVE>`**, y sin ese secreto el servicio responde `503` a todo `/v1`: un proxy abierto en una URL pública es crédito regalado. La clave de OpenRouter (`OPENROUTER_API_KEY`) solo la conoce `app/src/openrouter.rs` y nunca sale del backend.
+- Secretos y variables del backend: `OPENROUTER_API_KEY` y `SERVICIO_CLAVE` (secretos de repositorio, los vuelca `deploy.yml` a Fly), `MODELO_DEFECTO` (variable de repositorio, opcional) y `OPENROUTER_BASE` (solo para pruebas locales contra un servidor simulado).
 - `GET /holamundo` devuelve `holamundo` en texto plano; `/holamundo` y `/salud` llevan `Access-Control-Allow-Origin: *` porque los consume `docs/holamundo.html` desde Pages (otro origen). Si añades más rutas para el frontend, ponles la misma cabecera. `deploy.yml` verifica las dos rutas y falla si cambian.
+- `docs/consola.html` es el cliente de referencia del servicio y crece con cada etapa. `docs/index.html` es el mock de todas las etapas, no llama a nada.
 - `docs/holamundo.html` toma el nombre de la app de Fly del `<meta name="fly-app">` (`<repo>-<owner>`, como lo deriva `deploy.yml`). Si el proyecto define `FLY_APP` con otro nombre, actualiza ese `content` en el mismo commit.
 - `app/fly.toml` no lleva clave `app`: el nombre se pasa con `--app` desde `deploy.yml`.
 - El backend escucha en 8080, que es lo que espera Fly; la variable de entorno `PUERTO` solo la usa `tools/arrancar.ps1` para probar en el PC.
@@ -65,7 +70,7 @@ Pages está siempre activo. Fly también: `FLY_API_TOKEN` es un secreto de la or
 **El sandbox de la sesión no alcanza Pages, Fly ni el VPS**: `curl` a `*.github.io`, `*.fly.dev` o al VPS devuelve `CONNECT tunnel failed, response 403`. Tampoco hay daemon de Docker. Por eso **la verificación de un despliegue la hace siempre un workflow**, que corre en el runner de GitHub y sí tiene salida a internet:
 
 - `pages.yml` da por bueno el despliegue con el paso `deploy-pages`, **pero eso solo prueba que el artefacto se subió**, no que se esté sirviendo. Si tras el push aparece además un run `pages build and deployment` con un paso `Build with Jekyll`, el **Source** de Pages sigue en «Deploy from a branch»: el sitio sirve la raíz del repo (README en `/`, `docs/` colgando de `/docs/`) y los runs de `pages.yml` salen verdes sin efecto. Comprobarlo es parte de la verificación; el arreglo es manual, en Settings.
-- `deploy.yml` tiene un paso final que hace `curl` a `/salud` y falla el run si la respuesta no contiene el SHA del commit.
+- `deploy.yml` tiene pasos finales que hacen `curl` a `/salud` (falla si la respuesta no contiene el SHA del commit), a `/holamundo` y a `/v1/estado` con la clave de servicio. Este último solo corre si están los dos secretos; comprueba la conexión real con OpenRouter sin gastar crédito.
 
 No anuncies "puedes probarlo" hasta confirmar por la API de GitHub Actions que el run del workflow para el SHA que acabas de enviar está en `success`. Si en 5 minutos no está, avisa del fallo con la causa leída en los logs, no del éxito. Al avisar, da siempre: SHA, URL y número de `build`.
 

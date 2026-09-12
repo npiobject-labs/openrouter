@@ -78,11 +78,32 @@ jobs:
           FLY_APP: ${{ steps.app.outputs.app }}
         run: flyctl apps create "${FLY_APP}" --org desdemovil || true
 
-      - name: Fijar BUILD_ID con el SHA del commit
+      # BUILD_ID y, si existen, los secretos del servicio. --stage los deja
+      # preparados sin reiniciar: los aplica el deploy siguiente.
+      - name: Fijar los secretos del servicio
         if: steps.fly.outputs.configurado == 'true'
         env:
           FLY_APP: ${{ steps.app.outputs.app }}
-        run: flyctl secrets set "BUILD_ID=${GITHUB_SHA}" --app "${FLY_APP}" --stage
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          SERVICIO_CLAVE: ${{ secrets.SERVICIO_CLAVE }}
+          MODELO_DEFECTO: ${{ vars.MODELO_DEFECTO }}
+        run: |
+          set -- "BUILD_ID=${GITHUB_SHA}"
+          if [ -n "${OPENROUTER_API_KEY}" ]; then
+            set -- "$@" "OPENROUTER_API_KEY=${OPENROUTER_API_KEY}"
+          else
+            echo "Sin OPENROUTER_API_KEY: /v1 respondera 503 hasta que se defina."
+          fi
+          if [ -n "${SERVICIO_CLAVE}" ]; then
+            set -- "$@" "SERVICIO_CLAVE=${SERVICIO_CLAVE}"
+          else
+            echo "Sin SERVICIO_CLAVE: /v1 queda cerrado, que es lo correcto para un proxy publico."
+          fi
+          if [ -n "${MODELO_DEFECTO}" ]; then
+            set -- "$@" "MODELO_DEFECTO=${MODELO_DEFECTO}"
+          fi
+          echo "Fijando $# secretos (valores ocultos)."
+          flyctl secrets set "$@" --app "${FLY_APP}" --stage
 
       - name: Desplegar en Fly.io
         if: steps.fly.outputs.configurado == 'true'
@@ -127,6 +148,37 @@ jobs:
             || { echo "::error::/holamundo sin cabecera CORS"; exit 1; }
           echo "OK: /holamundo responde 'holamundo' con CORS"
 
+      # La conexion real con OpenRouter. No gasta credito: solo consulta la clave.
+      - name: Verificar /v1/estado
+        if: steps.fly.outputs.configurado == 'true'
+        env:
+          FLY_APP: ${{ steps.app.outputs.app }}
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          SERVICIO_CLAVE: ${{ secrets.SERVICIO_CLAVE }}
+        run: |
+          if [ -z "${SERVICIO_CLAVE}" ] || [ -z "${OPENROUTER_API_KEY}" ]; then
+            echo "Secretos del servicio incompletos: no se comprueba /v1/estado."
+            echo "Secretos del servicio incompletos: /v1/estado sin comprobar" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          url="https://${FLY_APP}.fly.dev/v1/estado"
+          echo "Verificando ${url}"
+          for intento in $(seq 1 6); do
+            # -o para no volcar el cuerpo: lleva la etiqueta y el saldo de la cuenta.
+            codigo="$(curl -s -o /tmp/estado -w '%{http_code}' --max-time 30 \
+              -H "Authorization: Bearer ${SERVICIO_CLAVE}" "${url}" || true)"
+            echo "Intento ${intento}/6: HTTP ${codigo}"
+            if [ "${codigo}" = "200" ] && grep -q '"ok":true' /tmp/estado; then
+              echo "OK: el servicio habla con OpenRouter"
+              exit 0
+            fi
+            if [ "${intento}" -lt 6 ]; then
+              sleep 10
+            fi
+          done
+          echo "::error::/v1/estado no confirmo la conexion con OpenRouter (ultimo HTTP ${codigo})."
+          exit 1
+
       - name: Resumen del despliegue
         if: success() && steps.fly.outputs.configurado == 'true'
         env:
@@ -140,6 +192,8 @@ jobs:
             echo "- URL: https://${FLY_APP}.fly.dev/"
             echo "- Salud: https://${FLY_APP}.fly.dev/salud"
             echo "- Hola mundo: https://${FLY_APP}.fly.dev/holamundo"
+            echo "- Estado del servicio: https://${FLY_APP}.fly.dev/v1/estado (requiere clave)"
             echo "- Comprobacion desde Pages: https://${GITHUB_REPOSITORY%%/*}.github.io/${GITHUB_REPOSITORY#*/}/holamundo.html"
+            echo "- Consola: https://${GITHUB_REPOSITORY%%/*}.github.io/${GITHUB_REPOSITORY#*/}/consola.html"
             echo "- Build (SHA): \`${GITHUB_SHA}\`"
           } >> "$GITHUB_STEP_SUMMARY"
