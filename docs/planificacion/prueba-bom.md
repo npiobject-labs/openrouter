@@ -83,10 +83,36 @@ que costó, y otra con lo que dijo cada modelo en cada campo.
 
 Con `-Modelo a/uno,b/dos` comparas los que quieras.
 
-El tope está en 0,02 dólares por llamada y se cambia con `-Tope`. Existe porque
+El tope está en 0,02 dólares por llamada y se cambia con `-Tope`. La respuesta
+está limitada a 700 tokens, que se cambian con `-MaxSalida`; si un modelo se
+pasa, la prueba lo dice y sigue con el siguiente en vez de cobrarte una novela. Existe porque
 el catálogo llega hasta modelos de 150 dólares por millón de tokens: uno de esos
 cuesta más de diez céntimos por análisis, mil veces el modelo de la casa, y no
 tiene por qué acertar más.
+
+### Lo que salió al comparar de verdad
+
+Con el BOM de Keyless, tres modelos de escalones distintos:
+
+| Modelo | Campos | Tardó | Coste |
+|---|---|---|---|
+| `google/gemini-2.5-flash-lite` | 6/7 | 0,7 s | 0,000138 $ |
+| `moonshotai/kimi-k2.5` | 6/7 aparente | 25,6 s | 0,019633 $ |
+| `anthropic/claude-fable-5` | 0/7 | 8,5 s | 0,031780 $ |
+
+El modelo de la casa acierta igual, tarda treinta y cinco veces menos y cuesta
+ciento cuarenta veces menos. **Para leer BOMs, pagar más no compra precisión.**
+
+El caso de kimi merece atención: su tabla dice seis de siete, pero en el campo
+que debía llevar el nombre de una columna metió cinco mil tokens deliberando
+entre dos candidatas. El JSON era válido y el esquema se cumplía, porque un
+campo de texto acepta cualquier cosa. De ahí salieron el límite de salida y los
+`maxLength` del esquema que lleva ahora la prueba.
+
+Su razonamiento, eso sí, era correcto y sirve para más adelante: `Comment` unas
+veces trae el código del fabricante y otras una descripción, y `Referencia
+principal` mezcla código de fabricante con código de distribuidor. Eso importará
+al cruzar con tarifas.
 
 **Por qué existe esta comparación.** La primera versión de la prueba elegía sola
 el primer modelo del catálogo que admitiera salida estructurada, y le tocó uno
