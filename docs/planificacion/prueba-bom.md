@@ -36,12 +36,15 @@ cuántas filas mandar con `-Filas`.
 ## Paso 2: la prueba de verdad
 
 ```powershell
-$env:SERVICIO_CLAVE = "<tu clave>"
 pwsh -File tools\probar-bom.ps1 -Fichero C:\ruta\BOM_Keyless3.3_Rev2.xlsx
 ```
 
-La clave también se puede pasar con `-Clave`, pero por la variable de entorno no
-queda en el historial de la consola.
+Si no hay clave, el script la pide y la tecleas ahí. Así no queda en el
+historial de PowerShell, cosa que sí pasa al escribirla con `-Clave`. También
+vale la variable `SERVICIO_CLAVE`.
+
+Sin `-Modelo`, se usa el modelo por defecto del servicio, el mismo que entra
+cuando una petición no elige ninguno.
 
 ## Qué deberías ver
 
@@ -65,12 +68,32 @@ estimación con los precios del catálogo, y unos segundos después el importe q
 factura OpenRouter. Es el dato que convierte esto en negocio: **cuánto cuesta
 analizar un BOM**.
 
+## Paso 3: comparar modelos
+
+```powershell
+pwsh -File tools\probar-bom.ps1 -Fichero BOM.xlsx -Comparar
+```
+
+Coge tres escalones de precio del catálogo, entre los que admiten salida
+estructurada: el modelo por defecto del servicio, uno intermedio y el más caro.
+Después enseña una tabla con cuántos campos mapeó cada uno, lo que tardó y lo
+que costó, y otra con lo que dijo cada modelo en cada campo.
+
+Con `-Modelo a/uno,b/dos` comparas los que quieras.
+
+**Por qué existe esta comparación.** La primera versión de la prueba elegía sola
+el primer modelo del catálogo que admitiera salida estructurada, y le tocó uno
+diminuto: mapeó **una** columna de siete, dijo que `Designator`, `Description` y
+`Quantity` no estaban en el fichero, y todo ello con confianza `0.99`. El JSON
+era válido, así que ninguna validación de esquema lo habría pillado. La calidad
+del mapeo depende del modelo, y por eso conviene medirla antes de elegir.
+
 ## Cuánto cuesta ejecutarla
 
-Con la cabecera y seis filas son del orden de 1.500 tokens de entrada. Con un
-modelo barato sale por bastante menos de un céntimo. El script elige solo un
-modelo del catálogo que admita salida estructurada y no sea gratuito, porque los
-gratuitos están desactivados en esta cuenta. Puedes fijar otro con `-Modelo`.
+Con la cabecera y seis filas son del orden de 700 tokens de entrada y 200 de
+salida. En una prueba real con un modelo barato salió por 0,000182 dólares. Aun
+comparando tres modelos, incluido el más caro del catálogo, la prueba entera
+cuesta céntesimas de céntimo.
 
 ## Si algo falla
 
@@ -80,6 +103,7 @@ gratuitos están desactivados en esta cuenta. Puedes fijar otro con `-Modelo`.
 | `openrouter_rechaza` con 402 | Sin saldo en OpenRouter. |
 | `el modelo no devolvio JSON valido` | El modelo se salió del esquema. Si se repite, toca añadir validación con reintento en el servicio. |
 | `coste sin calcular` | El catálogo no tenía precio de ese modelo. La confirmación posterior lo arregla. |
+| Mapeo lleno de «no esta en el fichero» | El modelo es demasiado pequeño para la tarea. Compara con `-Comparar` y fija uno mejor con `-Modelo`. |
 
 ## Contra el backend local
 
