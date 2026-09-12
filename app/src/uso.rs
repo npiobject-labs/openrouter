@@ -1,21 +1,44 @@
 use std::{
-    collections::VecDeque,
     sync::{
         atomic::{AtomicU64, Ordering},
-        RwLock,
+        Mutex,
     },
     time::{SystemTime, UNIX_EPOCH},
 };
 
+use rusqlite::{params, Connection, OptionalExtension, Row};
 use serde::Serialize;
 use serde_json::Value;
 
-/// Cuántas llamadas se recuerdan. En memoria: al reiniciar la máquina de Fly se
-/// pierden. La persistencia llega en la etapa 4.
-const CAPACIDAD: usize = 1000;
+/// Dónde vive el histórico. En Fly es el volumen montado en `/datos`; si no se
+/// puede abrir, el servicio sigue funcionando en memoria y lo dice en
+/// `/v1/estado`, que es como se detecta que el volumen no está.
+const RUTA_DEFECTO: &str = "/datos/uso.db";
 
-/// Lo que se sabe de una llamada a un modelo. Se anota siempre, también cuando
-/// falla: un error que costó dos segundos de espera es información de uso.
+const ESQUEMA: &str = "
+CREATE TABLE IF NOT EXISTS uso (
+    id             TEXT PRIMARY KEY,
+    fecha          TEXT    NOT NULL,
+    modelo_pedido  TEXT    NOT NULL,
+    modelo_servido TEXT,
+    proveedor      TEXT,
+    tokens_entrada INTEGER NOT NULL DEFAULT 0,
+    tokens_salida  INTEGER NOT NULL DEFAULT 0,
+    tokens_razonamiento INTEGER NOT NULL DEFAULT 0,
+    tokens_cache   INTEGER NOT NULL DEFAULT 0,
+    coste          REAL,
+    coste_origen   TEXT    NOT NULL,
+    latencia_ms    INTEGER NOT NULL DEFAULT 0,
+    motivo_fin     TEXT,
+    estado         INTEGER NOT NULL DEFAULT 0,
+    id_openrouter  TEXT
+);
+CREATE INDEX IF NOT EXISTS uso_fecha ON uso(fecha);
+CREATE INDEX IF NOT EXISTS uso_modelo ON uso(modelo_servido);
+";
+
+/// Lo que se sabe de una llamada. Se anota siempre, también cuando falla: un
+/// error que costó dos segundos de espera es información de uso.
 #[derive(Clone, Serialize)]
 pub struct Registro {
     pub id: String,
@@ -23,15 +46,15 @@ pub struct Registro {
     pub modelo_pedido: String,
     pub modelo_servido: Option<String>,
     pub proveedor: Option<String>,
-    pub tokens_entrada: u64,
-    pub tokens_salida: u64,
-    pub tokens_razonamiento: u64,
-    pub tokens_cache: u64,
+    pub tokens_entrada: i64,
+    pub tokens_salida: i64,
+    pub tokens_razonamiento: i64,
+    pub tokens_cache: i64,
     /// Dólares. `None` mientras no se pueda ni estimar.
     pub coste: Option<f64>,
     /// `estimado` con los precios del catálogo, `openrouter` si ya se reconcilió.
-    pub coste_origen: &'static str,
-    pub latencia_ms: u64,
+    pub coste_origen: String,
+    pub latencia_ms: i64,
     pub motivo_fin: Option<String>,
     pub estado: u16,
     /// El id de la generación en OpenRouter, con el que se reconcilia el coste.
@@ -60,7 +83,7 @@ impl Registro {
             // viene, es el dato bueno y ahorra la reconciliación.
             if let Some(c) = u.get("cost").and_then(Value::as_f64) {
                 self.coste = Some(c);
-                self.coste_origen = "openrouter";
+                self.coste_origen = "openrouter".into();
             }
         }
 
@@ -81,8 +104,28 @@ impl Registro {
             let total = (self.tokens_entrada as f64 * entrada + self.tokens_salida as f64 * salida)
                 / 1_000_000.0;
             self.coste = Some(total);
-            self.coste_origen = "estimado";
+            self.coste_origen = "estimado".into();
         }
+    }
+
+    fn desde_fila(f: &Row) -> rusqlite::Result<Self> {
+        Ok(Self {
+            id: f.get("id")?,
+            fecha: f.get("fecha")?,
+            modelo_pedido: f.get("modelo_pedido")?,
+            modelo_servido: f.get("modelo_servido")?,
+            proveedor: f.get("proveedor")?,
+            tokens_entrada: f.get("tokens_entrada")?,
+            tokens_salida: f.get("tokens_salida")?,
+            tokens_razonamiento: f.get("tokens_razonamiento")?,
+            tokens_cache: f.get("tokens_cache")?,
+            coste: f.get("coste")?,
+            coste_origen: f.get("coste_origen")?,
+            latencia_ms: f.get("latencia_ms")?,
+            motivo_fin: f.get("motivo_fin")?,
+            estado: f.get("estado")?,
+            id_openrouter: f.get("id_openrouter")?,
+        })
     }
 }
 
@@ -92,18 +135,88 @@ fn texto(v: Option<&Value>) -> Option<String> {
         .map(str::to_string)
 }
 
-fn entero(v: Option<&Value>) -> u64 {
-    v.and_then(Value::as_u64).unwrap_or(0)
+fn entero(v: Option<&Value>) -> i64 {
+    v.and_then(Value::as_i64).unwrap_or(0)
 }
 
-/// El anillo de registros y el contador que da los identificadores.
-#[derive(Default)]
+/// Cómo agrupar el resumen.
+pub enum Agrupacion {
+    Dia,
+    Modelo,
+}
+
+impl Agrupacion {
+    /// La columna por la que se agrupa. Nunca viene del usuario sin pasar por
+    /// aquí: es la única forma de que el `GROUP BY` no sea inyectable.
+    pub fn desde(texto: Option<&str>) -> Self {
+        match texto {
+            Some("modelo") => Self::Modelo,
+            _ => Self::Dia,
+        }
+    }
+
+    fn columna(&self) -> &'static str {
+        match self {
+            // La fecha es ISO, así que el día son sus diez primeros caracteres.
+            Self::Dia => "substr(fecha, 1, 10)",
+            Self::Modelo => "coalesce(modelo_servido, modelo_pedido)",
+        }
+    }
+}
+
+/// El histórico de llamadas. Una sola conexión bajo mutex: las consultas son de
+/// microsegundos y solo hay una máquina, porque el volumen de Fly obliga a
+/// `--ha=false`. Un pool aquí sería complicar sin ganar nada.
 pub struct Uso {
-    anillo: RwLock<VecDeque<Registro>>,
+    conexion: Mutex<Connection>,
+    en_disco: bool,
     contador: AtomicU64,
 }
 
 impl Uso {
+    /// Abre el histórico. Si el fichero no se puede abrir (no hay volumen, o no
+    /// hay permiso), avisa por el log y sigue en memoria: perder el histórico es
+    /// malo, pero dejar de servir consultas por eso lo es más.
+    pub fn nuevo(ruta: Option<&str>) -> Self {
+        let ruta = ruta.unwrap_or(RUTA_DEFECTO);
+
+        let (conexion, en_disco) = match Self::en_fichero(ruta) {
+            Ok(c) => (c, true),
+            Err(e) => {
+                eprintln!("no se pudo abrir {ruta} ({e}); el uso se guarda solo en memoria");
+                (
+                    Connection::open_in_memory().expect("SQLite en memoria siempre debe abrir"),
+                    false,
+                )
+            }
+        };
+        conexion
+            .execute_batch(ESQUEMA)
+            .expect("el esquema de uso debe crearse");
+
+        Self {
+            conexion: Mutex::new(conexion),
+            en_disco,
+            contador: AtomicU64::new(0),
+        }
+    }
+
+    fn en_fichero(ruta: &str) -> rusqlite::Result<Connection> {
+        let conexion = Connection::open(ruta)?;
+        // WAL para que una lectura larga no bloquee la anotación de una llamada.
+        conexion.pragma_update(None, "journal_mode", "WAL")?;
+        conexion.pragma_update(None, "synchronous", "NORMAL")?;
+        Ok(conexion)
+    }
+
+    pub fn almacen(&self) -> &'static str {
+        if self.en_disco {
+            "sqlite"
+        } else {
+            "memoria"
+        }
+    }
+
     /// Abre el registro de una llamada. El id se devuelve al cliente en
     /// `X-Uso-Id` antes de saber siquiera si la llamada irá bien.
     pub fn abre(&self, modelo_pedido: String) -> Registro {
@@ -124,7 +237,7 @@ impl Uso {
             tokens_razonamiento: 0,
             tokens_cache: 0,
             coste: None,
-            coste_origen: "desconocido",
+            coste_origen: "desconocido".into(),
             latencia_ms: 0,
             motivo_fin: None,
             estado: 0,
@@ -132,41 +245,130 @@ impl Uso {
         }
     }
 
-    pub fn anota(&self, registro: Registro) {
-        let mut anillo = self.anillo.write().unwrap();
-        if anillo.len() == CAPACIDAD {
-            anillo.pop_front();
+    pub fn anota(&self, r: Registro) {
+        let conexion = self.conexion.lock().unwrap();
+        let hecho = conexion.execute(
+            "INSERT OR REPLACE INTO uso (id, fecha, modelo_pedido, modelo_servido, proveedor,
+                tokens_entrada, tokens_salida, tokens_razonamiento, tokens_cache,
+                coste, coste_origen, latencia_ms, motivo_fin, estado, id_openrouter)
+             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15)",
+            params![
+                r.id, r.fecha, r.modelo_pedido, r.modelo_servido, r.proveedor,
+                r.tokens_entrada, r.tokens_salida, r.tokens_razonamiento, r.tokens_cache,
+                r.coste, r.coste_origen, r.latencia_ms, r.motivo_fin, r.estado, r.id_openrouter
+            ],
+        );
+        if let Err(e) = hecho {
+            eprintln!("no se pudo anotar el uso {}: {e}", r.id);
         }
-        anillo.push_back(registro);
     }
 
     /// Los últimos `n`, del más reciente al más antiguo.
     pub fn ultimos(&self, n: usize) -> Vec<Registro> {
-        let anillo = self.anillo.read().unwrap();
-        anillo.iter().rev().take(n).cloned().collect()
+        self.consulta(
+            "SELECT * FROM uso ORDER BY fecha DESC, rowid DESC LIMIT ?1",
+            params![n as i64],
+        )
     }
 
     pub fn uno(&self, id: &str) -> Option<Registro> {
-        let anillo = self.anillo.read().unwrap();
-        anillo.iter().rev().find(|r| r.id == id).cloned()
+        let conexion = self.conexion.lock().unwrap();
+        conexion
+            .query_one("SELECT * FROM uso WHERE id = ?1", params![id], |f| {
+                Registro::desde_fila(f)
+            })
+            .optional()
+            .unwrap_or(None)
     }
 
     pub fn total(&self) -> usize {
-        self.anillo.read().unwrap().len()
+        let conexion = self.conexion.lock().unwrap();
+        conexion
+            .query_one("SELECT count(*) FROM uso", [], |f| f.get::<_, i64>(0))
+            .map(|n| n as usize)
+            .unwrap_or(0)
     }
 
     /// Sustituye el coste estimado por el que factura OpenRouter, cuando la
-    /// reconciliación lo consigue. Si el registro ya salió del anillo, se
-    /// descarta sin ruido: es un dato de conveniencia, no una transacción.
+    /// reconciliación lo consigue.
     pub fn reconcilia(&self, id: &str, coste: f64, proveedor: Option<String>) {
-        let mut anillo = self.anillo.write().unwrap();
-        if let Some(r) = anillo.iter_mut().rev().find(|r| r.id == id) {
-            r.coste = Some(coste);
-            r.coste_origen = "openrouter";
-            if r.proveedor.is_none() {
-                r.proveedor = proveedor;
-            }
+        let conexion = self.conexion.lock().unwrap();
+        let hecho = conexion.execute(
+            "UPDATE uso SET coste = ?1, coste_origen = 'openrouter',
+                    proveedor = coalesce(proveedor, ?2)
+             WHERE id = ?3",
+            params![coste, proveedor, id],
+        );
+        if let Err(e) = hecho {
+            eprintln!("no se pudo reconciliar el uso {id}: {e}");
         }
+    }
+
+    /// Las llamadas de un intervalo, de la más antigua a la más reciente, que es
+    /// el orden natural para exportar.
+    pub fn intervalo(&self, desde: Option<&str>, hasta: Option<&str>) -> Vec<Registro> {
+        self.consulta(
+            "SELECT * FROM uso
+             WHERE (?1 IS NULL OR fecha >= ?1) AND (?2 IS NULL OR fecha <= ?2)
+             ORDER BY fecha ASC, rowid ASC",
+            params![desde, hasta],
+        )
+    }
+
+    /// Totales por día o por modelo. Devuelve filas ya listas para el JSON.
+    pub fn resumen(
+        &self,
+        desde: Option<&str>,
+        hasta: Option<&str>,
+        agrupar: &Agrupacion,
+    ) -> Vec<Value> {
+        let consulta = format!(
+            "SELECT {columna} AS grupo,
+                    count(*)                AS llamadas,
+                    sum(estado >= 400)      AS fallos,
+                    sum(tokens_entrada)     AS tokens_entrada,
+                    sum(tokens_salida)      AS tokens_salida,
+                    sum(coalesce(coste, 0)) AS coste,
+                    avg(latencia_ms)        AS latencia_media_ms
+             FROM uso
+             WHERE (?1 IS NULL OR fecha >= ?1) AND (?2 IS NULL OR fecha <= ?2)
+             GROUP BY grupo
+             ORDER BY grupo DESC",
+            columna = agrupar.columna()
+        );
+
+        let conexion = self.conexion.lock().unwrap();
+        let Ok(mut sentencia) = conexion.prepare(&consulta) else {
+            return Vec::new();
+        };
+        let filas = sentencia.query_map(params![desde, hasta], |f| {
+            Ok(serde_json::json!({
+                "grupo": f.get::<_, String>("grupo")?,
+                "llamadas": f.get::<_, i64>("llamadas")?,
+                "fallos": f.get::<_, i64>("fallos")?,
+                "tokens_entrada": f.get::<_, i64>("tokens_entrada")?,
+                "tokens_salida": f.get::<_, i64>("tokens_salida")?,
+                "coste": f.get::<_, f64>("coste")?,
+                "latencia_media_ms": f.get::<_, f64>("latencia_media_ms")?.round() as i64,
+            }))
+        });
+
+        match filas {
+            Ok(filas) => filas.filter_map(Result::ok).collect(),
+            Err(_) => Vec::new(),
+        }
+    }
+
+    fn consulta(&self, sql: &str, argumentos: impl rusqlite::Params) -> Vec<Registro> {
+        let conexion = self.conexion.lock().unwrap();
+        let Ok(mut sentencia) = conexion.prepare(sql) else {
+            return Vec::new();
+        };
+        let filas = match sentencia.query_map(argumentos, Registro::desde_fila) {
+            Ok(filas) => filas.filter_map(Result::ok).collect(),
+            Err(_) => Vec::new(),
+        };
+        filas
     }
 }
 
@@ -195,6 +397,12 @@ fn iso(segundos: u64) -> String {
 mod pruebas {
     use super::*;
 
+    fn en_memoria() -> Uso {
+        // Una ruta que no existe fuerza el camino de memoria, que es justo lo
+        // que hace el servicio cuando Fly no monta el volumen.
+        Uso::nuevo(Some("/no/existe/uso.db"))
+    }
+
     #[test]
     fn la_fecha_sale_en_iso() {
         assert_eq!(iso(0), "1970-01-01T00:00:00Z");
@@ -205,18 +413,17 @@ mod pruebas {
     }
 
     #[test]
-    fn el_anillo_no_pasa_de_su_capacidad() {
-        let uso = Uso::default();
-        for _ in 0..CAPACIDAD + 10 {
-            let r = uso.abre("m".into());
-            uso.anota(r);
-        }
-        assert_eq!(uso.total(), CAPACIDAD);
+    fn sin_volumen_el_servicio_sigue_en_memoria() {
+        let uso = en_memoria();
+        assert_eq!(uso.almacen(), "memoria");
+        let r = uso.abre("m".into());
+        uso.anota(r);
+        assert_eq!(uso.total(), 1);
     }
 
     #[test]
     fn el_coste_de_openrouter_le_gana_a_la_estimacion() {
-        let uso = Uso::default();
+        let uso = en_memoria();
         let mut r = uso.abre("m".into());
         r.desde_respuesta(&serde_json::json!({
             "id": "gen-1", "model": "m",
@@ -229,7 +436,7 @@ mod pruebas {
 
     #[test]
     fn sin_coste_de_openrouter_se_estima_con_el_catalogo() {
-        let uso = Uso::default();
+        let uso = en_memoria();
         let mut r = uso.abre("m".into());
         r.desde_respuesta(&serde_json::json!({
             "usage": { "prompt_tokens": 1_000_000, "completion_tokens": 500_000 }
@@ -237,5 +444,74 @@ mod pruebas {
         r.estima(Some((2.0, 4.0)));
         assert_eq!(r.coste, Some(4.0));
         assert_eq!(r.coste_origen, "estimado");
+    }
+
+    #[test]
+    fn el_historico_sobrevive_a_reabrir_el_fichero() {
+        let ruta = std::env::temp_dir().join(format!("uso-{}.db", std::process::id()));
+        let ruta = ruta.to_str().unwrap();
+        {
+            let uso = Uso::nuevo(Some(ruta));
+            assert_eq!(uso.almacen(), "sqlite");
+            let mut r = uso.abre("modelo/uno".into());
+            r.estado = 200;
+            r.coste = Some(0.5);
+            uso.anota(r);
+        }
+        let uso = Uso::nuevo(Some(ruta));
+        assert_eq!(uso.total(), 1, "el registro tiene que seguir ahí");
+        let _ = std::fs::remove_file(ruta);
+    }
+
+    #[test]
+    fn el_resumen_agrupa_y_suma() {
+        let uso = en_memoria();
+        for (modelo, coste, estado) in [("a", 1.0, 200), ("a", 2.0, 500), ("b", 4.0, 200)] {
+            let mut r = uso.abre(modelo.into());
+            r.modelo_servido = Some(modelo.into());
+            r.coste = Some(coste);
+            r.estado = estado;
+            r.tokens_entrada = 10;
+            uso.anota(r);
+        }
+
+        let por_modelo = uso.resumen(None, None, &Agrupacion::Modelo);
+        assert_eq!(por_modelo.len(), 2);
+        let a = por_modelo.iter().find(|f| f["grupo"] == "a").unwrap();
+        assert_eq!(a["llamadas"], 2);
+        assert_eq!(a["fallos"], 1);
+        assert_eq!(a["coste"], 3.0);
+        assert_eq!(a["tokens_entrada"], 20);
+
+        // Todas son de hoy, así que por día sale un solo grupo con las tres.
+        let por_dia = uso.resumen(None, None, &Agrupacion::Dia);
+        assert_eq!(por_dia.len(), 1);
+        assert_eq!(por_dia[0]["llamadas"], 3);
+        assert_eq!(por_dia[0]["coste"], 7.0);
+    }
+
+    #[test]
+    fn el_dia_completo_entra_en_el_intervalo() {
+        let uso = en_memoria();
+        let mut r = uso.abre("m".into());
+        r.fecha = "2026-09-12T14:48:00Z".into();
+        uso.anota(r);
+        // Lo que manda la ruta tras normalizar un "hasta" de solo fecha.
+        assert_eq!(uso.intervalo(None, Some("2026-09-12T23:59:59Z")).len(), 1);
+        // Sin normalizar, la fecha suelta dejaria el dia fuera.
+        assert_eq!(uso.intervalo(None, Some("2026-09-12")).len(), 0);
+    }
+
+    #[test]
+    fn el_intervalo_filtra_por_fecha() {
+        let uso = en_memoria();
+        for fecha in ["2026-01-01T10:00:00Z", "2026-06-01T10:00:00Z"] {
+            let mut r = uso.abre("m".into());
+            r.fecha = fecha.into();
+            uso.anota(r);
+        }
+        assert_eq!(uso.intervalo(Some("2026-03-01"), None).len(), 1);
+        assert_eq!(uso.intervalo(None, Some("2026-03-01")).len(), 1);
+        assert_eq!(uso.intervalo(None, None).len(), 2);
     }
 }

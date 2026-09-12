@@ -10,6 +10,8 @@ serde_json = "1"
 serde = { version = "1", features = ["derive"] }
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls", "http2"] }
 tower-http = { version = "0.6", features = ["cors"] }
+# "bundled" compila SQLite con el binario: el runtime no necesita libsqlite3.
+rusqlite = { version = "0.40", features = ["bundled"] }
 
 [profile.release]
 opt-level = "z"

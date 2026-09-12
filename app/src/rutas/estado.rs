@@ -14,6 +14,8 @@ pub async fn estado(State(servicio): State<Arc<Servicio>>) -> Result<Json<Value>
         "ok": true,
         "build": servicio.config.build,
         "modelo_defecto": servicio.config.modelo_defecto,
+        "almacen": servicio.uso.almacen(),
+        "registros": servicio.uso.total(),
         "clave": clave,
     })))
 }

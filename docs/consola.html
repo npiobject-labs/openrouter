@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="build" content="OP-B1-20260912-011">
+<meta name="build" content="OP-B1-20260912-012">
 <!-- App de Fly: <repo>-<owner>, el mismo nombre que deriva deploy.yml.
      Con otro nombre, cambia este content o abre la pagina con ?app=<nombre>. -->
 <meta name="fly-app" content="openrouter-npiobject-labs">
@@ -71,7 +71,7 @@ footer{display:flex;flex-wrap:wrap;gap:.4rem 1.2rem;font-size:.8rem;color:var(--
 <main>
   <header>
     <h1>openrouter <span>· consola</span></h1>
-    <p>Cliente de referencia del servicio. Etapas 1 a 3: conexión, catálogo de modelos, consulta y medición de lo que cuesta.</p>
+    <p>Cliente de referencia del servicio. Etapas 1 a 4: conexión, catálogo, consulta, medición de lo que cuesta e histórico con totales.</p>
   </header>
 
   <section class="panel">
@@ -157,7 +157,7 @@ footer{display:flex;flex-wrap:wrap;gap:.4rem 1.2rem;font-size:.8rem;color:var(--
 
   <section class="panel">
     <h2>Uso <span class="estado" id="uso-estado">sin cargar</span></h2>
-    <p>Las últimas llamadas que ha servido el backend, con lo que costó cada una. Se guardan las últimas mil en memoria y se pierden si la máquina se reinicia: la persistencia es la etapa 4.</p>
+    <p>Las últimas llamadas que ha servido el backend, con lo que costó cada una. Desde la etapa 4 el histórico vive en el volumen de Fly, así que sobrevive a los reinicios.</p>
     <div class="fila">
       <span style="flex:1"></span>
       <button id="btn-uso">Actualizar</button>
@@ -168,8 +168,33 @@ footer{display:flex;flex-wrap:wrap;gap:.4rem 1.2rem;font-size:.8rem;color:var(--
     </table></div>
   </section>
 
+  <section class="panel">
+    <h2>Resumen <span class="estado" id="res-estado">sin cargar</span></h2>
+    <p>Totales del histórico, por día o por modelo. Sin fechas, todo lo que haya guardado.</p>
+    <div class="fila">
+      <label for="res-agrupar">Agrupar por
+        <select id="res-agrupar"><option value="dia">Día</option><option value="modelo">Modelo</option></select>
+      </label>
+      <label for="res-desde">Desde <input id="res-desde" type="date"></label>
+      <label for="res-hasta">Hasta <input id="res-hasta" type="date"></label>
+      <button class="primario" id="btn-resumen">Calcular</button>
+      <button id="btn-csv" title="Descarga el histórico del intervalo en CSV">CSV</button>
+    </div>
+    <dl class="ficha" id="res-totales" hidden>
+      <div><dt>Coste</dt><dd class="grande" id="t-coste">–</dd></div>
+      <div><dt>Llamadas</dt><dd id="t-llamadas">–</dd></div>
+      <div><dt>Fallos</dt><dd id="t-fallos">–</dd></div>
+      <div><dt>Entrada</dt><dd id="t-entrada">–</dd></div>
+      <div><dt>Salida</dt><dd id="t-salida">–</dd></div>
+    </dl>
+    <div class="tabla"><table>
+      <thead><tr><th id="res-cabecera">Día</th><th>Llamadas</th><th>Fallos</th><th>Tokens</th><th>Coste</th><th>Latencia media</th></tr></thead>
+      <tbody id="res-filas"><tr><td colspan="6" class="texto">Pulsa «Calcular» para traer los totales.</td></tr></tbody>
+    </table></div>
+  </section>
+
   <footer>
-    <span>Build <code>OP-B1-20260912-011</code></span>
+    <span>Build <code>OP-B1-20260912-012</code></span>
     <span>Backend: <a id="url-backend" href="#">–</a></span>
     <a href="api.html">Documentación de la API</a>
     <a href="./">Mock de todas las etapas</a>
@@ -415,6 +440,94 @@ footer{display:flex;flex-wrap:wrap;gap:.4rem 1.2rem;font-size:.8rem;color:var(--
   }
 
   $('btn-uso').addEventListener('click', cargarUso);
+
+  // --- resumen --------------------------------------------------------------
+  function fechas(){
+    var q = [];
+    if ($('res-desde').value) q.push('desde=' + $('res-desde').value);
+    if ($('res-hasta').value) q.push('hasta=' + $('res-hasta').value);
+    return q;
+  }
+
+  function fila(celdas){
+    var tr = document.createElement('tr');
+    celdas.forEach(function(c){
+      var td = document.createElement('td');
+      if (c.clase) td.className = c.clase;
+      td.textContent = c.v;
+      tr.appendChild(td);
+    });
+    return tr;
+  }
+
+  function cargarResumen(){
+    var boton = $('btn-resumen');
+    var agrupar = $('res-agrupar').value;
+    boton.disabled = true;
+    pinta('res-estado', 'calculando…', '');
+    llama('/v1/uso/resumen?' + fechas().concat('agrupar=' + agrupar).join('&')).then(function(res){
+      var d = res.datos;
+      var t = d.totales;
+      texto('res-cabecera', agrupar === 'modelo' ? 'Modelo' : 'Día');
+      texto('t-coste', dinero6(t.coste));
+      texto('t-llamadas', miles(t.llamadas));
+      texto('t-fallos', miles(t.fallos));
+      texto('t-entrada', miles(t.tokens_entrada) + ' tok');
+      texto('t-salida', miles(t.tokens_salida) + ' tok');
+      $('res-totales').hidden = false;
+
+      var cuerpo = $('res-filas');
+      cuerpo.textContent = '';
+      if (!d.data.length){
+        cuerpo.appendChild(fila([{ v: 'Sin llamadas en ese intervalo.', clase: 'texto' }]));
+        cuerpo.firstChild.firstChild.colSpan = 6;
+      }
+      d.data.forEach(function(g){
+        cuerpo.appendChild(fila([
+          { v: g.grupo, clase: 'texto' },
+          { v: miles(g.llamadas) },
+          { v: miles(g.fallos), clase: g.fallos ? 'fallo' : '' },
+          { v: miles(g.tokens_entrada) + ' + ' + miles(g.tokens_salida) },
+          { v: dinero6(g.coste) },
+          { v: duracion(g.latencia_media_ms) }
+        ]));
+      });
+      pinta('res-estado', d.data.length + (d.data.length === 1 ? ' grupo' : ' grupos'), 'ok');
+    }).catch(function(e){
+      pinta('res-estado', e.message, 'mal');
+    }).finally(function(){ boton.disabled = false; });
+  }
+
+  // La descarga no puede ser un enlace: la ruta pide la clave por cabecera, y
+  // un <a href> no la lleva. Se trae con fetch y se guarda desde el blob.
+  function descargarCsv(){
+    var boton = $('btn-csv');
+    boton.disabled = true;
+    pinta('res-estado', 'exportando…', '');
+    var ruta = '/v1/uso/exportar?' + fechas().concat('formato=csv').join('&');
+    fetch(base + ruta, { headers: { 'Authorization': 'Bearer ' + clave.value.trim() } })
+      .then(function(r){
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        return r.text();
+      })
+      .then(function(csv){
+        var url = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
+        var a = document.createElement('a');
+        a.href = url;
+        a.download = 'uso.csv';
+        a.click();
+        URL.revokeObjectURL(url);
+        pinta('res-estado', 'CSV descargado', 'ok');
+      })
+      .catch(function(e){ pinta('res-estado', e.message, 'mal'); })
+      .finally(function(){ boton.disabled = false; });
+  }
+
+  $('btn-resumen').addEventListener('click', cargarResumen);
+  $('btn-csv').addEventListener('click', descargarCsv);
+  $('res-agrupar').addEventListener('change', function(){
+    if ($('res-estado').textContent !== 'sin cargar') cargarResumen();
+  });
 
   // --- consulta -----------------------------------------------------------
   $('btn-enviar').addEventListener('click', function(){

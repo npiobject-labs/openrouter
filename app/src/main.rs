@@ -37,7 +37,7 @@ async fn main() {
     let servicio = Arc::new(Servicio {
         openrouter: Cliente::nuevo(&config),
         catalogo: Catalogo::default(),
-        uso: Uso::default(),
+        uso: Uso::nuevo(config.bd.as_deref()),
         config,
     });
 
@@ -48,6 +48,8 @@ async fn main() {
         .route("/models", get(rutas::modelos::modelos))
         .route("/chat/completions", post(rutas::chat::chat))
         .route("/uso", get(rutas::uso::lista))
+        .route("/uso/resumen", get(rutas::uso::resumen))
+        .route("/uso/exportar", get(rutas::uso::exportar))
         .route("/uso/{id}", get(rutas::uso::una))
         .route_layer(middleware::from_fn_with_state(
             servicio.clone(),

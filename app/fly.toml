@@ -19,3 +19,10 @@ primary_region = "cdg"
   memory = "256mb"
   cpu_kind = "shared"
   cpus = 1
+
+# Volumen del historico de uso (etapa 4). Obliga a una sola maquina, que es lo
+# que ya hace deploy.yml con --ha=false. El volumen lo crea el propio workflow
+# si no existe.
+[mounts]
+  source = "datos"
+  destination = "/datos"

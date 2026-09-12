@@ -18,6 +18,8 @@ pub struct Config {
     pub base_openrouter: String,
     pub build: String,
     pub puerto: u16,
+    /// Fichero SQLite del histórico. Por defecto, el volumen de Fly.
+    pub bd: Option<String>,
 }
 
 impl Config {
@@ -36,6 +38,7 @@ impl Config {
             puerto: variable("PUERTO")
                 .and_then(|p| p.parse().ok())
                 .unwrap_or(8080),
+            bd: variable("BD_RUTA"),
         }
     }
 }

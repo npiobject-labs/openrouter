@@ -105,6 +105,21 @@ jobs:
           echo "Fijando $# secretos (valores ocultos)."
           flyctl secrets set "$@" --app "${FLY_APP}" --stage
 
+      - name: Crear el volumen del historico si no existe
+        if: steps.fly.outputs.configurado == 'true'
+        env:
+          FLY_APP: ${{ steps.app.outputs.app }}
+        run: |
+          # "volumes create" no es idempotente: sin esta comprobacion cada
+          # despliegue dejaria un volumen suelto mas.
+          region="$(sed -n 's/^primary_region *= *"\(.*\)"/\1/p' app/fly.toml)"
+          if flyctl volumes list --app "${FLY_APP}" --json | jq -e '.[] | select(.name == "datos")' > /dev/null; then
+            echo "El volumen datos ya existe."
+          else
+            flyctl volumes create datos --app "${FLY_APP}" --region "${region}" --size 1 --yes
+            echo "Volumen datos creado en ${region}."
+          fi
+
       - name: Desplegar en Fly.io
         if: steps.fly.outputs.configurado == 'true'
         env:
@@ -170,6 +185,14 @@ jobs:
             echo "Intento ${intento}/6: HTTP ${codigo}"
             if [ "${codigo}" = "200" ] && grep -q '"ok":true' /tmp/estado; then
               echo "OK: el servicio habla con OpenRouter"
+              # El historico tiene que estar en el volumen. Si dice "memoria",
+              # el montaje de /datos fallo y cada reinicio borraria el uso.
+              almacen="$(jq -r '.almacen' /tmp/estado)"
+              if [ "${almacen}" != "sqlite" ]; then
+                echo "::error::el historico esta en '${almacen}', no en el volumen: revisa el montaje de /datos."
+                exit 1
+              fi
+              echo "OK: historico en sqlite con $(jq -r '.registros' /tmp/estado) registros"
               exit 0
             fi
             if [ "${intento}" -lt 6 ]; then
