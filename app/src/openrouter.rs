@@ -67,6 +67,31 @@ impl Cliente {
         Ok(cuerpo.get("data").cloned().unwrap_or(cuerpo))
     }
 
+    /// `GET /models`: el catálogo entero. Tampoco gasta crédito, pero son
+    /// cientos de modelos, así que se cachea arriba.
+    pub async fn modelos(&self) -> Result<Value, ErrorApi> {
+        let respuesta = self
+            .http
+            .get(format!("{}/models", self.base))
+            .bearer_auth(self.clave()?)
+            .timeout(ESPERA_CORTA)
+            .send()
+            .await
+            .map_err(|e| sin_alcanzar("no se pudo traer el catálogo", e))?;
+
+        let estado = respuesta.status();
+        let cuerpo: Value = respuesta.json().await.map_err(respuesta_ilegible)?;
+
+        if !estado.is_success() {
+            return Err(ErrorApi::nuevo(
+                StatusCode::BAD_GATEWAY,
+                "openrouter_rechaza",
+                format!("OpenRouter respondió {estado} al pedir el catálogo."),
+            ));
+        }
+        Ok(cuerpo)
+    }
+
     /// `POST /chat/completions`: se reenvía el cuerpo tal cual y se devuelve la
     /// respuesta tal cual, con su código de estado y su bloque `usage`.
     pub async fn chat(&self, cuerpo: Value) -> Result<(StatusCode, Value), ErrorApi> {

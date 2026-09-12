@@ -1,4 +1,5 @@
 mod auth;
+mod catalogo;
 mod config;
 mod error;
 mod openrouter;
@@ -9,7 +10,7 @@ use std::sync::Arc;
 use axum::{
     http::{
         header::{AUTHORIZATION, CONTENT_TYPE},
-        Method,
+        HeaderName, Method,
     },
     middleware,
     routing::{get, post},
@@ -17,12 +18,13 @@ use axum::{
 };
 use tower_http::cors::{Any, CorsLayer};
 
-use crate::{config::Config, openrouter::Cliente};
+use crate::{catalogo::Catalogo, config::Config, openrouter::Cliente};
 
 /// Lo que comparten todas las rutas.
 pub struct Servicio {
     pub config: Config,
     pub openrouter: Cliente,
+    pub catalogo: Catalogo,
 }
 
 #[tokio::main]
@@ -32,6 +34,7 @@ async fn main() {
 
     let servicio = Arc::new(Servicio {
         openrouter: Cliente::nuevo(&config),
+        catalogo: Catalogo::default(),
         config,
     });
 
@@ -39,6 +42,7 @@ async fn main() {
     // que una ruta nueva nazca protegida.
     let v1 = Router::new()
         .route("/estado", get(rutas::estado::estado))
+        .route("/models", get(rutas::modelos::modelos))
         .route("/chat/completions", post(rutas::chat::chat))
         .route_layer(middleware::from_fn_with_state(
             servicio.clone(),
@@ -50,7 +54,9 @@ async fn main() {
     let cors = CorsLayer::new()
         .allow_origin(Any)
         .allow_methods([Method::GET, Method::POST, Method::OPTIONS])
-        .allow_headers([AUTHORIZATION, CONTENT_TYPE]);
+        .allow_headers([AUTHORIZATION, CONTENT_TYPE])
+        // Sin esto el navegador no puede leer X-Cache aunque viaje.
+        .expose_headers([HeaderName::from_static("x-cache")]);
 
     let app = Router::new()
         .route("/", get(rutas::basicas::raiz))
