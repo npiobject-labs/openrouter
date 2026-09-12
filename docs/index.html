@@ -1,27 +1,488 @@
 <!doctype html>
 <html lang="es">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="build" content="OP-B1-20260910-002">
-  <title>openrouter · mock 0</title>
-  <style>
-    body { font-family: system-ui, -apple-system, sans-serif; margin: 0; padding: 2rem; background: #fafafa; color: #1a1a1a; }
-    main { max-width: 40rem; margin: 0 auto; }
-    h1 { font-size: 1.5rem; margin: 0 0 .5rem; }
-    p { color: #555; line-height: 1.5; }
-    code { background: #eee; padding: .15rem .35rem; border-radius: 3px; }
-    a { color: #0b6e7a; text-underline-offset: 2px; }
-    .enlaces { margin-top: 1.75rem; padding-top: 1.25rem; border-top: 1px solid #e2e2e2; }
-  </style>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="build" content="OP-B1-20260912-003">
+<meta name="fly-app" content="openrouter-npiobject-labs">
+<title>Consola openrouter</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+:root{
+  --fondo:#f3f5f7; --superficie:#ffffff; --hundido:#e9edf0; --tinta:#17202a; --suave:#5b6673; --borde:#d6dce2;
+  --acento:#0b6e7a; --acento-tinta:#ffffff; --acento-suave:#dfeff1;
+  --ok:#2e7d4f; --ok-suave:#e2f1e8; --aviso:#a86b12; --aviso-suave:#fbefd9; --corte:#b93c3c; --corte-suave:#f9e3e3;
+  --etapa:#5b4a9c; --etapa-suave:#ece8f7;
+  --sans:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --fondo:#0f1418; --superficie:#171d23; --hundido:#1f272e; --tinta:#e4e9ee; --suave:#98a4b0; --borde:#2b353e;
+    --acento:#4fb3bf; --acento-tinta:#0b1518; --acento-suave:#163238;
+    --ok:#6dc48f; --ok-suave:#173124; --aviso:#e0a64a; --aviso-suave:#352a14; --corte:#e57373; --corte-suave:#3a1d1d;
+    --etapa:#b3a3e8; --etapa-suave:#2a2440;
+  }
+}
+:root[data-theme="dark"]{
+  --fondo:#0f1418; --superficie:#171d23; --hundido:#1f272e; --tinta:#e4e9ee; --suave:#98a4b0; --borde:#2b353e;
+  --acento:#4fb3bf; --acento-tinta:#0b1518; --acento-suave:#163238;
+  --ok:#6dc48f; --ok-suave:#173124; --aviso:#e0a64a; --aviso-suave:#352a14; --corte:#e57373; --corte-suave:#3a1d1d;
+  --etapa:#b3a3e8; --etapa-suave:#2a2440;
+}
+*{box-sizing:border-box}
+html{color-scheme:light dark}
+body{margin:0;background:var(--fondo);color:var(--tinta);font:14px/1.5 var(--sans);padding-inline:16px;padding-block:0 3rem}
+h1,h2,h3{margin:0;text-wrap:balance;font-weight:600}
+h2{font-size:1.05rem}
+h3{font-size:.95rem}
+a{color:var(--acento);text-underline-offset:2px}
+code,.mono{font-family:var(--mono);font-size:.85em}
+.num{font-variant-numeric:tabular-nums}
+button,input,select,textarea{font:inherit;color:inherit}
+button{cursor:pointer;border:1px solid var(--borde);background:var(--superficie);border-radius:6px;padding:.4rem .8rem}
+button.primario{background:var(--acento);color:var(--acento-tinta);border-color:var(--acento);font-weight:500}
+button.peligro{color:var(--corte);border-color:var(--corte)}
+button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible,[role=tab]:focus-visible{outline:2px solid var(--acento);outline-offset:2px}
+input,select,textarea{border:1px solid var(--borde);background:var(--superficie);border-radius:6px;padding:.4rem .6rem;min-width:0;width:100%}
+textarea{resize:vertical;font-family:var(--mono);font-size:.85rem;line-height:1.5}
+label{display:flex;flex-direction:column;gap:.25rem;font-size:.8rem;color:var(--suave);font-weight:500}
+label > *:not(:first-child){color:var(--tinta);font-weight:400;font-size:.9rem}
+.contenedor{max-width:74rem;margin:0 auto}
+
+/* cabecera */
+header{position:sticky;top:0;z-index:5;background:var(--fondo);border-bottom:1px solid var(--borde);margin-inline:-16px;padding:.7rem 16px}
+header .contenedor{display:flex;flex-wrap:wrap;align-items:center;gap:.6rem 1.25rem}
+header h1{font-size:1.05rem;letter-spacing:-.01em}
+header h1 span{color:var(--suave);font-weight:400}
+.chip{display:inline-flex;align-items:center;gap:.3rem;font-family:var(--mono);font-size:.72rem;padding:.1rem .45rem;border-radius:4px;background:var(--hundido);color:var(--suave);white-space:nowrap}
+.chip.ok{background:var(--ok-suave);color:var(--ok)}
+.chip.aviso{background:var(--aviso-suave);color:var(--aviso)}
+.chip.corte{background:var(--corte-suave);color:var(--corte)}
+.e{display:inline-flex;align-items:center;font-family:var(--mono);font-size:.68rem;font-weight:500;letter-spacing:.04em;padding:.05rem .35rem;border-radius:3px;background:var(--etapa-suave);color:var(--etapa);vertical-align:middle;margin-left:.35rem}
+.presupuesto{margin-left:auto;display:flex;align-items:center;gap:.6rem;font-size:.8rem;color:var(--suave)}
+.medidor{width:9rem;height:.45rem;background:var(--hundido);border-radius:3px;overflow:hidden;position:relative}
+.medidor i{position:absolute;inset:0 auto 0 0;background:var(--acento);border-radius:3px}
+.medidor b{position:absolute;top:-.15rem;bottom:-.15rem;width:1px;background:var(--aviso)}
+
+/* leyenda de etapas */
+.etapas{display:flex;gap:.4rem;overflow-x:auto;padding:.75rem 0 .25rem;scrollbar-width:thin}
+.etapas button{flex:0 0 auto;display:flex;flex-direction:column;align-items:flex-start;gap:0;padding:.35rem .6rem;border-radius:6px;text-align:left;line-height:1.25}
+.etapas button small{color:var(--suave);font-size:.72rem}
+.etapas button b{font-family:var(--mono);font-size:.72rem;font-weight:500;color:var(--etapa)}
+.etapas button[aria-pressed=true]{border-color:var(--etapa);background:var(--etapa-suave)}
+body[data-ver] [data-etapa]{opacity:.35;transition:opacity .15s}
+body[data-ver="1"] [data-etapa="1"],body[data-ver="2"] [data-etapa="2"],body[data-ver="3"] [data-etapa="3"],body[data-ver="4"] [data-etapa="4"],
+body[data-ver="5"] [data-etapa="5"],body[data-ver="6"] [data-etapa="6"],body[data-ver="7"] [data-etapa="7"],body[data-ver="8"] [data-etapa="8"]{opacity:1;outline:2px dashed var(--etapa);outline-offset:3px;border-radius:4px}
+.nota-etapas{font-size:.8rem;color:var(--suave);margin:.25rem 0 .75rem}
+
+/* pestañas */
+[role=tablist]{display:flex;gap:.15rem;border-bottom:1px solid var(--borde);overflow-x:auto;scrollbar-width:none}
+[role=tab]{flex:0 0 auto;background:none;border:0;border-bottom:2px solid transparent;border-radius:0;padding:.55rem .8rem;color:var(--suave);font-weight:500;margin-bottom:-1px}
+[role=tab][aria-selected=true]{color:var(--tinta);border-bottom-color:var(--acento)}
+[role=tabpanel]{padding-top:1.1rem}
+[role=tabpanel][hidden]{display:none}
+
+/* bloques */
+.rejilla{display:grid;gap:1rem}
+.dos{grid-template-columns:minmax(0,1.15fr) minmax(0,1fr)}
+.tres{grid-template-columns:repeat(3,minmax(0,1fr))}
+.cuatro{grid-template-columns:repeat(4,minmax(0,1fr))}
+@media (max-width:760px){.dos,.tres,.cuatro{grid-template-columns:1fr}}
+.panel{background:var(--superficie);border:1px solid var(--borde);border-radius:8px;padding:1rem;display:flex;flex-direction:column;gap:.8rem}
+.panel > h2,.panel > h3{display:flex;align-items:center;gap:.3rem;flex-wrap:wrap}
+.fila{display:flex;flex-wrap:wrap;gap:.6rem;align-items:flex-end}
+.fila > label{flex:1 1 10rem}
+.fila > button{flex:0 0 auto}
+.salida{background:var(--hundido);border-radius:6px;padding:.75rem .9rem;white-space:pre-wrap;font-family:var(--mono);font-size:.8rem;line-height:1.5;overflow-x:auto;margin:0}
+.respuesta{white-space:pre-wrap;line-height:1.6;margin:0}
+.ficha{display:grid;grid-template-columns:repeat(auto-fit,minmax(7.5rem,1fr));gap:.5rem .9rem;border-top:1px dashed var(--borde);padding-top:.7rem}
+.ficha div{display:flex;flex-direction:column}
+.ficha dt{font-size:.7rem;text-transform:uppercase;letter-spacing:.06em;color:var(--suave)}
+.ficha dd{margin:0;font-family:var(--mono);font-size:.85rem}
+.ficha dd.grande{font-size:1.15rem;color:var(--acento)}
+details summary{cursor:pointer;color:var(--suave);font-size:.85rem}
+.tabla{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-size:.85rem}
+th,td{text-align:left;padding:.45rem .6rem;border-bottom:1px solid var(--borde);vertical-align:top;white-space:nowrap}
+th{font-size:.7rem;text-transform:uppercase;letter-spacing:.06em;color:var(--suave);font-weight:500}
+td.num,th.num{text-align:right}
+tr.cortada td{color:var(--suave)}
+.punto{display:inline-block;width:.5rem;height:.5rem;border-radius:50%;margin-right:.35rem;vertical-align:middle;background:var(--ok)}
+.punto.aviso{background:var(--aviso)}.punto.corte{background:var(--corte)}
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(9rem,1fr));gap:.75rem}
+.tile{background:var(--hundido);border-radius:6px;padding:.7rem .85rem}
+.tile small{display:block;font-size:.7rem;text-transform:uppercase;letter-spacing:.06em;color:var(--suave)}
+.tile strong{display:block;font-family:var(--mono);font-size:1.3rem;font-weight:500;margin-top:.15rem}
+.barras{display:grid;grid-template-columns:repeat(14,1fr);gap:.3rem;align-items:end;height:7rem;padding-top:.5rem}
+.barras div{background:var(--acento);border-radius:2px 2px 0 0;position:relative;min-height:2px}
+.barras div:last-child{background:var(--aviso)}
+.barras span{position:absolute;bottom:-1.2rem;left:0;right:0;text-align:center;font-family:var(--mono);font-size:.62rem;color:var(--suave)}
+.ejes{display:flex;justify-content:space-between;font-size:.7rem;color:var(--suave);margin-top:1.4rem}
+.interruptor{display:inline-flex;align-items:center;gap:.4rem;font-size:.85rem;color:var(--tinta);flex-direction:row;font-weight:400}
+.interruptor input{width:auto}
+.stream{font-family:var(--mono);font-size:.8rem;color:var(--suave);display:flex;gap:1rem;flex-wrap:wrap}
+.cursor::after{content:"▍";color:var(--acento);animation:parp 1s steps(2) infinite}
+@keyframes parp{to{opacity:0}}
+@media (prefers-reduced-motion:reduce){.cursor::after{animation:none}}
+.barra-pres{height:.5rem;background:var(--hundido);border-radius:3px;position:relative;overflow:hidden;min-width:7rem}
+.barra-pres i{position:absolute;inset:0 auto 0 0;background:var(--acento);border-radius:3px}
+.barra-pres i.aviso{background:var(--aviso)}.barra-pres i.corte{background:var(--corte)}
+.alerta{border-left:3px solid var(--aviso);background:var(--aviso-suave);padding:.6rem .8rem;border-radius:0 6px 6px 0;font-size:.85rem}
+.alerta.corte{border-color:var(--corte);background:var(--corte-suave)}
+footer{margin-top:2.5rem;padding-top:1rem;border-top:1px solid var(--borde);font-size:.8rem;color:var(--suave);display:flex;flex-wrap:wrap;gap:.4rem 1.2rem}
+.aviso-mock{font-size:.8rem;color:var(--suave);margin:.6rem 0 0}
+</style>
 </head>
 <body>
-  <main>
-    <h1>openrouter · mock 0</h1>
-    <p>Fase 0 del flujo «PC arranca, móvil continúa».</p>
-    <p>Build: <code>OP-B1-20260910-002</code></p>
-    <p class="enlaces"><a href="bitacora.html">Bitácora del proyecto</a> · cada sesión de trabajo, qué se pidió y qué cambió.<br>
-    <a href="holamundo.html">Comprobación del backend</a> · Pages llama a <code>/holamundo</code> y <code>/salud</code> en Fly.</p>
-  </main>
+<header>
+  <div class="contenedor">
+    <h1>openrouter <span>· consola</span></h1>
+    <span class="chip">OP-B1-20260912-003</span>
+    <span class="chip mono">openrouter-npiobject-labs.fly.dev</span>
+    <div class="presupuesto" data-etapa="6">
+      <span>consola · septiembre</span>
+      <div class="medidor" aria-label="Consumo del presupuesto mensual"><i style="width:31%"></i><b style="left:80%"></b></div>
+      <span class="mono num">3,12 $ / 10 $</span>
+      <span class="e">E6</span>
+    </div>
+  </div>
+</header>
+
+<div class="contenedor">
+  <p class="aviso-mock">Mock estático con datos de ejemplo. Cada pieza lleva la etapa del plan que la introduce; pulsa una etapa para ver solo lo que añade. Nada de esta página llama a ningún servicio.</p>
+  <div class="etapas" role="group" aria-label="Etapas del plan">
+    <button aria-pressed="false" data-ver="1"><b>E1</b><small>Conexión y consulta</small></button>
+    <button aria-pressed="false" data-ver="2"><b>E2</b><small>Catálogo de modelos</small></button>
+    <button aria-pressed="false" data-ver="3"><b>E3</b><small>Medición por llamada</small></button>
+    <button aria-pressed="false" data-ver="4"><b>E4</b><small>Persistencia y agregados</small></button>
+    <button aria-pressed="false" data-ver="5"><b>E5</b><small>Apps consumidoras</small></button>
+    <button aria-pressed="false" data-ver="6"><b>E6</b><small>Presupuestos y cuotas</small></button>
+    <button aria-pressed="false" data-ver="7"><b>E7</b><small>Streaming</small></button>
+    <button aria-pressed="false" data-ver="8"><b>E8</b><small>Alias y enrutado</small></button>
+  </div>
+  <p class="nota-etapas" id="nota-etapas">Se muestra todo. La consola de la etapa 1 son solo las piezas marcadas E1: clave, estado, prompt y respuesta.</p>
+
+  <div role="tablist" aria-label="Secciones">
+    <button role="tab" id="tab-consola" aria-selected="true" aria-controls="p-consola">Consola<span class="e">E1</span></button>
+    <button role="tab" id="tab-modelos" aria-selected="false" aria-controls="p-modelos">Modelos<span class="e">E2</span></button>
+    <button role="tab" id="tab-uso" aria-selected="false" aria-controls="p-uso">Uso<span class="e">E3</span></button>
+    <button role="tab" id="tab-resumen" aria-selected="false" aria-controls="p-resumen">Resumen<span class="e">E4</span></button>
+    <button role="tab" id="tab-apps" aria-selected="false" aria-controls="p-apps">Apps<span class="e">E5</span></button>
+    <button role="tab" id="tab-alias" aria-selected="false" aria-controls="p-alias">Alias<span class="e">E8</span></button>
+  </div>
+
+  <!-- CONSOLA -->
+  <section role="tabpanel" id="p-consola" aria-labelledby="tab-consola">
+    <div class="rejilla dos">
+      <div class="rejilla" style="align-content:start">
+        <div class="panel" data-etapa="1">
+          <h2>Conexión<span class="e">E1</span></h2>
+          <div class="fila">
+            <label>Clave de servicio<input id="clave" type="password" value="sk-serv-ejemplo-0000" autocomplete="off"></label>
+            <button id="btn-estado">Estado</button>
+          </div>
+          <dl class="ficha" style="border:0;padding:0">
+            <div><dt>Clave de OpenRouter</dt><dd>openrouter-servicio</dd></div>
+            <div><dt>Uso acumulado</dt><dd class="num">12,47 $</dd></div>
+            <div><dt>Límite</dt><dd class="num">50 $</dd></div>
+            <div><dt>Servicio</dt><dd><span class="punto"></span>ok · build e9815b9</dd></div>
+          </dl>
+          <p style="margin:0;font-size:.8rem;color:var(--suave)">La clave se guarda solo en este navegador. La de OpenRouter nunca sale del backend.</p>
+        </div>
+
+        <div class="panel">
+          <h2>Consulta<span class="e">E1</span></h2>
+          <div class="fila">
+            <label data-etapa="2">Modelo<span class="e">E2</span>
+              <select id="modelo">
+                <optgroup label="Alias (E8)" data-etapa="8">
+                  <option>alias:redactor → anthropic/claude-haiku-4.5</option>
+                  <option>alias:clasificador → google/gemini-2.5-flash-lite</option>
+                </optgroup>
+                <optgroup label="Modelos">
+                  <option selected>google/gemini-2.5-flash-lite · 0,10 / 0,40 $/M</option>
+                  <option>anthropic/claude-haiku-4.5 · 1,00 / 5,00 $/M</option>
+                  <option>openai/gpt-5-mini · 0,25 / 2,00 $/M</option>
+                  <option>meta-llama/llama-3.3-70b-instruct:free · gratis</option>
+                </optgroup>
+              </select>
+            </label>
+            <label data-etapa="5">Operación<span class="e">E5</span><input id="operacion" value="doc-2026-0912-017" placeholder="X-Operacion (opcional)"></label>
+          </div>
+          <label>Prompt<textarea id="prompt" rows="5">Resume en tres frases, en español, qué hace un proxy de medición delante de OpenRouter y por qué la clave nunca debe llegar al navegador.</textarea></label>
+          <div class="fila" style="align-items:center">
+            <label class="interruptor" data-etapa="7"><input id="stream" type="checkbox" checked> Streaming<span class="e">E7</span></label>
+            <label class="interruptor"><input id="json" type="checkbox"> JSON de salida</label>
+            <span style="flex:1"></span>
+            <button id="btn-cancelar" data-etapa="7">Cancelar</button>
+            <button class="primario" id="btn-enviar">Enviar</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel" style="align-self:start">
+        <h2>Respuesta <span class="chip">google/gemini-2.5-flash-lite</span></h2>
+        <div class="stream" data-etapa="7">
+          <span>primer token 412 ms</span><span>ttl 1,84 s</span><span>93 tok/s</span><span class="e">E7</span>
+        </div>
+        <p class="respuesta">Un proxy de medición se sitúa entre tus aplicaciones y OpenRouter: recibe cada petición con la credencial de la app, la reenvía con la clave real y devuelve la respuesta intacta. Por el camino anota tokens, coste, latencia y proveedor, de modo que cada app sabe cuánto gasta sin tener que confiar en su propio recuento. La clave de OpenRouter nunca llega al navegador porque cualquier cosa servida en una página pública puede leerse, copiarse y usarse para gastar tu crédito<span class="cursor"></span></p>
+        <dl class="ficha" data-etapa="3">
+          <div><dt>Coste</dt><dd class="grande num">0,000 187 $</dd></div>
+          <div><dt>Entrada</dt><dd class="num">118 tok</dd></div>
+          <div><dt>Salida</dt><dd class="num">171 tok</dd></div>
+          <div><dt>Razonamiento</dt><dd class="num">0 tok</dd></div>
+          <div><dt>Caché</dt><dd class="num">0 tok</dd></div>
+          <div><dt>Proveedor</dt><dd>Google AI Studio</dd></div>
+          <div><dt>Fin</dt><dd>stop</dd></div>
+          <div><dt>Uso</dt><dd>X-Uso-Id u_01j7q<span class="e">E3</span></dd></div>
+        </dl>
+        <div class="fila" data-etapa="3">
+          <button>Repetir con otro modelo</button>
+          <button>Ver en Uso</button>
+        </div>
+        <details>
+          <summary>JSON crudo de OpenRouter<span class="e">E1</span></summary>
+<pre class="salida">{
+  "id": "gen-1757664841-Xk2p",
+  "model": "google/gemini-2.5-flash-lite",
+  "provider": "Google AI Studio",
+  "choices": [{ "finish_reason": "stop", "message": { "role": "assistant", "content": "Un proxy de medición…" } }],
+  "usage": { "prompt_tokens": 118, "completion_tokens": 171, "total_tokens": 289, "cost": 0.000187 }
+}</pre>
+        </details>
+      </div>
+    </div>
+  </section>
+
+  <!-- MODELOS -->
+  <section role="tabpanel" id="p-modelos" aria-labelledby="tab-modelos" hidden>
+    <div class="panel" data-etapa="2">
+      <h2>Catálogo <span class="chip">caché 41 min · 327 modelos</span><span class="e">E2</span></h2>
+      <div class="fila">
+        <label>Buscar<input id="f-texto" placeholder="id o nombre" value="flash"></label>
+        <label>Proveedor<select id="f-prov"><option>Todos</option><option selected>Google</option><option>Anthropic</option><option>OpenAI</option><option>Meta</option></select></label>
+        <label>Contexto mínimo<select id="f-ctx"><option>Cualquiera</option><option selected>128k</option><option>200k</option><option>1M</option></select></label>
+        <label class="interruptor"><input id="f-gratis" type="checkbox"> Solo gratuitos</label>
+        <button>Refrescar catálogo</button>
+      </div>
+      <div class="tabla"><table>
+        <thead><tr><th>Modelo</th><th>Proveedor</th><th class="num">Contexto</th><th class="num">Entrada $/M</th><th class="num">Salida $/M</th><th>Herramientas</th><th>JSON</th><th>Modalidades</th><th></th></tr></thead>
+        <tbody>
+          <tr><td class="mono">google/gemini-2.5-flash-lite</td><td>Google</td><td class="num">1 048 576</td><td class="num">0,10</td><td class="num">0,40</td><td>sí</td><td>sí</td><td>texto, imagen</td><td><button>Usar</button></td></tr>
+          <tr><td class="mono">google/gemini-2.5-flash</td><td>Google</td><td class="num">1 048 576</td><td class="num">0,30</td><td class="num">2,50</td><td>sí</td><td>sí</td><td>texto, imagen, audio</td><td><button>Usar</button></td></tr>
+          <tr><td class="mono">google/gemini-2.5-pro</td><td>Google</td><td class="num">1 048 576</td><td class="num">1,25</td><td class="num">10,00</td><td>sí</td><td>sí</td><td>texto, imagen, audio</td><td><button>Usar</button></td></tr>
+          <tr><td class="mono">google/gemma-3-27b-it:free</td><td>Google</td><td class="num">131 072</td><td class="num">0,00</td><td class="num">0,00</td><td>no</td><td>no</td><td>texto, imagen</td><td><button>Usar</button></td></tr>
+        </tbody>
+      </table></div>
+      <p style="margin:0;font-size:.8rem;color:var(--suave)">Precios en dólares por millón de tokens, tal como los publica OpenRouter. Si el catálogo no responde se sirve la última copia con la marca <code>X-Cache: stale</code>.</p>
+    </div>
+  </section>
+
+  <!-- USO -->
+  <section role="tabpanel" id="p-uso" aria-labelledby="tab-uso" hidden>
+    <div class="panel">
+      <h2>Últimas llamadas<span class="e">E3</span></h2>
+      <div class="fila">
+        <label data-etapa="5">App<span class="e">E5</span><select id="u-app"><option>Todas</option><option>consola</option><option>facturas</option><option>soporte</option></select></label>
+        <label data-etapa="4">Desde<span class="e">E4</span><input id="u-desde" type="date" value="2026-09-05"></label>
+        <label data-etapa="4">Hasta<input id="u-hasta" type="date" value="2026-09-12"></label>
+        <label>Mostrar<select id="u-n"><option>50</option><option>200</option><option>1000</option></select></label>
+      </div>
+      <div class="tabla" data-etapa="3"><table>
+        <thead><tr><th>Cuándo</th><th data-etapa="5">App</th><th data-etapa="5">Operación</th><th>Modelo pedido → servido</th><th>Proveedor</th><th class="num">Ent.</th><th class="num">Sal.</th><th class="num">Coste $</th><th class="num">Lat.</th><th>Estado</th></tr></thead>
+        <tbody>
+          <tr><td class="mono">12/09 09:14:01</td><td>consola</td><td class="mono">doc-…-017</td><td class="mono">gemini-2.5-flash-lite</td><td>Google AI Studio</td><td class="num">118</td><td class="num">171</td><td class="num">0,000187</td><td class="num">1,84 s</td><td><span class="punto"></span>reconciliado</td></tr>
+          <tr><td class="mono">12/09 09:13:40</td><td>facturas</td><td class="mono">fac-2026-3311</td><td class="mono">alias:clasificador → gemini-2.5-flash-lite</td><td>Google AI Studio</td><td class="num">2 410</td><td class="num">36</td><td class="num">0,000255</td><td class="num">0,91 s</td><td><span class="punto"></span>reconciliado</td></tr>
+          <tr><td class="mono">12/09 09:13:38</td><td>facturas</td><td class="mono">fac-2026-3311</td><td class="mono">alias:clasificador → gemini-2.5-flash-lite</td><td>Google AI Studio</td><td class="num">2 388</td><td class="num">41</td><td class="num">0,000255</td><td class="num">0,88 s</td><td><span class="punto"></span>reconciliado</td></tr>
+          <tr><td class="mono">12/09 09:12:07</td><td>soporte</td><td class="mono">tk-88121</td><td class="mono">alias:redactor → claude-haiku-4.5</td><td>Anthropic</td><td class="num">1 902</td><td class="num">412</td><td class="num">0,003962</td><td class="num">4,10 s</td><td><span class="punto aviso"></span>pendiente</td></tr>
+          <tr><td class="mono">12/09 09:11:52</td><td>soporte</td><td class="mono">tk-88121</td><td class="mono">alias:redactor → claude-haiku-4.5 <span class="chip aviso">respaldo</span></td><td>Anthropic</td><td class="num">1 902</td><td class="num">0</td><td class="num">0,000000</td><td class="num">12,0 s</td><td><span class="punto corte"></span>502 proveedor</td></tr>
+          <tr class="cortada"><td class="mono">12/09 09:02:15</td><td>facturas</td><td class="mono">fac-2026-3298</td><td class="mono">alias:clasificador</td><td>—</td><td class="num">—</td><td class="num">—</td><td class="num">0</td><td class="num">—</td><td><span class="punto corte"></span>429 bucle<span class="e">E6</span></td></tr>
+          <tr><td class="mono">11/09 18:40:33</td><td>consola</td><td class="mono">—</td><td class="mono">gpt-5-mini</td><td>OpenAI</td><td class="num">96</td><td class="num">220</td><td class="num">0,000464</td><td class="num">2,31 s</td><td><span class="punto"></span>cancelado 220 tok<span class="e">E7</span></td></tr>
+        </tbody>
+      </table></div>
+      <p style="margin:0;font-size:.8rem;color:var(--suave)">Coste según <code>usage</code> y, en cuanto OpenRouter lo publica, el real de <code>/generation</code>. Hasta la etapa 4 solo se guardan las últimas 1 000 en memoria.</p>
+    </div>
+  </section>
+
+  <!-- RESUMEN -->
+  <section role="tabpanel" id="p-resumen" aria-labelledby="tab-resumen" hidden>
+    <div class="rejilla" data-etapa="4">
+      <div class="panel">
+        <h2>Últimos 14 días <span class="chip">SQLite · 4 812 registros</span><span class="e">E4</span></h2>
+        <div class="tiles">
+          <div class="tile"><small>Llamadas</small><strong class="num">1 296</strong></div>
+          <div class="tile"><small>Tokens de entrada</small><strong class="num">2,41 M</strong></div>
+          <div class="tile"><small>Tokens de salida</small><strong class="num">318 k</strong></div>
+          <div class="tile"><small>Coste</small><strong class="num">4,87 $</strong></div>
+          <div class="tile"><small>Coste medio / llamada</small><strong class="num">0,0038 $</strong></div>
+        </div>
+        <h3>Coste por día, $</h3>
+        <div class="barras" aria-label="Coste diario en dólares">
+          <div style="height:38%"><span>30</span></div><div style="height:45%"><span>31</span></div><div style="height:22%"><span>01</span></div><div style="height:60%"><span>02</span></div>
+          <div style="height:52%"><span>03</span></div><div style="height:17%"><span>04</span></div><div style="height:12%"><span>05</span></div><div style="height:70%"><span>06</span></div>
+          <div style="height:64%"><span>07</span></div><div style="height:81%"><span>08</span></div><div style="height:58%"><span>09</span></div><div style="height:100%"><span>10</span></div>
+          <div style="height:47%"><span>11</span></div><div style="height:26%"><span>12</span></div>
+        </div>
+        <div class="ejes"><span>máx. 0,71 $ el día 10</span><span>hoy, parcial</span></div>
+      </div>
+      <div class="rejilla dos">
+        <div class="panel">
+          <h3>Por modelo</h3>
+          <div class="tabla"><table>
+            <thead><tr><th>Modelo</th><th class="num">Llamadas</th><th class="num">Coste $</th><th class="num">% coste</th></tr></thead>
+            <tbody>
+              <tr><td class="mono">claude-haiku-4.5</td><td class="num">214</td><td class="num">2,91</td><td class="num">60</td></tr>
+              <tr><td class="mono">gemini-2.5-flash-lite</td><td class="num">918</td><td class="num">0,84</td><td class="num">17</td></tr>
+              <tr><td class="mono">gpt-5-mini</td><td class="num">131</td><td class="num">0,77</td><td class="num">16</td></tr>
+              <tr><td class="mono">gemini-2.5-pro</td><td class="num">33</td><td class="num">0,35</td><td class="num">7</td></tr>
+            </tbody>
+          </table></div>
+        </div>
+        <div class="panel">
+          <h3>Por app<span class="e">E5</span></h3>
+          <div class="tabla" data-etapa="5"><table>
+            <thead><tr><th>App</th><th class="num">Llamadas</th><th class="num">Coste $</th><th>Presupuesto mes</th></tr></thead>
+            <tbody>
+              <tr><td>soporte</td><td class="num">301</td><td class="num">3,02</td><td><div class="barra-pres"><i class="aviso" style="width:84%"></i></div></td></tr>
+              <tr><td>facturas</td><td class="num">862</td><td class="num">1,21</td><td><div class="barra-pres"><i style="width:24%"></i></div></td></tr>
+              <tr><td>consola</td><td class="num">133</td><td class="num">0,64</td><td><div class="barra-pres"><i style="width:31%"></i></div></td></tr>
+            </tbody>
+          </table></div>
+          <div class="fila"><button>Exportar CSV</button><button>Exportar JSON</button></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- APPS -->
+  <section role="tabpanel" id="p-apps" aria-labelledby="tab-apps" hidden>
+    <div class="rejilla">
+      <div class="alerta corte" data-etapa="6">Cortacircuitos: <b>facturas</b> repitió el mismo cuerpo 12 veces en 40 s a las 09:02. Se cortó con <code>429 bucle</code>; el crédito no se tocó. Se reanuda solo tras 5 minutos sin repeticiones.<span class="e">E6</span></div>
+      <div class="alerta" data-etapa="6">Aviso: <b>soporte</b> lleva el 84 % de su presupuesto de septiembre. Corte al 100 %.</div>
+      <div class="panel" data-etapa="5">
+        <h2>Apps consumidoras <span class="chip">clave de administración</span><span class="e">E5</span></h2>
+        <div class="tabla"><table>
+          <thead><tr><th>App</th><th>Clave</th><th>Creada</th><th>Estado</th><th data-etapa="6">Presupuesto mes<span class="e">E6</span></th><th class="num" data-etapa="6">Cuota / min</th><th></th></tr></thead>
+          <tbody>
+            <tr><td>soporte</td><td class="mono">app_3f…9c</td><td class="mono">2026-09-03</td><td><span class="punto aviso"></span>activa, en aviso</td><td><div class="barra-pres"><i class="aviso" style="width:84%"></i></div><span class="mono num" style="font-size:.75rem">25,20 $ / 30 $</span></td><td class="num">60</td><td><button>Editar</button> <button class="peligro">Desactivar</button></td></tr>
+            <tr><td>facturas</td><td class="mono">app_a1…07</td><td class="mono">2026-09-06</td><td><span class="punto"></span>activa</td><td><div class="barra-pres"><i style="width:24%"></i></div><span class="mono num" style="font-size:.75rem">4,80 $ / 20 $</span></td><td class="num">120</td><td><button>Editar</button> <button class="peligro">Desactivar</button></td></tr>
+            <tr><td>consola</td><td class="mono">app_c0…e2</td><td class="mono">2026-09-01</td><td><span class="punto"></span>activa</td><td><div class="barra-pres"><i style="width:31%"></i></div><span class="mono num" style="font-size:.75rem">3,12 $ / 10 $</span></td><td class="num">30</td><td><button>Editar</button> <button class="peligro">Desactivar</button></td></tr>
+            <tr class="cortada"><td>demo-antigua</td><td class="mono">app_77…1b</td><td class="mono">2026-08-28</td><td><span class="punto corte"></span>desactivada</td><td>—</td><td class="num">—</td><td><button>Reactivar</button></td></tr>
+          </tbody>
+        </table></div>
+      </div>
+      <div class="rejilla dos">
+        <div class="panel" data-etapa="5">
+          <h3>Nueva app</h3>
+          <div class="fila">
+            <label>Nombre<input id="a-nombre" placeholder="p. ej. resumenes"></label>
+            <label data-etapa="6">Presupuesto mes, $<input id="a-pres" type="number" value="10" min="0"></label>
+            <label data-etapa="6">Cuota / min<input id="a-cuota" type="number" value="60" min="1"></label>
+            <button class="primario">Crear y mostrar clave</button>
+          </div>
+          <p style="margin:0;font-size:.8rem;color:var(--suave)">La clave se enseña una sola vez. El servicio guarda solo su hash.</p>
+        </div>
+        <div class="panel" data-etapa="6">
+          <h3>Presupuesto de <b>soporte</b><span class="e">E6</span></h3>
+          <div class="fila">
+            <label>Periodo<select id="pr-periodo"><option>Mes</option><option>Día</option></select></label>
+            <label>Tope, $<input id="pr-tope" type="number" value="30"></label>
+            <label>Aviso al %<input id="pr-aviso" type="number" value="80"></label>
+            <label>Cuota / min<input id="pr-cuota" type="number" value="60"></label>
+            <button>Guardar</button>
+          </div>
+          <p style="margin:0;font-size:.8rem;color:var(--suave)">La app puede preguntar su margen en <code>GET /v1/presupuesto</code> antes de gastar. Al superar el tope recibe <code>402</code>.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ALIAS -->
+  <section role="tabpanel" id="p-alias" aria-labelledby="tab-alias" hidden>
+    <div class="rejilla" data-etapa="8">
+      <div class="panel">
+        <h2>Alias<span class="e">E8</span></h2>
+        <div class="tabla"><table>
+          <thead><tr><th>Alias</th><th>Modelo</th><th>Respaldo</th><th>Estrategia</th><th>Parámetros</th><th>Prompt de sistema</th><th class="num">Llamadas 14 d</th><th></th></tr></thead>
+          <tbody>
+            <tr><td class="mono">redactor</td><td class="mono">anthropic/claude-haiku-4.5</td><td class="mono">openai/gpt-5-mini → google/gemini-2.5-flash</td><td>equilibrado</td><td class="mono">temp 0,7 · máx 1 024</td><td>sí, 212 tok</td><td class="num">301</td><td><button>Editar</button></td></tr>
+            <tr><td class="mono">clasificador</td><td class="mono">google/gemini-2.5-flash-lite</td><td class="mono">google/gemma-3-27b-it:free</td><td>más barato</td><td class="mono">temp 0 · JSON</td><td>sí, 88 tok</td><td class="num">862</td><td><button>Editar</button></td></tr>
+            <tr><td class="mono">vision</td><td class="mono">google/gemini-2.5-flash</td><td class="mono">—</td><td>más rápido</td><td class="mono">temp 0,2</td><td>no</td><td class="num">0</td><td><button>Editar</button></td></tr>
+          </tbody>
+        </table></div>
+        <p style="margin:0;font-size:.8rem;color:var(--suave)">La app manda <code>"model": "alias:redactor"</code> y no vuelve a escribir un nombre de modelo. El alias se traduce a los campos <code>models</code> y <code>provider</code> de OpenRouter.</p>
+      </div>
+      <div class="rejilla dos">
+        <div class="panel">
+          <h3>Simulador: ¿y si <b>redactor</b> apuntara a otro modelo?</h3>
+          <div class="fila">
+            <label>Modelo candidato<select id="s-modelo"><option>google/gemini-2.5-flash</option><option selected>openai/gpt-5-mini</option><option>google/gemini-2.5-flash-lite</option></select></label>
+            <label>Periodo<select id="s-periodo"><option>Últimos 14 días</option><option>Últimos 30 días</option></select></label>
+            <button class="primario">Calcular</button>
+          </div>
+          <dl class="ficha">
+            <div><dt>Coste real</dt><dd class="num">2,91 $</dd></div>
+            <div><dt>Con gpt-5-mini</dt><dd class="grande num">0,79 $</dd></div>
+            <div><dt>Ahorro</dt><dd class="num">2,12 $ · 73 %</dd></div>
+            <div><dt>Base</dt><dd class="num">301 llamadas, mismos tokens</dd></div>
+          </dl>
+          <p style="margin:0;font-size:.8rem;color:var(--suave)">Solo dinero: a precios del catálogo de hoy y con los tokens reales del histórico. No dice nada de la calidad.</p>
+        </div>
+        <div class="panel">
+          <h3>Editar <b>redactor</b></h3>
+          <div class="fila">
+            <label>Modelo<input id="al-modelo" value="anthropic/claude-haiku-4.5"></label>
+            <label>Respaldo, en orden<input id="al-respaldo" value="openai/gpt-5-mini, google/gemini-2.5-flash"></label>
+          </div>
+          <div class="fila">
+            <label>Estrategia<select id="al-estr"><option selected>Equilibrado</option><option>Más barato</option><option>Más rápido</option></select></label>
+            <label>Temperatura<input id="al-temp" type="number" step="0.1" value="0.7"></label>
+            <label>Máx. salida<input id="al-max" type="number" value="1024"></label>
+          </div>
+          <label>Prompt de sistema<textarea id="al-sistema" rows="3">Eres un redactor técnico. Escribes en español, en frases cortas, sin adjetivos vacíos.</textarea></label>
+          <div class="fila"><button class="primario">Guardar alias</button><button>Probar en consola</button></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    <span>Build <code>OP-B1-20260912-003</code></span>
+    <a href="bitacora.html">Bitácora</a>
+    <a href="holamundo.html">Comprobación del backend</a>
+    <a href="mocks/">Mocks anteriores</a>
+  </footer>
+</div>
+
+<script>
+(function(){
+  var tabs=document.querySelectorAll('[role=tab]');
+  tabs.forEach(function(t){
+    t.addEventListener('click',function(){
+      tabs.forEach(function(o){o.setAttribute('aria-selected','false');document.getElementById(o.getAttribute('aria-controls')).hidden=true;});
+      t.setAttribute('aria-selected','true');document.getElementById(t.getAttribute('aria-controls')).hidden=false;
+    });
+  });
+  var nombres={1:'Etapa 1: clave de servicio, estado de la conexión, prompt y respuesta con el JSON crudo. Nada más.',
+    2:'Etapa 2: catálogo con caché y filtros, y el selector de modelo con precio.',
+    3:'Etapa 3: ficha de coste bajo cada respuesta, X-Uso-Id y la tabla de últimas llamadas en memoria.',
+    4:'Etapa 4: SQLite en volumen, resumen por día y modelo, filtros por fecha y exportación.',
+    5:'Etapa 5: una credencial por app, consumo por app e identificador de operación.',
+    6:'Etapa 6: presupuesto con aviso y corte, cuota por minuto y cortacircuitos por bucle.',
+    7:'Etapa 7: respuesta en streaming con primer token, tokens por segundo y cancelación.',
+    8:'Etapa 8: alias semánticos con respaldo y estrategia, y el simulador de coste.'};
+  var nota=document.getElementById('nota-etapas');
+  var botones=document.querySelectorAll('.etapas button');
+  botones.forEach(function(b){
+    b.addEventListener('click',function(){
+      var v=b.getAttribute('data-ver'), activo=b.getAttribute('aria-pressed')==='true';
+      botones.forEach(function(o){o.setAttribute('aria-pressed','false');});
+      if(activo){document.body.removeAttribute('data-ver');nota.textContent='Se muestra todo. La consola de la etapa 1 son solo las piezas marcadas E1: clave, estado, prompt y respuesta.';}
+      else{b.setAttribute('aria-pressed','true');document.body.setAttribute('data-ver',v);nota.textContent=nombres[v];}
+    });
+  });
+})();
+</script>
 </body>
 </html>
