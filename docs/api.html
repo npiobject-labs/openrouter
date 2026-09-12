@@ -1,0 +1,482 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="build" content="OP-B1-20260912-010">
+<title>openrouter · API</title>
+<style>
+:root{
+  --fondo:#f3f5f7; --superficie:#fff; --hundido:#e9edf0; --tinta:#17202a; --suave:#5b6673; --borde:#d6dce2;
+  --acento:#0b6e7a; --acento-tinta:#fff; --ok:#2e7d4f; --ok-suave:#e2f1e8; --aviso:#a86b12; --aviso-suave:#fbefd9;
+  --corte:#b93c3c; --corte-suave:#f9e3e3;
+  --sans:system-ui,-apple-system,"Segoe UI",sans-serif; --mono:ui-monospace,SFMono-Regular,Menlo,monospace;
+}
+@media (prefers-color-scheme:dark){:root{
+  --fondo:#0f1418; --superficie:#171d23; --hundido:#1f272e; --tinta:#e4e9ee; --suave:#98a4b0; --borde:#2b353e;
+  --acento:#4fb3bf; --acento-tinta:#0b1518; --ok:#6dc48f; --ok-suave:#173124; --aviso:#e0a64a; --aviso-suave:#352a14;
+  --corte:#e57373; --corte-suave:#3a1d1d;
+}}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html{color-scheme:light dark;scroll-behavior:smooth}
+body{margin:0;background:var(--fondo);color:var(--tinta);font:14px/1.55 var(--sans)}
+.envoltura{max-width:76rem;margin:0 auto;padding-inline:16px;padding-block:1.5rem 4rem;display:grid;grid-template-columns:14rem 1fr;gap:2rem;align-items:start}
+@media (max-width:62rem){.envoltura{grid-template-columns:1fr;gap:1rem}nav.indice{position:static!important;max-height:none!important}}
+h1{font-size:1.25rem;margin:0}
+h1 span{color:var(--suave);font-weight:400}
+h2{font-size:1.05rem;margin:0 0 .2rem}
+h3{font-size:.95rem;margin:0}
+p{margin:0 0 .6rem;color:var(--suave)}
+p:last-child{margin-bottom:0}
+a{color:var(--acento);text-underline-offset:2px}
+code{font-family:var(--mono);font-size:.85em;background:var(--hundido);padding:.05em .28em;border-radius:4px}
+pre code{background:none;padding:0}
+main{display:flex;flex-direction:column;gap:1rem;min-width:0}
+.panel{background:var(--superficie);border:1px solid var(--borde);border-radius:8px;padding:1rem;display:flex;flex-direction:column;gap:.7rem;scroll-margin-top:1rem}
+nav.indice{position:sticky;top:1rem;background:var(--superficie);border:1px solid var(--borde);border-radius:8px;padding:.8rem;font-size:.85rem;max-height:calc(100vh - 2rem);overflow:auto}
+nav.indice a{display:block;padding:.22rem 0;color:var(--tinta);text-decoration:none;border-bottom:1px solid transparent}
+nav.indice a:hover{color:var(--acento)}
+nav.indice .grupo{font-size:.7rem;text-transform:uppercase;letter-spacing:.06em;color:var(--suave);margin:.7rem 0 .2rem}
+nav.indice .grupo:first-child{margin-top:0}
+nav.indice a .via{display:block;font-family:var(--mono);font-size:.75rem;color:var(--suave);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.metodo{font-family:var(--mono);font-size:.72rem;font-weight:700;letter-spacing:.04em;padding:.12rem .4rem;border-radius:4px;background:var(--hundido);color:var(--suave)}
+.metodo.get{background:var(--ok-suave);color:var(--ok)}
+.metodo.post{background:var(--aviso-suave);color:var(--aviso)}
+.metodo.put,.metodo.delete{background:var(--corte-suave);color:var(--corte)}
+.ruta{font-family:var(--mono);font-size:.92rem;word-break:break-all}
+.cabecera-ruta{display:flex;align-items:center;gap:.5rem;flex-wrap:wrap}
+.marca{display:inline-flex;align-items:center;gap:.3rem;font-size:.72rem;padding:.1rem .45rem;border-radius:4px;background:var(--hundido);color:var(--suave)}
+.marca.llave{background:var(--aviso-suave);color:var(--aviso)}
+.marca.libre{background:var(--ok-suave);color:var(--ok)}
+.marca.entregada{background:var(--ok-suave);color:var(--ok)}
+.marca.siguiente{background:var(--aviso-suave);color:var(--aviso)}
+.marca.planificada{background:var(--hundido);color:var(--suave)}
+table{border-collapse:collapse;width:100%;font-size:.85rem}
+.tabla{overflow-x:auto}
+th,td{text-align:left;padding:.4rem .5rem;border-bottom:1px solid var(--borde);vertical-align:top}
+th{font-size:.7rem;text-transform:uppercase;letter-spacing:.06em;color:var(--suave);font-weight:600}
+td.mono,th.mono{font-family:var(--mono);font-size:.8rem;white-space:nowrap}
+tr:last-child td{border-bottom:none}
+pre{background:var(--hundido);border-radius:6px;padding:.7rem .85rem;overflow-x:auto;font-family:var(--mono);font-size:.78rem;margin:0;line-height:1.5}
+.bloque{position:relative}
+.bloque button{position:absolute;top:.4rem;right:.4rem;font:inherit;font-size:.72rem;cursor:pointer;border:1px solid var(--borde);background:var(--superficie);color:var(--suave);border-radius:5px;padding:.15rem .45rem;opacity:0;transition:opacity .12s}
+.bloque:hover button,.bloque button:focus-visible{opacity:1}
+.pestanas{display:flex;gap:.3rem;flex-wrap:wrap}
+.pestanas button{font:inherit;font-size:.8rem;cursor:pointer;border:1px solid var(--borde);background:var(--superficie);color:var(--suave);border-radius:6px;padding:.25rem .7rem}
+.pestanas button[aria-selected=true]{background:var(--acento);color:var(--acento-tinta);border-color:var(--acento);font-weight:500}
+details summary{cursor:pointer;color:var(--suave);font-size:.85rem}
+details[open] summary{margin-bottom:.5rem}
+label{display:flex;flex-direction:column;gap:.25rem;font-size:.8rem;color:var(--suave);font-weight:500}
+input{font:inherit;color:inherit;border:1px solid var(--borde);background:var(--superficie);border-radius:6px;padding:.4rem .6rem;width:100%;font-family:var(--mono);font-size:.85rem}
+input:focus-visible,button:focus-visible,a:focus-visible{outline:2px solid var(--acento);outline-offset:2px}
+.aviso{background:var(--aviso-suave);color:var(--aviso);border-radius:6px;padding:.6rem .8rem;font-size:.85rem}
+.aviso p{color:inherit}
+footer{grid-column:1/-1;display:flex;flex-wrap:wrap;gap:.4rem 1.2rem;font-size:.8rem;color:var(--suave);border-top:1px solid var(--borde);padding-top:1rem;margin-top:1rem}
+.etapa{display:flex;gap:.7rem;padding:.6rem 0;border-bottom:1px solid var(--borde)}
+.etapa:last-child{border-bottom:none}
+.etapa .num{font-family:var(--mono);font-size:1.1rem;color:var(--suave);min-width:1.6rem}
+.etapa .cuerpo{min-width:0;display:flex;flex-direction:column;gap:.3rem}
+.etapa .rutas{display:flex;flex-wrap:wrap;gap:.3rem}
+.etapa .rutas span{font-family:var(--mono);font-size:.75rem;background:var(--hundido);color:var(--suave);border-radius:4px;padding:.1rem .4rem}
+</style>
+</head>
+<body>
+<div class="envoltura">
+  <nav class="indice" id="indice" aria-label="Contenido"></nav>
+  <main id="principal">
+    <p id="cargando">Cargando el contrato desde <code>openapi.json</code>…</p>
+  </main>
+  <footer>
+    <span>openrouter · npiobject-labs</span>
+    <a href="index.html">Mock</a>
+    <a href="consola.html">Consola</a>
+    <a href="openapi.json">openapi.json</a>
+    <a href="bitacora.html">Bitácora</a>
+  </footer>
+</div>
+
+<script>
+(function(){
+  'use strict';
+  var $ = function(id){ return document.getElementById(id); };
+
+  // --- utilidades de DOM: siempre textContent, nunca innerHTML ------------
+  function el(etiqueta, props, hijos){
+    var n = document.createElement(etiqueta);
+    if (props) Object.keys(props).forEach(function(k){
+      if (k === 'clase') n.className = props[k];
+      else if (k === 'texto') n.textContent = props[k];
+      else n.setAttribute(k, props[k]);
+    });
+    (hijos || []).forEach(function(h){ if (h) n.appendChild(h); });
+    return n;
+  }
+
+  // Los textos del contrato llevan `codigo` entre comillas invertidas y
+  // parrafos separados por linea en blanco. No es Markdown completo a
+  // proposito: solo lo que se usa, y sin innerHTML.
+  function formatea(texto){
+    var destino = document.createDocumentFragment();
+    String(texto || '').split('\n\n').forEach(function(parrafo){
+      var p = el('p');
+      parrafo.split('`').forEach(function(trozo, i){
+        if (trozo === '') return;
+        p.appendChild(i % 2 ? el('code', { texto: trozo }) : document.createTextNode(trozo));
+      });
+      destino.appendChild(p);
+    });
+    return destino;
+  }
+
+  function bloque(texto){
+    var pre = el('pre', {}, [el('code', { texto: texto })]);
+    var copiar = el('button', { type: 'button', texto: 'copiar' });
+    copiar.addEventListener('click', function(){
+      navigator.clipboard.writeText(texto).then(function(){
+        copiar.textContent = 'copiado';
+        setTimeout(function(){ copiar.textContent = 'copiar'; }, 1200);
+      }, function(){ copiar.textContent = 'no se pudo'; });
+    });
+    return el('div', { clase: 'bloque' }, [pre, copiar]);
+  }
+
+  function tabla(cabeceras, filas){
+    var tr = el('tr', {}, cabeceras.map(function(c){ return el('th', { texto: c }); }));
+    var cuerpo = filas.map(function(f){
+      return el('tr', {}, f.map(function(celda){
+        return celda && celda.mono
+          ? el('td', { clase: 'mono', texto: celda.v })
+          : el('td', {}, [formatea(celda && celda.v !== undefined ? celda.v : celda)]);
+      }));
+    });
+    return el('div', { clase: 'tabla' }, [
+      el('table', {}, [el('thead', {}, [tr]), el('tbody', {}, cuerpo)])
+    ]);
+  }
+
+  function panel(id, titulo, hijos){
+    var s = el('section', { clase: 'panel', id: id }, [el('h2', { texto: titulo })]);
+    (hijos || []).forEach(function(h){ if (h) s.appendChild(h); });
+    return s;
+  }
+
+  // --- estado de la pagina ------------------------------------------------
+  var LENGUAJES = ['curl', 'python', 'javascript'];
+  var lenguaje = 'curl';
+  var base = '';
+  try { lenguaje = localStorage.getItem('api.lenguaje') || 'curl'; } catch (e) {}
+  if (LENGUAJES.indexOf(lenguaje) < 0) lenguaje = 'curl';
+
+  var suscriptores = [];      // repintan los ejemplos al cambiar base o lenguaje
+  function avisa(){ suscriptores.forEach(function(f){ f(); }); }
+
+  // --- generacion de ejemplos --------------------------------------------
+  function consulta(op){
+    var partes = (op.parameters || []).filter(function(p){ return p.example !== undefined; })
+      .map(function(p){ return encodeURIComponent(p.name) + '=' + encodeURIComponent(p.example); });
+    return partes.length ? '?' + partes.join('&') : '';
+  }
+
+  function cuerpoEjemplo(op){
+    var c = op.requestBody && op.requestBody.content && op.requestBody.content['application/json'];
+    return c && c.example ? c.example : null;
+  }
+
+  function ejemplo(metodo, ruta, op){
+    var protegida = !(op.security && op.security.length === 0);
+    var url = base + ruta + consulta(op);
+    var cuerpo = cuerpoEjemplo(op);
+    var json = cuerpo ? JSON.stringify(cuerpo, null, 2) : null;
+
+    if (lenguaje === 'curl'){
+      var l = ['curl' + (metodo === 'GET' ? '' : ' -X ' + metodo) + ' "' + url + '" \\'];
+      if (protegida) l.push('  -H "Authorization: Bearer $CLAVE_DE_SERVICIO" \\');
+      if (json){
+        l.push('  -H "Content-Type: application/json" \\');
+        l.push("  -d '" + JSON.stringify(cuerpo) + "'");
+      }
+      return l.join('\n').replace(/ \\$/, '');
+    }
+
+    if (lenguaje === 'python'){
+      var p = ['import os, requests', ''];
+      var args = ['    "' + url + '",'];
+      if (protegida) args.push('    headers={"Authorization": "Bearer " + os.environ["CLAVE_DE_SERVICIO"]},');
+      if (json) args.push('    json=' + json.replace(/\n/g, '\n    ').replace(/true/g, 'True').replace(/false/g, 'False') + ',');
+      p.push('r = requests.' + metodo.toLowerCase() + '(');
+      p = p.concat(args);
+      p.push(')');
+      p.push('if not r.ok:');
+      p.push('    e = r.json()["error"]');
+      p.push('    raise RuntimeError(f\'{e["code"]}: {e["message"]}\')');
+      p.push('print(r.json())');
+      return p.join('\n');
+    }
+
+    var j = ['const r = await fetch("' + url + '", {'];
+    if (metodo !== 'GET') j.push('  method: "' + metodo + '",');
+    var cab = [];
+    if (protegida) cab.push('    "Authorization": `Bearer ${process.env.CLAVE_DE_SERVICIO}`');
+    if (json) cab.push('    "Content-Type": "application/json"');
+    if (cab.length) j.push('  headers: {\n' + cab.join(',\n') + '\n  },');
+    if (json) j.push('  body: JSON.stringify(' + json.replace(/\n/g, '\n  ') + '),');
+    j.push('});');
+    j.push('const datos = await r.json();');
+    j.push('if (!r.ok) throw new Error(`${datos.error.code}: ${datos.error.message}`);');
+    return j.join('\n');
+  }
+
+  function pestanasDeLenguaje(){
+    var botones = LENGUAJES.map(function(n){
+      var b = el('button', { type: 'button', role: 'tab', texto: n === 'javascript' ? 'JavaScript' : (n === 'python' ? 'Python' : 'curl') });
+      b.setAttribute('aria-selected', String(n === lenguaje));
+      b.addEventListener('click', function(){
+        lenguaje = n;
+        try { localStorage.setItem('api.lenguaje', n); } catch (e) {}
+        avisa();
+      });
+      suscriptores.push(function(){ b.setAttribute('aria-selected', String(n === lenguaje)); });
+      return b;
+    });
+    return el('div', { clase: 'pestanas', role: 'tablist' }, botones);
+  }
+
+  // --- render -------------------------------------------------------------
+  function pinta(doc){
+    var principal = $('principal');
+    var indice = $('indice');
+    principal.textContent = '';
+    indice.textContent = '';
+    var servidores = doc.servers || [];
+    base = servidores.length ? servidores[0].url : '';
+    try { base = localStorage.getItem('api.base') || base; } catch (e) {}
+
+    function enlaceIndice(id, texto, via){
+      var a = el('a', { href: '#' + id }, [document.createTextNode(texto)]);
+      if (via) a.appendChild(el('span', { clase: 'via', texto: via }));
+      indice.appendChild(a);
+    }
+    function grupoIndice(t){ indice.appendChild(el('div', { clase: 'grupo', texto: t })); }
+
+    // Cabecera
+    var campo = el('input', { type: 'url', value: base, spellcheck: 'false', 'aria-label': 'URL base' });
+    campo.addEventListener('input', function(){
+      base = campo.value.replace(/\/+$/, '');
+      try { localStorage.setItem('api.base', base); } catch (e) {}
+      avisa();
+    });
+    var atajos = el('div', { clase: 'pestanas' }, servidores.map(function(s){
+      var b = el('button', { type: 'button', texto: s.description });
+      b.addEventListener('click', function(){
+        campo.value = s.url;
+        campo.dispatchEvent(new Event('input'));
+      });
+      return b;
+    }));
+
+    var cabecera = panel('inicio', '', [
+      el('h1', {}, [document.createTextNode('openrouter '), el('span', { texto: '· API ' + doc.info.version })]),
+      formatea(doc.info.summary),
+      formatea(doc.info.description),
+      el('label', {}, [document.createTextNode('URL base para los ejemplos'), campo]),
+      atajos
+    ]);
+    cabecera.querySelector('h2').remove();
+    principal.appendChild(cabecera);
+    grupoIndice('Empezar');
+    enlaceIndice('inicio', 'Qué es esto');
+
+    // Autenticacion
+    var seg = doc.components.securitySchemes.claveDeServicio;
+    principal.appendChild(panel('autenticacion', 'Autenticación', [
+      formatea(seg.description),
+      bloque('Authorization: Bearer <clave de servicio>'),
+      el('div', { clase: 'aviso' }, [formatea('Las rutas de servicio `/salud` y `/holamundo` son las únicas abiertas. Todo lo que cuelga de `/v1` exige la clave, y sin ella el servicio responde `401`.')])
+    ]));
+    enlaceIndice('autenticacion', 'Autenticación');
+
+    // Arranque rapido con el SDK de OpenAI
+    var sdk = el('div');
+    var repintaSdk = function(){
+      sdk.textContent = '';
+      if (lenguaje === 'python'){
+        sdk.appendChild(bloque(
+          'from openai import OpenAI\n\n' +
+          'cliente = OpenAI(base_url="' + base + '/v1", api_key=CLAVE_DE_SERVICIO)\n\n' +
+          'r = cliente.chat.completions.create(\n' +
+          '    model="google/gemini-2.5-flash-lite",\n' +
+          '    messages=[{"role": "user", "content": "hola"}],\n' +
+          ')\n' +
+          'print(r.choices[0].message.content, r.usage)'
+        ));
+      } else if (lenguaje === 'javascript'){
+        sdk.appendChild(bloque(
+          'import OpenAI from "openai";\n\n' +
+          'const cliente = new OpenAI({ baseURL: "' + base + '/v1", apiKey: CLAVE_DE_SERVICIO });\n\n' +
+          'const r = await cliente.chat.completions.create({\n' +
+          '  model: "google/gemini-2.5-flash-lite",\n' +
+          '  messages: [{ role: "user", content: "hola" }],\n' +
+          '});\n' +
+          'console.log(r.choices[0].message.content, r.usage);'
+        ));
+      } else {
+        sdk.appendChild(bloque(
+          'curl "' + base + '/v1/chat/completions" \\\n' +
+          '  -H "Authorization: Bearer $CLAVE_DE_SERVICIO" \\\n' +
+          '  -H "Content-Type: application/json" \\\n' +
+          '  -d \'{"messages":[{"role":"user","content":"hola"}]}\''
+        ));
+      }
+    };
+    suscriptores.push(repintaSdk);
+    repintaSdk();
+    principal.appendChild(panel('empezar', 'Empezar en un minuto', [
+      formatea('El contrato es el de la API de OpenAI, así que el camino corto es su propio cliente oficial apuntando aquí: cambias `base_url` y la clave, y el resto del código de tu aplicación no se entera. El campo `model` es opcional; sin él entra el modelo por defecto del servicio.'),
+      pestanasDeLenguaje(),
+      sdk,
+      el('div', { clase: 'aviso' }, [formatea('Dos límites de hoy que conviene conocer antes de integrar: `stream: true` devuelve `400` hasta la etapa 7, y la clave de servicio es única y compartida, sin cuota por aplicación, hasta las etapas 5 y 6.')])
+    ]));
+    enlaceIndice('empezar', 'Empezar en un minuto');
+
+    // Rutas, agrupadas por etiqueta
+    var porEtiqueta = {};
+    Object.keys(doc.paths).forEach(function(ruta){
+      Object.keys(doc.paths[ruta]).forEach(function(metodo){
+        var op = doc.paths[ruta][metodo];
+        var etiqueta = (op.tags && op.tags[0]) || 'Otras';
+        (porEtiqueta[etiqueta] = porEtiqueta[etiqueta] || []).push({ ruta: ruta, metodo: metodo.toUpperCase(), op: op });
+      });
+    });
+
+    (doc.tags || []).forEach(function(t){
+      var operaciones = porEtiqueta[t.name] || [];
+      if (!operaciones.length) return;
+      grupoIndice(t.name);
+      operaciones.forEach(function(o){
+        var id = 'r-' + (o.metodo + o.ruta).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+        enlaceIndice(id, o.op.summary, o.metodo + ' ' + o.ruta);
+        principal.appendChild(pintaRuta(id, o, doc));
+      });
+    });
+
+    // Errores
+    var sobre = doc.components.schemas.Error;
+    var filas = (doc['x-codigos-de-error'] || []).map(function(c){
+      return [{ mono: true, v: c.code }, { mono: true, v: String(c.http) }, c.cuando];
+    });
+    principal.appendChild(panel('errores', 'Errores', [
+      formatea(sobre.description),
+      bloque(JSON.stringify({ ok: false, error: { message: 'La clave de servicio no es válida.', code: 'clave_invalida', type: 'authentication_error' } }, null, 2)),
+      formatea('Compara `error.code`, no el texto: el mensaje puede cambiar y el código no. `error.type` sigue la familia que usan los clientes de OpenAI, y `error.upstream` solo aparece cuando quien rechazó fue OpenRouter, con su cuerpo original dentro.'),
+      tabla(['code', 'HTTP', 'Cuándo'], filas)
+    ]));
+    grupoIndice('Referencia');
+    enlaceIndice('errores', 'Errores');
+
+    // Hoja de ruta
+    var etapas = (doc['x-etapas'] || []).map(function(e){
+      return el('div', { clase: 'etapa' }, [
+        el('div', { clase: 'num', texto: String(e.numero) }),
+        el('div', { clase: 'cuerpo' }, [
+          el('h3', {}, [
+            document.createTextNode(e.titulo + ' '),
+            el('span', { clase: 'marca ' + e.estado, texto: e.estado })
+          ]),
+          el('div', { clase: 'rutas' }, (e.rutas || []).map(function(r){
+            return el('span', { texto: r.metodo + ' ' + r.ruta + (r.nota ? ' (' + r.nota + ')' : '') });
+          })),
+          formatea(e.nota)
+        ])
+      ]);
+    });
+    principal.appendChild(panel('etapas', 'Qué APIs llegan después', [
+      formatea('El servicio crece por etapas y cada una publica rutas nuevas sin romper las anteriores. Esta es la hoja de ruta, para que una aplicación consumidora sepa qué podrá pedir más adelante y qué conviene no construir por su cuenta.'),
+      el('div', {}, etapas)
+    ]));
+    enlaceIndice('etapas', 'Próximas APIs');
+
+    principal.appendChild(panel('compatibilidad', 'Compromiso de compatibilidad', [
+      formatea('Una ruta publicada no se rompe. Los cambios incompatibles irían a `/v2/`, y las respuestas pueden ganar campos nuevos, nunca perderlos, así que tu cliente debe ignorar lo que no conozca.'),
+      formatea('La versión de este documento acompaña a la etapa entregada. El contrato completo, en formato legible por máquina, está en `openapi.json`, y sirve para generar clientes.')
+    ]));
+    enlaceIndice('compatibilidad', 'Compatibilidad');
+
+    avisa();
+  }
+
+  function pintaRuta(id, o, doc){
+    var s = el('section', { clase: 'panel', id: id }, [
+      el('div', { clase: 'cabecera-ruta' }, [
+        el('span', { clase: 'metodo ' + o.metodo.toLowerCase(), texto: o.metodo }),
+        el('span', { clase: 'ruta', texto: o.ruta }),
+        (o.op.security && o.op.security.length === 0)
+          ? el('span', { clase: 'marca libre', texto: 'sin clave' })
+          : el('span', { clase: 'marca llave', texto: 'clave de servicio' })
+      ]),
+      el('h3', { texto: o.op.summary })
+    ]);
+    s.appendChild(formatea(o.op.description));
+
+    if (o.op.parameters && o.op.parameters.length){
+      s.appendChild(el('h3', { texto: 'Parámetros' }));
+      s.appendChild(tabla(['Nombre', 'Tipo', 'Qué hace'], o.op.parameters.map(function(p){
+        return [{ mono: true, v: p.name }, { mono: true, v: (p.schema && p.schema.type) || '' }, p.description];
+      })));
+    }
+
+    var cuerpo = cuerpoEjemplo(o.op);
+    if (cuerpo){
+      var esquema = o.op.requestBody.content['application/json'].schema;
+      var ref = esquema && esquema.$ref ? doc.components.schemas[esquema.$ref.split('/').pop()] : null;
+      s.appendChild(el('h3', { texto: 'Cuerpo' }));
+      if (ref) s.appendChild(formatea(ref.description));
+    }
+
+    // Ejemplo de llamada, en el lenguaje elegido arriba
+    var caja = el('div');
+    var repinta = function(){
+      caja.textContent = '';
+      caja.appendChild(bloque(ejemplo(o.metodo, o.ruta, o.op)));
+    };
+    suscriptores.push(repinta);
+    repinta();
+    s.appendChild(el('h3', { texto: 'Llamada' }));
+    s.appendChild(caja);
+
+    // Respuestas
+    var respuestas = Object.keys(o.op.responses).map(function(codigo){
+      var r = o.op.responses[codigo];
+      if (r.$ref) r = doc.components.responses[r.$ref.split('/').pop()];
+      return [{ mono: true, v: codigo }, r.description];
+    });
+    s.appendChild(el('h3', { texto: 'Respuestas' }));
+    s.appendChild(tabla(['HTTP', 'Qué significa'], respuestas));
+
+    var correcta = o.op.responses['200'];
+    var contenido = correcta && correcta.content && (correcta.content['application/json'] || correcta.content['text/plain']);
+    if (contenido && contenido.example !== undefined){
+      var det = el('details', {}, [el('summary', { texto: 'Ejemplo de respuesta' })]);
+      det.appendChild(bloque(typeof contenido.example === 'string'
+        ? contenido.example
+        : JSON.stringify(contenido.example, null, 2)));
+      s.appendChild(det);
+    }
+    if (correcta && correcta.headers){
+      Object.keys(correcta.headers).forEach(function(h){
+        s.appendChild(formatea('Cabecera `' + h + '`: ' + correcta.headers[h].description));
+      });
+    }
+    return s;
+  }
+
+  fetch('openapi.json')
+    .then(function(r){ if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+    .then(pinta)
+    .catch(function(e){
+      $('cargando').textContent = 'No se pudo cargar openapi.json: ' + e.message;
+    });
+})();
+</script>
+</body>
+</html>

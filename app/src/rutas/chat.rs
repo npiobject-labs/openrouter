@@ -37,6 +37,6 @@ pub async fn chat(
         );
     }
 
-    let (estado, respuesta) = servicio.openrouter.chat(cuerpo).await?;
-    Ok((estado, Json(respuesta)))
+    let respuesta = servicio.openrouter.chat(cuerpo).await?;
+    Ok(Json(respuesta))
 }

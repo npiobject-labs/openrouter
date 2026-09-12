@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="build" content="OP-B1-20260912-008">
+<meta name="build" content="OP-B1-20260912-010">
 <!-- App de Fly: <repo>-<owner>, el mismo nombre que deriva deploy.yml.
      Con otro nombre, cambia este content o abre la pagina con ?app=<nombre>. -->
 <meta name="fly-app" content="openrouter-npiobject-labs">
@@ -146,8 +146,9 @@ footer{display:flex;flex-wrap:wrap;gap:.4rem 1.2rem;font-size:.8rem;color:var(--
   </section>
 
   <footer>
-    <span>Build <code>OP-B1-20260912-008</code></span>
+    <span>Build <code>OP-B1-20260912-010</code></span>
     <span>Backend: <a id="url-backend" href="#">–</a></span>
+    <a href="api.html">Documentación de la API</a>
     <a href="./">Mock de todas las etapas</a>
     <a href="holamundo.html">Comprobación del backend</a>
     <a href="bitacora.html">Bitácora</a>
@@ -182,7 +183,8 @@ footer{display:flex;flex-wrap:wrap;gap:.4rem 1.2rem;font-size:.8rem;color:var(--
   function dinero(v){ return v === 0 ? 'gratis' : v.toFixed(2) + ' $/M'; }
   function miles(v){ return (v || 0).toLocaleString('es-ES'); }
 
-  // El servicio siempre contesta JSON; un error nuestro trae {"ok":false,"error":{...}}.
+  // El servicio siempre contesta JSON, y todo error sale con el mismo sobre:
+  // {"ok":false,"error":{"message","code","type"}}, venga de aquí o de OpenRouter.
   // Se devuelve también la respuesta cruda, porque el catálogo informa por X-Cache.
   function llama(ruta, opciones){
     if (!clave.value.trim()) return Promise.reject(new Error('Falta la clave de servicio'));
@@ -192,16 +194,17 @@ footer{display:flex;flex-wrap:wrap;gap:.4rem 1.2rem;font-size:.8rem;color:var(--
     opciones.signal = AbortSignal.timeout(opciones.espera || 60000);
     return fetch(base + ruta, opciones).then(function(r){
       return r.json().catch(function(){
-        return { error: { mensaje: 'respuesta ilegible de ' + ruta.split('?')[0] + ', HTTP ' + r.status } };
+        return { error: { message: 'respuesta ilegible de ' + ruta.split('?')[0] + ', HTTP ' + r.status } };
       })
         .then(function(j){
           if (!r.ok) {
-            // Los errores del servicio traen "mensaje"; los que vienen de
-            // OpenRouter a traves del proxy traen "message", en ingles.
+            // "mensaje" es el formato viejo: sirve mientras esta pagina sea
+            // mas nueva que el backend desplegado.
             var e = j.error || {};
-            var fallo = new Error(e.mensaje || e.message || ('HTTP ' + r.status));
+            var fallo = new Error(e.message || e.mensaje || ('HTTP ' + r.status));
             fallo.cuerpo = j;
             fallo.codigo = r.status;
+            fallo.clave = e.code || '';
             throw fallo;
           }
           return { datos: j, respuesta: r };
@@ -359,7 +362,7 @@ footer{display:flex;flex-wrap:wrap;gap:.4rem 1.2rem;font-size:.8rem;color:var(--
       $('ficha-uso').hidden = false;
       texto('crudo', JSON.stringify(j, null, 2));
     }).catch(function(e){
-      texto('respuesta', 'Error' + (e.codigo ? ' ' + e.codigo : '') + ': ' + e.message);
+      texto('respuesta', 'Error' + (e.codigo ? ' ' + e.codigo : '') + (e.clave ? ' ' + e.clave : '') + ': ' + e.message);
       texto('crudo', e.cuerpo ? JSON.stringify(e.cuerpo, null, 2) : '–');
     }).finally(function(){ boton.disabled = false; });
   });

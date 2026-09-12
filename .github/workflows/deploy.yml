@@ -204,6 +204,37 @@ jobs:
             || { echo "::error::el catalogo vino vacio o ilegible"; exit 1; }
           echo "OK: el catalogo trae modelos"
 
+      - name: Verificar el formato de error
+        if: steps.fly.outputs.configurado == 'true'
+        env:
+          FLY_APP: ${{ steps.app.outputs.app }}
+        run: |
+          # Un solo sobre de error es contrato publicado: si cambia, el run falla.
+          # Los dos casos se provocan sin clave y sin gastar credito.
+          base="https://${FLY_APP}.fly.dev"
+
+          comprueba() {
+            ruta="$1"; esperado="$2"; codigo="$3"; tipo="$4"
+            http="$(curl -s -o /tmp/error.json -w '%{http_code}' --max-time 20 "${base}${ruta}" || true)"
+            echo "${ruta} -> HTTP ${http}"
+            if [ "${http}" != "${esperado}" ]; then
+              echo "::error::${ruta} respondio ${http} y se esperaba ${esperado}."
+              cat /tmp/error.json || true
+              return 1
+            fi
+            if ! jq -e --arg c "${codigo}" --arg t "${tipo}" \
+                 '.ok == false and (.error.message | type == "string" and length > 0)
+                  and .error.code == $c and .error.type == $t' /tmp/error.json > /dev/null; then
+              echo "::error::${ruta} no devolvio el sobre de error esperado (code=${codigo}, type=${tipo})."
+              cat /tmp/error.json || true
+              return 1
+            fi
+            echo "OK: $(jq -r '.error.code + " / " + .error.type' /tmp/error.json)"
+          }
+
+          comprueba "/v1/models" 401 sin_clave authentication_error
+          comprueba "/v1/ruta-que-no-existe" 404 ruta_desconocida not_found_error
+
       - name: Resumen del despliegue
         if: success() && steps.fly.outputs.configurado == 'true'
         env:
