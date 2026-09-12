@@ -1,0 +1,217 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="build" content="OP-B1-20260912-004">
+<!-- App de Fly: <repo>-<owner>, el mismo nombre que deriva deploy.yml.
+     Con otro nombre, cambia este content o abre la pagina con ?app=<nombre>. -->
+<meta name="fly-app" content="openrouter-npiobject-labs">
+<title>openrouter · consola</title>
+<style>
+:root{
+  --fondo:#f3f5f7; --superficie:#fff; --hundido:#e9edf0; --tinta:#17202a; --suave:#5b6673; --borde:#d6dce2;
+  --acento:#0b6e7a; --acento-tinta:#fff; --ok:#2e7d4f; --ok-suave:#e2f1e8; --corte:#b93c3c; --corte-suave:#f9e3e3;
+  --sans:system-ui,-apple-system,"Segoe UI",sans-serif; --mono:ui-monospace,SFMono-Regular,Menlo,monospace;
+}
+@media (prefers-color-scheme:dark){:root{
+  --fondo:#0f1418; --superficie:#171d23; --hundido:#1f272e; --tinta:#e4e9ee; --suave:#98a4b0; --borde:#2b353e;
+  --acento:#4fb3bf; --acento-tinta:#0b1518; --ok:#6dc48f; --ok-suave:#173124; --corte:#e57373; --corte-suave:#3a1d1d;
+}}
+*{box-sizing:border-box}
+html{color-scheme:light dark}
+body{margin:0;background:var(--fondo);color:var(--tinta);font:14px/1.5 var(--sans);padding-inline:16px;padding-block:1.5rem 3rem}
+main{max-width:58rem;margin:0 auto;display:flex;flex-direction:column;gap:1rem}
+h1{font-size:1.2rem;margin:0}
+h1 span{color:var(--suave);font-weight:400}
+h2{font-size:1rem;margin:0}
+p{margin:0;color:var(--suave)}
+a{color:var(--acento);text-underline-offset:2px}
+code{font-family:var(--mono);font-size:.85em}
+.panel{background:var(--superficie);border:1px solid var(--borde);border-radius:8px;padding:1rem;display:flex;flex-direction:column;gap:.8rem}
+.fila{display:flex;flex-wrap:wrap;gap:.6rem;align-items:flex-end}
+.fila>label{flex:1 1 12rem}
+label{display:flex;flex-direction:column;gap:.25rem;font-size:.8rem;color:var(--suave);font-weight:500}
+input,textarea{font:inherit;color:inherit;border:1px solid var(--borde);background:var(--superficie);border-radius:6px;padding:.45rem .6rem;width:100%;min-width:0}
+textarea{resize:vertical;font-family:var(--mono);font-size:.85rem}
+button{font:inherit;cursor:pointer;border:1px solid var(--borde);background:var(--superficie);color:inherit;border-radius:6px;padding:.45rem .9rem}
+button.primario{background:var(--acento);color:var(--acento-tinta);border-color:var(--acento);font-weight:500}
+button[disabled]{opacity:.55;cursor:progress}
+button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px solid var(--acento);outline-offset:2px}
+.ficha{display:grid;grid-template-columns:repeat(auto-fit,minmax(8rem,1fr));gap:.6rem .9rem;margin:0}
+.ficha div{display:flex;flex-direction:column}
+.ficha dt{font-size:.7rem;text-transform:uppercase;letter-spacing:.06em;color:var(--suave)}
+.ficha dd{margin:0;font-family:var(--mono);font-size:.85rem;font-variant-numeric:tabular-nums;word-break:break-word}
+.ficha dd.grande{font-size:1.1rem;color:var(--acento)}
+.estado{display:inline-flex;align-items:center;gap:.4rem;font-size:.8rem;font-family:var(--mono);padding:.15rem .5rem;border-radius:4px;background:var(--hundido);color:var(--suave)}
+.estado.ok{background:var(--ok-suave);color:var(--ok)}
+.estado.mal{background:var(--corte-suave);color:var(--corte)}
+.respuesta{white-space:pre-wrap;line-height:1.6;margin:0;color:var(--tinta);min-height:1.5rem}
+pre{background:var(--hundido);border-radius:6px;padding:.75rem .9rem;overflow-x:auto;font-family:var(--mono);font-size:.78rem;margin:0;white-space:pre-wrap;word-break:break-word}
+details summary{cursor:pointer;color:var(--suave);font-size:.85rem}
+footer{display:flex;flex-wrap:wrap;gap:.4rem 1.2rem;font-size:.8rem;color:var(--suave);border-top:1px solid var(--borde);padding-top:1rem}
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>openrouter <span>· consola</span></h1>
+    <p>Cliente de referencia del servicio. Etapa 1: comprobar la conexión y lanzar una consulta.</p>
+  </header>
+
+  <section class="panel">
+    <h2>Conexión</h2>
+    <div class="fila">
+      <label for="clave">Clave de servicio
+        <input id="clave" type="password" autocomplete="off" placeholder="la de SERVICIO_CLAVE">
+      </label>
+      <button id="btn-estado">Comprobar estado</button>
+    </div>
+    <div><span id="estado" class="estado">sin comprobar</span></div>
+    <dl class="ficha" id="ficha-clave" hidden>
+      <div><dt>Clave de OpenRouter</dt><dd id="k-label">–</dd></div>
+      <div><dt>Uso acumulado</dt><dd id="k-uso">–</dd></div>
+      <div><dt>Límite</dt><dd id="k-limite">–</dd></div>
+      <div><dt>Modelo por defecto</dt><dd id="k-modelo">–</dd></div>
+      <div><dt>Build</dt><dd id="k-build">–</dd></div>
+    </dl>
+    <p>La clave se guarda solo en este navegador. La de OpenRouter nunca sale del backend.</p>
+  </section>
+
+  <section class="panel">
+    <h2>Consulta</h2>
+    <label for="prompt">Prompt
+      <textarea id="prompt" rows="5">Explica en tres frases por qué la clave de OpenRouter no debe llegar nunca al navegador.</textarea>
+    </label>
+    <div class="fila">
+      <label for="modelo">Modelo (vacío = el del servicio)
+        <input id="modelo" placeholder="p. ej. openai/gpt-5-mini" autocomplete="off">
+      </label>
+      <button class="primario" id="btn-enviar">Enviar</button>
+    </div>
+  </section>
+
+  <section class="panel">
+    <h2>Respuesta</h2>
+    <p class="respuesta" id="respuesta">Todavía no has enviado nada.</p>
+    <dl class="ficha" id="ficha-uso" hidden>
+      <div><dt>Coste</dt><dd class="grande" id="u-coste">–</dd></div>
+      <div><dt>Entrada</dt><dd id="u-entrada">–</dd></div>
+      <div><dt>Salida</dt><dd id="u-salida">–</dd></div>
+      <div><dt>Modelo servido</dt><dd id="u-modelo">–</dd></div>
+      <div><dt>Fin</dt><dd id="u-fin">–</dd></div>
+      <div><dt>Tardó</dt><dd id="u-lat">–</dd></div>
+    </dl>
+    <details>
+      <summary>JSON crudo</summary>
+      <pre id="crudo">–</pre>
+    </details>
+  </section>
+
+  <footer>
+    <span>Build <code>OP-B1-20260912-004</code></span>
+    <span>Backend: <a id="url-backend" href="#">–</a></span>
+    <a href="./">Mock de todas las etapas</a>
+    <a href="holamundo.html">Comprobación del backend</a>
+    <a href="bitacora.html">Bitácora</a>
+  </footer>
+</main>
+
+<script>
+(function(){
+  var parametros = new URLSearchParams(location.search);
+  var app = parametros.get('app') || document.querySelector('meta[name="fly-app"]').content;
+  // Servida desde el PC por tools/arrancar.ps1: el backend es el local, no el de Fly.
+  var enLocal = ['localhost','127.0.0.1'].includes(location.hostname);
+  var base = enLocal
+    ? location.protocol + '//' + location.hostname + ':' + (parametros.get('api') || '8080')
+    : 'https://' + app + '.fly.dev';
+  var enlace = document.getElementById('url-backend');
+  enlace.href = base; enlace.textContent = base;
+
+  var clave = document.getElementById('clave');
+  try { clave.value = localStorage.getItem('openrouter.clave') || ''; } catch (e) {}
+  clave.addEventListener('change', function(){
+    try { localStorage.setItem('openrouter.clave', clave.value.trim()); } catch (e) {}
+  });
+
+  function pintaEstado(texto, clase){
+    var el = document.getElementById('estado');
+    el.className = 'estado' + (clase ? ' ' + clase : '');
+    el.textContent = texto;
+  }
+  function texto(id, valor){ document.getElementById(id).textContent = valor; }
+
+  // El servicio siempre contesta JSON; un error nuestro trae {"ok":false,"error":{...}}.
+  function llama(ruta, opciones){
+    if (!clave.value.trim()) return Promise.reject(new Error('Falta la clave de servicio'));
+    opciones = opciones || {};
+    opciones.headers = Object.assign({ 'Authorization': 'Bearer ' + clave.value.trim() }, opciones.headers || {});
+    // La máquina de Fly se apaga sola sin tráfico: la primera llamada puede tardar.
+    opciones.signal = AbortSignal.timeout(opciones.espera || 60000);
+    return fetch(base + ruta, opciones).then(function(r){
+      return r.json().catch(function(){ return { error: { mensaje: 'respuesta ilegible, HTTP ' + r.status } }; })
+        .then(function(j){
+          if (!r.ok) throw new Error((j.error && j.error.mensaje) || ('HTTP ' + r.status));
+          return j;
+        });
+    });
+  }
+
+  document.getElementById('btn-estado').addEventListener('click', function(){
+    var boton = this;
+    boton.disabled = true;
+    pintaEstado('comprobando…');
+    llama('/v1/estado', { espera: 40000 }).then(function(j){
+      var k = j.clave || {};
+      pintaEstado('conectado', 'ok');
+      texto('k-label', k.label || '(sin etiqueta)');
+      texto('k-uso', k.usage != null ? Number(k.usage).toFixed(4) + ' $' : '–');
+      texto('k-limite', k.limit == null ? 'sin límite' : Number(k.limit).toFixed(2) + ' $');
+      texto('k-modelo', j.modelo_defecto || '–');
+      texto('k-build', (j.build || '–').slice(0, 7));
+      document.getElementById('ficha-clave').hidden = false;
+    }).catch(function(e){
+      pintaEstado(e.message, 'mal');
+      document.getElementById('ficha-clave').hidden = true;
+    }).finally(function(){ boton.disabled = false; });
+  });
+
+  document.getElementById('btn-enviar').addEventListener('click', function(){
+    var boton = this;
+    var cuerpo = { messages: [{ role: 'user', content: document.getElementById('prompt').value }] };
+    var modelo = document.getElementById('modelo').value.trim();
+    if (modelo) cuerpo.model = modelo;
+
+    boton.disabled = true;
+    texto('respuesta', 'Esperando al modelo…');
+    document.getElementById('ficha-uso').hidden = true;
+    var arranque = performance.now();
+
+    llama('/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(cuerpo),
+      espera: 130000
+    }).then(function(j){
+      var tardo = ((performance.now() - arranque) / 1000).toFixed(2) + ' s';
+      var eleccion = (j.choices && j.choices[0]) || {};
+      var uso = j.usage || {};
+      texto('respuesta', (eleccion.message && eleccion.message.content) || '(sin contenido)');
+      texto('u-coste', uso.cost != null ? Number(uso.cost).toFixed(6) + ' $' : '–');
+      texto('u-entrada', (uso.prompt_tokens != null ? uso.prompt_tokens : '–') + ' tok');
+      texto('u-salida', (uso.completion_tokens != null ? uso.completion_tokens : '–') + ' tok');
+      texto('u-modelo', j.model || '–');
+      texto('u-fin', eleccion.finish_reason || '–');
+      texto('u-lat', tardo);
+      document.getElementById('ficha-uso').hidden = false;
+      texto('crudo', JSON.stringify(j, null, 2));
+    }).catch(function(e){
+      texto('respuesta', 'Error: ' + e.message);
+      texto('crudo', '–');
+    }).finally(function(){ boton.disabled = false; });
+  });
+})();
+</script>
+</body>
+</html>

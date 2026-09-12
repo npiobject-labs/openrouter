@@ -50,6 +50,16 @@ if ($LASTEXITCODE -ne 0 -or -not $sha) { $sha = 'sin-git' }
 
 $env:BUILD_ID = "local-$sha"
 $env:PUERTO   = $PuertoApi
+
+# El servicio hereda las claves de esta sesion. Sin ellas arranca igual, pero
+# /v1 queda cerrado: define $env:OPENROUTER_API_KEY y $env:SERVICIO_CLAVE antes
+# de llamar a este script si quieres probar la consola.
+if (-not $env:SERVICIO_CLAVE) {
+  Write-Host "arrancar : aviso - sin SERVICIO_CLAVE; /v1 respondera 503." -ForegroundColor Yellow
+} elseif (-not $env:OPENROUTER_API_KEY) {
+  Write-Host "arrancar : aviso - sin OPENROUTER_API_KEY; /v1/estado respondera 503." -ForegroundColor Yellow
+}
+
 $backend = Start-Process -FilePath $binario -PassThru -NoNewWindow
 
 # El puerto tarda un instante en abrirse: se espera antes de anunciar nada.
