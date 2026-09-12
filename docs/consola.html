@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="build" content="OP-B1-20260912-007">
+<meta name="build" content="OP-B1-20260912-008">
 <!-- App de Fly: <repo>-<owner>, el mismo nombre que deriva deploy.yml.
      Con otro nombre, cambia este content o abre la pagina con ?app=<nombre>. -->
 <meta name="fly-app" content="openrouter-npiobject-labs">
@@ -146,7 +146,7 @@ footer{display:flex;flex-wrap:wrap;gap:.4rem 1.2rem;font-size:.8rem;color:var(--
   </section>
 
   <footer>
-    <span>Build <code>OP-B1-20260912-007</code></span>
+    <span>Build <code>OP-B1-20260912-008</code></span>
     <span>Backend: <a id="url-backend" href="#">–</a></span>
     <a href="./">Mock de todas las etapas</a>
     <a href="holamundo.html">Comprobación del backend</a>
@@ -195,7 +195,15 @@ footer{display:flex;flex-wrap:wrap;gap:.4rem 1.2rem;font-size:.8rem;color:var(--
         return { error: { mensaje: 'respuesta ilegible de ' + ruta.split('?')[0] + ', HTTP ' + r.status } };
       })
         .then(function(j){
-          if (!r.ok) throw new Error((j.error && j.error.mensaje) || ('HTTP ' + r.status));
+          if (!r.ok) {
+            // Los errores del servicio traen "mensaje"; los que vienen de
+            // OpenRouter a traves del proxy traen "message", en ingles.
+            var e = j.error || {};
+            var fallo = new Error(e.mensaje || e.message || ('HTTP ' + r.status));
+            fallo.cuerpo = j;
+            fallo.codigo = r.status;
+            throw fallo;
+          }
           return { datos: j, respuesta: r };
         });
     });
@@ -351,8 +359,8 @@ footer{display:flex;flex-wrap:wrap;gap:.4rem 1.2rem;font-size:.8rem;color:var(--
       $('ficha-uso').hidden = false;
       texto('crudo', JSON.stringify(j, null, 2));
     }).catch(function(e){
-      texto('respuesta', 'Error: ' + e.message);
-      texto('crudo', '–');
+      texto('respuesta', 'Error' + (e.codigo ? ' ' + e.codigo : '') + ': ' + e.message);
+      texto('crudo', e.cuerpo ? JSON.stringify(e.cuerpo, null, 2) : '–');
     }).finally(function(){ boton.disabled = false; });
   });
 })();
