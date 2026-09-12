@@ -2,25 +2,52 @@
   "openapi": "3.1.0",
   "info": {
     "title": "openrouter · servicio",
-    "version": "0.2.0",
+    "version": "0.3.0",
     "summary": "Pasarela propia sobre OpenRouter, pensada para ser llamada por otras aplicaciones.",
-    "description": "Esto no es una aplicación con interfaz: es un conjunto de servicios HTTP. La clave de OpenRouter vive solo en el backend y nunca sale de él; las apps consumidoras usan una clave de servicio propia.\n\nEl contrato sigue el de la API de OpenAI donde existe equivalente, así que cualquier cliente de OpenAI funciona cambiando la URL base. Lo propio del servicio va en rutas propias y en cabeceras `X-...`. Una ruta publicada no se rompe: lo incompatible iría a `/v2/`.\n\nLa versión de este documento acompaña a la etapa entregada: `0.2.0` es la etapa 2.",
-    "license": { "name": "Uso interno" }
+    "description": "Esto no es una aplicación con interfaz: es un conjunto de servicios HTTP. La clave de OpenRouter vive solo en el backend y nunca sale de él; las apps consumidoras usan una clave de servicio propia.\n\nEl contrato sigue el de la API de OpenAI donde existe equivalente, así que cualquier cliente de OpenAI funciona cambiando la URL base. Lo propio del servicio va en rutas propias y en cabeceras `X-...`. Una ruta publicada no se rompe: lo incompatible iría a `/v2/`.\n\nLa versión de este documento acompaña a la etapa entregada: `0.3.0` es la etapa 3.",
+    "license": {
+      "name": "Uso interno"
+    }
   },
   "servers": [
-    { "url": "https://openrouter-npiobject-labs.fly.dev", "description": "Producción (Fly.io)" },
-    { "url": "http://localhost:8080", "description": "En el PC, con tools/arrancar.ps1" }
+    {
+      "url": "https://openrouter-npiobject-labs.fly.dev",
+      "description": "Producción (Fly.io)"
+    },
+    {
+      "url": "http://localhost:8080",
+      "description": "En el PC, con tools/arrancar.ps1"
+    }
   ],
-  "security": [{ "claveDeServicio": [] }],
+  "security": [
+    {
+      "claveDeServicio": []
+    }
+  ],
   "tags": [
-    { "name": "Servicio", "description": "Estado del proceso y del servicio. No gastan crédito." },
-    { "name": "Modelos", "description": "Catálogo de modelos disponibles, con precio y capacidades." },
-    { "name": "Consultas", "description": "Lanzar una consulta a un modelo." }
+    {
+      "name": "Servicio",
+      "description": "Estado del proceso y del servicio. No gastan crédito."
+    },
+    {
+      "name": "Modelos",
+      "description": "Catálogo de modelos disponibles, con precio y capacidades."
+    },
+    {
+      "name": "Consultas",
+      "description": "Lanzar una consulta a un modelo."
+    },
+    {
+      "name": "Uso",
+      "description": "Qué consumió cada llamada: tokens, coste, latencia y proveedor."
+    }
   ],
   "paths": {
     "/salud": {
       "get": {
-        "tags": ["Servicio"],
+        "tags": [
+          "Servicio"
+        ],
         "summary": "Salud del proceso",
         "description": "Dice si el proceso está en pie, con qué build y si tiene configuradas las dos claves. No llama a OpenRouter. Es la ruta que usan las comprobaciones automáticas y la única, junto a `/holamundo`, que no exige clave.",
         "security": [],
@@ -29,8 +56,15 @@
             "description": "El servicio responde.",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/Salud" },
-                "example": { "ok": true, "build": "87e6a89", "openrouter": true, "clave_servicio": true }
+                "schema": {
+                  "$ref": "#/components/schemas/Salud"
+                },
+                "example": {
+                  "ok": true,
+                  "build": "87e6a89",
+                  "openrouter": true,
+                  "clave_servicio": true
+                }
               }
             }
           }
@@ -39,21 +73,32 @@
     },
     "/holamundo": {
       "get": {
-        "tags": ["Servicio"],
+        "tags": [
+          "Servicio"
+        ],
         "summary": "Prueba de vida",
         "description": "Devuelve `holamundo` en texto plano. Existe para comprobar desde el navegador que el backend contesta y que el CORS funciona.",
         "security": [],
         "responses": {
           "200": {
             "description": "Texto plano.",
-            "content": { "text/plain": { "schema": { "type": "string" }, "example": "holamundo" } }
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                },
+                "example": "holamundo"
+              }
+            }
           }
         }
       }
     },
     "/v1/estado": {
       "get": {
-        "tags": ["Servicio"],
+        "tags": [
+          "Servicio"
+        ],
         "summary": "Estado del servicio y de la clave",
         "description": "Comprueba de verdad que el backend habla con OpenRouter, y devuelve la etiqueta de la clave, su uso y su límite tal como los da el proveedor. No gasta crédito, así que sirve para vigilancia periódica.",
         "responses": {
@@ -61,32 +106,85 @@
             "description": "Conexión confirmada.",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/Estado" },
+                "schema": {
+                  "$ref": "#/components/schemas/Estado"
+                },
                 "example": {
                   "ok": true,
                   "build": "87e6a89",
                   "modelo_defecto": "google/gemini-2.5-flash-lite",
-                  "clave": { "label": "openrouter", "usage": 0.0123, "limit": 5, "is_free_tier": false }
+                  "clave": {
+                    "label": "openrouter",
+                    "usage": 0.0123,
+                    "limit": 5,
+                    "is_free_tier": false
+                  }
                 }
               }
             }
           },
-          "401": { "$ref": "#/components/responses/NoAutorizado" },
-          "503": { "$ref": "#/components/responses/SinConfigurar" }
+          "401": {
+            "$ref": "#/components/responses/NoAutorizado"
+          },
+          "503": {
+            "$ref": "#/components/responses/SinConfigurar"
+          }
         }
       }
     },
     "/v1/models": {
       "get": {
-        "tags": ["Modelos"],
+        "tags": [
+          "Modelos"
+        ],
         "summary": "Catálogo de modelos",
         "description": "El catálogo de OpenRouter con el formato de la API de OpenAI, más los campos que hacen falta para elegir: precio en dólares por millón de tokens, ventana de contexto, modalidades de entrada y si admite herramientas o salida estructurada.\n\nSe cachea una hora en memoria. Si OpenRouter no responde y hay copia caducada, se sirve la caducada antes que un error: para elegir modelo, una lista de ayer es mejor que nada. La cabecera `X-Cache` dice de dónde salió.",
         "parameters": [
-          { "name": "texto", "in": "query", "description": "Filtra por texto en el identificador o el nombre.", "schema": { "type": "string" }, "example": "gemini" },
-          { "name": "proveedor", "in": "query", "description": "Filtra por proveedor, que es el tramo anterior a la barra del identificador.", "schema": { "type": "string" }, "example": "anthropic" },
-          { "name": "contexto_min", "in": "query", "description": "Descarta los modelos con menos contexto que este número de tokens.", "schema": { "type": "integer", "minimum": 0 }, "example": 200000 },
-          { "name": "gratis", "in": "query", "description": "Con `1`, `true` o `si`, solo modelos de precio cero. Cualquier otro valor no filtra.", "schema": { "type": "string" }, "example": "1" },
-          { "name": "refrescar", "in": "query", "description": "Con `1`, `true` o `si`, ignora la caché y vuelve a pedir el catálogo.", "schema": { "type": "string" } }
+          {
+            "name": "texto",
+            "in": "query",
+            "description": "Filtra por texto en el identificador o el nombre.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "gemini"
+          },
+          {
+            "name": "proveedor",
+            "in": "query",
+            "description": "Filtra por proveedor, que es el tramo anterior a la barra del identificador.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "anthropic"
+          },
+          {
+            "name": "contexto_min",
+            "in": "query",
+            "description": "Descarta los modelos con menos contexto que este número de tokens.",
+            "schema": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "example": 200000
+          },
+          {
+            "name": "gratis",
+            "in": "query",
+            "description": "Con `1`, `true` o `si`, solo modelos de precio cero. Cualquier otro valor no filtra.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "1"
+          },
+          {
+            "name": "refrescar",
+            "in": "query",
+            "description": "Con `1`, `true` o `si`, ignora la caché y vuelve a pedir el catálogo.",
+            "schema": {
+              "type": "string"
+            }
+          }
         ],
         "responses": {
           "200": {
@@ -94,12 +192,21 @@
             "headers": {
               "X-Cache": {
                 "description": "`miss` recién traído de OpenRouter, `hit` de la caché vigente, `stale` copia caducada porque OpenRouter no respondió.",
-                "schema": { "type": "string", "enum": ["miss", "hit", "stale"] }
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "miss",
+                    "hit",
+                    "stale"
+                  ]
+                }
               }
             },
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/ListaDeModelos" },
+                "schema": {
+                  "$ref": "#/components/schemas/ListaDeModelos"
+                },
                 "example": {
                   "object": "list",
                   "data": [
@@ -115,7 +222,10 @@
                       "gratis": false,
                       "herramientas": true,
                       "json": true,
-                      "modalidades": ["text", "image"]
+                      "modalidades": [
+                        "text",
+                        "image"
+                      ]
                     }
                   ],
                   "total": 445,
@@ -124,25 +234,40 @@
               }
             }
           },
-          "401": { "$ref": "#/components/responses/NoAutorizado" },
-          "502": { "$ref": "#/components/responses/FalloDeProveedor" },
-          "503": { "$ref": "#/components/responses/SinConfigurar" }
+          "401": {
+            "$ref": "#/components/responses/NoAutorizado"
+          },
+          "502": {
+            "$ref": "#/components/responses/FalloDeProveedor"
+          },
+          "503": {
+            "$ref": "#/components/responses/SinConfigurar"
+          }
         }
       }
     },
     "/v1/chat/completions": {
       "post": {
-        "tags": ["Consultas"],
+        "tags": [
+          "Consultas"
+        ],
         "summary": "Consulta a un modelo",
-        "description": "Proxy fino sobre OpenRouter con el contrato de OpenAI. El cuerpo se reenvía tal cual salvo dos retoques: si no traes `model` se rellena con el modelo por defecto del servicio, y `stream: true` se rechaza con `400` porque el streaming llega en la etapa 7.\n\nLa respuesta es la de OpenRouter sin tocar, incluido el bloque `usage`, que es lo que permite saber qué costó la llamada.",
+        "description": "Proxy fino sobre OpenRouter con el contrato de OpenAI. El cuerpo se reenvía tal cual salvo dos retoques: si no traes `model` se rellena con el modelo por defecto del servicio, y `stream: true` se rechaza con `400` porque el streaming llega en la etapa 7.\n\nLa respuesta es la de OpenRouter sin tocar, incluido el bloque `usage`, que es lo que permite saber qué costó la llamada.\n\nToda llamada que llega a salir queda anotada en el registro de uso, vaya bien o mal, y su identificador vuelve en la cabecera `X-Uso-Id`. Con él se consulta después lo que costó, en `/v1/uso/{id}`.",
         "requestBody": {
           "required": true,
           "content": {
             "application/json": {
-              "schema": { "$ref": "#/components/schemas/Consulta" },
+              "schema": {
+                "$ref": "#/components/schemas/Consulta"
+              },
               "example": {
                 "model": "google/gemini-2.5-flash-lite",
-                "messages": [{ "role": "user", "content": "Resume en una línea qué es OpenRouter." }]
+                "messages": [
+                  {
+                    "role": "user",
+                    "content": "Resume en una línea qué es OpenRouter."
+                  }
+                ]
               }
             }
           }
@@ -152,26 +277,207 @@
             "description": "Respuesta del modelo, con el formato de OpenAI.",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/Respuesta" },
+                "schema": {
+                  "$ref": "#/components/schemas/Respuesta"
+                },
                 "example": {
                   "id": "gen-1757000000-abc",
                   "model": "google/gemini-2.5-flash-lite",
                   "object": "chat.completion",
                   "choices": [
-                    { "index": 0, "finish_reason": "stop", "message": { "role": "assistant", "content": "Una pasarela que da acceso a modelos de muchos proveedores con una sola clave." } }
+                    {
+                      "index": 0,
+                      "finish_reason": "stop",
+                      "message": {
+                        "role": "assistant",
+                        "content": "Una pasarela que da acceso a modelos de muchos proveedores con una sola clave."
+                      }
+                    }
                   ],
-                  "usage": { "prompt_tokens": 14, "completion_tokens": 21, "total_tokens": 35 }
+                  "usage": {
+                    "prompt_tokens": 14,
+                    "completion_tokens": 21,
+                    "total_tokens": 35
+                  }
+                }
+              }
+            },
+            "headers": {
+              "X-Uso-Id": {
+                "description": "Identificador del registro de uso de esta llamada. También viaja en las respuestas de error, cuando el fallo ocurrió tras salir hacia OpenRouter.",
+                "schema": {
+                  "type": "string"
                 }
               }
             }
           },
-          "400": { "$ref": "#/components/responses/PeticionInvalida" },
-          "401": { "$ref": "#/components/responses/NoAutorizado" },
-          "402": { "$ref": "#/components/responses/SinSaldo" },
-          "404": { "$ref": "#/components/responses/NoEncontrado" },
-          "429": { "$ref": "#/components/responses/DemasiadasPeticiones" },
-          "502": { "$ref": "#/components/responses/FalloDeProveedor" },
-          "503": { "$ref": "#/components/responses/SinConfigurar" }
+          "400": {
+            "$ref": "#/components/responses/PeticionInvalida"
+          },
+          "401": {
+            "$ref": "#/components/responses/NoAutorizado"
+          },
+          "402": {
+            "$ref": "#/components/responses/SinSaldo"
+          },
+          "404": {
+            "$ref": "#/components/responses/NoEncontrado"
+          },
+          "429": {
+            "$ref": "#/components/responses/DemasiadasPeticiones"
+          },
+          "502": {
+            "$ref": "#/components/responses/FalloDeProveedor"
+          },
+          "503": {
+            "$ref": "#/components/responses/SinConfigurar"
+          }
+        }
+      }
+    },
+    "/v1/uso": {
+      "get": {
+        "tags": [
+          "Uso"
+        ],
+        "summary": "Últimas llamadas",
+        "description": "El registro de las últimas llamadas, de la más reciente a la más antigua.\n\nSon las últimas mil, en memoria: se pierden si la máquina se reinicia. La persistencia y los agregados llegan en la etapa 4.",
+        "parameters": [
+          {
+            "name": "n",
+            "in": "query",
+            "description": "Cuántas devolver. Entre 1 y 1000; por defecto 50.",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 1000,
+              "default": 50
+            },
+            "example": 10
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Lista de registros. `total` es lo que hay guardado ahora mismo.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "object": {
+                      "type": "string",
+                      "const": "list"
+                    },
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Registro"
+                      }
+                    },
+                    "total": {
+                      "type": "integer"
+                    }
+                  }
+                },
+                "example": {
+                  "object": "list",
+                  "data": [
+                    {
+                      "id": "u-1757673600123-7",
+                      "fecha": "2026-09-12T10:40:00Z",
+                      "modelo_pedido": "google/gemini-2.5-flash-lite",
+                      "modelo_servido": "google/gemini-2.5-flash-lite",
+                      "proveedor": "Google",
+                      "tokens_entrada": 1000,
+                      "tokens_salida": 500,
+                      "tokens_razonamiento": 0,
+                      "tokens_cache": 0,
+                      "coste": 0.00042,
+                      "coste_origen": "openrouter",
+                      "latencia_ms": 1840,
+                      "motivo_fin": "stop",
+                      "estado": 200,
+                      "id_openrouter": "gen-abc"
+                    }
+                  ],
+                  "total": 1
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/NoAutorizado"
+          }
+        }
+      }
+    },
+    "/v1/uso/{id}": {
+      "get": {
+        "tags": [
+          "Uso"
+        ],
+        "summary": "Una llamada concreta",
+        "description": "El registro que corresponde a un `X-Uso-Id`.\n\nEl coste llega primero estimado con los precios del catálogo y, un par de segundos después, reconciliado con lo que factura OpenRouter. El campo `coste_origen` dice cuál de los dos estás viendo, así que una aplicación que quiera el dato bueno puede volver a preguntar.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "El identificador devuelto en `X-Uso-Id`.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "El registro.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Registro"
+                },
+                "example": {
+                  "id": "u-1757673600123-7",
+                  "fecha": "2026-09-12T10:40:00Z",
+                  "modelo_pedido": "google/gemini-2.5-flash-lite",
+                  "modelo_servido": "google/gemini-2.5-flash-lite",
+                  "proveedor": "Google",
+                  "tokens_entrada": 1000,
+                  "tokens_salida": 500,
+                  "tokens_razonamiento": 0,
+                  "tokens_cache": 0,
+                  "coste": 0.00042,
+                  "coste_origen": "openrouter",
+                  "latencia_ms": 1840,
+                  "motivo_fin": "stop",
+                  "estado": 200,
+                  "id_openrouter": "gen-abc"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/NoAutorizado"
+          },
+          "404": {
+            "description": "No hay registro con ese id: nunca existió, o ya salió del anillo de las últimas mil.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "ok": false,
+                  "error": {
+                    "message": "No hay registro de uso con id u-1-2.",
+                    "code": "uso_desconocido",
+                    "type": "not_found_error"
+                  }
+                }
+              }
+            }
+          }
         }
       }
     }
@@ -188,82 +494,212 @@
       "Salud": {
         "type": "object",
         "properties": {
-          "ok": { "type": "boolean" },
-          "build": { "type": "string", "description": "SHA del commit desplegado." },
-          "openrouter": { "type": "boolean", "description": "Hay clave de OpenRouter configurada." },
-          "clave_servicio": { "type": "boolean", "description": "Hay clave de servicio configurada." }
+          "ok": {
+            "type": "boolean"
+          },
+          "build": {
+            "type": "string",
+            "description": "SHA del commit desplegado."
+          },
+          "openrouter": {
+            "type": "boolean",
+            "description": "Hay clave de OpenRouter configurada."
+          },
+          "clave_servicio": {
+            "type": "boolean",
+            "description": "Hay clave de servicio configurada."
+          }
         },
-        "required": ["ok", "build"]
+        "required": [
+          "ok",
+          "build"
+        ]
       },
       "Estado": {
         "type": "object",
         "properties": {
-          "ok": { "type": "boolean" },
-          "build": { "type": "string" },
-          "modelo_defecto": { "type": "string", "description": "El que se usa si la consulta no trae `model`." },
-          "clave": { "type": "object", "description": "Etiqueta, uso y límite de la clave, tal como los devuelve OpenRouter.", "additionalProperties": true }
+          "ok": {
+            "type": "boolean"
+          },
+          "build": {
+            "type": "string"
+          },
+          "modelo_defecto": {
+            "type": "string",
+            "description": "El que se usa si la consulta no trae `model`."
+          },
+          "clave": {
+            "type": "object",
+            "description": "Etiqueta, uso y límite de la clave, tal como los devuelve OpenRouter.",
+            "additionalProperties": true
+          }
         },
-        "required": ["ok", "build", "modelo_defecto", "clave"]
+        "required": [
+          "ok",
+          "build",
+          "modelo_defecto",
+          "clave"
+        ]
       },
       "Modelo": {
         "type": "object",
         "description": "Los cuatro primeros campos son los de la API de OpenAI; el resto es lo que añade este servicio.",
         "properties": {
-          "id": { "type": "string", "description": "Identificador que se manda en `model`." },
-          "object": { "type": "string", "const": "model" },
-          "created": { "type": "integer", "description": "Marca de tiempo Unix." },
-          "owned_by": { "type": "string", "description": "Proveedor, deducido del tramo anterior a la barra." },
-          "nombre": { "type": "string", "description": "Nombre legible." },
-          "contexto": { "type": "integer", "description": "Ventana de contexto en tokens." },
-          "entrada": { "type": "number", "description": "Dólares por millón de tokens de entrada." },
-          "salida": { "type": "number", "description": "Dólares por millón de tokens de salida." },
-          "gratis": { "type": "boolean", "description": "Entrada y salida a coste cero." },
-          "herramientas": { "type": "boolean", "description": "Admite llamada a herramientas." },
-          "json": { "type": "boolean", "description": "Admite salida estructurada o `response_format`." },
-          "modalidades": { "type": "array", "items": { "type": "string" }, "description": "Modalidades de entrada, por ejemplo texto e imagen." }
+          "id": {
+            "type": "string",
+            "description": "Identificador que se manda en `model`."
+          },
+          "object": {
+            "type": "string",
+            "const": "model"
+          },
+          "created": {
+            "type": "integer",
+            "description": "Marca de tiempo Unix."
+          },
+          "owned_by": {
+            "type": "string",
+            "description": "Proveedor, deducido del tramo anterior a la barra."
+          },
+          "nombre": {
+            "type": "string",
+            "description": "Nombre legible."
+          },
+          "contexto": {
+            "type": "integer",
+            "description": "Ventana de contexto en tokens."
+          },
+          "entrada": {
+            "type": "number",
+            "description": "Dólares por millón de tokens de entrada."
+          },
+          "salida": {
+            "type": "number",
+            "description": "Dólares por millón de tokens de salida."
+          },
+          "gratis": {
+            "type": "boolean",
+            "description": "Entrada y salida a coste cero."
+          },
+          "herramientas": {
+            "type": "boolean",
+            "description": "Admite llamada a herramientas."
+          },
+          "json": {
+            "type": "boolean",
+            "description": "Admite salida estructurada o `response_format`."
+          },
+          "modalidades": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Modalidades de entrada, por ejemplo texto e imagen."
+          }
         },
-        "required": ["id", "object", "owned_by", "nombre", "contexto", "entrada", "salida", "gratis"]
+        "required": [
+          "id",
+          "object",
+          "owned_by",
+          "nombre",
+          "contexto",
+          "entrada",
+          "salida",
+          "gratis"
+        ]
       },
       "ListaDeModelos": {
         "type": "object",
         "properties": {
-          "object": { "type": "string", "const": "list" },
-          "data": { "type": "array", "items": { "$ref": "#/components/schemas/Modelo" } },
-          "total": { "type": "integer", "description": "Modelos en el catálogo antes de filtrar." },
-          "antiguedad_minutos": { "type": "integer", "description": "Minutos desde que se trajo el catálogo." }
+          "object": {
+            "type": "string",
+            "const": "list"
+          },
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Modelo"
+            }
+          },
+          "total": {
+            "type": "integer",
+            "description": "Modelos en el catálogo antes de filtrar."
+          },
+          "antiguedad_minutos": {
+            "type": "integer",
+            "description": "Minutos desde que se trajo el catálogo."
+          }
         },
-        "required": ["object", "data", "total"]
+        "required": [
+          "object",
+          "data",
+          "total"
+        ]
       },
       "Consulta": {
         "type": "object",
         "description": "El cuerpo de la API de OpenAI. Se reenvía tal cual, así que cualquier campo que OpenRouter entienda vale, incluidos `tools`, `response_format`, `temperature` o `provider`.",
         "properties": {
-          "model": { "type": "string", "description": "Opcional. Si falta, el modelo por defecto del servicio." },
+          "model": {
+            "type": "string",
+            "description": "Opcional. Si falta, el modelo por defecto del servicio."
+          },
           "messages": {
             "type": "array",
             "description": "Los mensajes de la conversación.",
             "items": {
               "type": "object",
               "properties": {
-                "role": { "type": "string", "enum": ["system", "user", "assistant", "tool"] },
-                "content": { "type": "string" }
+                "role": {
+                  "type": "string",
+                  "enum": [
+                    "system",
+                    "user",
+                    "assistant",
+                    "tool"
+                  ]
+                },
+                "content": {
+                  "type": "string"
+                }
               },
-              "required": ["role", "content"]
+              "required": [
+                "role",
+                "content"
+              ]
             }
           },
-          "stream": { "type": "boolean", "description": "Rechazado hasta la etapa 7: con `true` la respuesta es `400`." }
+          "stream": {
+            "type": "boolean",
+            "description": "Rechazado hasta la etapa 7: con `true` la respuesta es `400`."
+          }
         },
-        "required": ["messages"],
+        "required": [
+          "messages"
+        ],
         "additionalProperties": true
       },
       "Respuesta": {
         "type": "object",
         "description": "La respuesta de OpenRouter sin modificar.",
         "properties": {
-          "id": { "type": "string" },
-          "model": { "type": "string", "description": "El modelo que realmente sirvió la consulta." },
-          "object": { "type": "string" },
-          "choices": { "type": "array", "items": { "type": "object", "additionalProperties": true } },
+          "id": {
+            "type": "string"
+          },
+          "model": {
+            "type": "string",
+            "description": "El modelo que realmente sirvió la consulta."
+          },
+          "object": {
+            "type": "string"
+          },
+          "choices": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": true
+            }
+          },
           "usage": {
             "type": "object",
             "description": "Tokens consumidos. Es la base de la medición de coste de la etapa 3.",
@@ -276,63 +712,328 @@
         "type": "object",
         "description": "Todo error del servicio sale con este sobre, venga de aquí o de OpenRouter. Los tres campos van en inglés porque es lo que leen sin adaptaciones los clientes de la API de OpenAI.",
         "properties": {
-          "ok": { "type": "boolean", "const": false },
+          "ok": {
+            "type": "boolean",
+            "const": false
+          },
           "error": {
             "type": "object",
             "properties": {
-              "message": { "type": "string", "description": "Texto del fallo, para enseñar o registrar." },
-              "code": { "type": "string", "description": "Código estable del servicio. Es lo que conviene comparar en código: el texto puede cambiar." },
-              "type": { "type": "string", "description": "Familia del error, deducida del estado HTTP.", "enum": ["invalid_request_error", "authentication_error", "insufficient_quota", "not_found_error", "rate_limit_error", "api_error"] },
-              "upstream": { "type": "object", "description": "Solo cuando el rechazo fue de OpenRouter: su cuerpo original, para depurar.", "additionalProperties": true }
+              "message": {
+                "type": "string",
+                "description": "Texto del fallo, para enseñar o registrar."
+              },
+              "code": {
+                "type": "string",
+                "description": "Código estable del servicio. Es lo que conviene comparar en código: el texto puede cambiar."
+              },
+              "type": {
+                "type": "string",
+                "description": "Familia del error, deducida del estado HTTP.",
+                "enum": [
+                  "invalid_request_error",
+                  "authentication_error",
+                  "insufficient_quota",
+                  "not_found_error",
+                  "rate_limit_error",
+                  "api_error"
+                ]
+              },
+              "upstream": {
+                "type": "object",
+                "description": "Solo cuando el rechazo fue de OpenRouter: su cuerpo original, para depurar.",
+                "additionalProperties": true
+              }
             },
-            "required": ["message", "code", "type"]
+            "required": [
+              "message",
+              "code",
+              "type"
+            ]
           }
         },
-        "required": ["ok", "error"]
+        "required": [
+          "ok",
+          "error"
+        ]
+      },
+      "Registro": {
+        "type": "object",
+        "description": "Lo que se sabe de una llamada. Se anota también cuando falla: un error que consumió dos segundos de espera es información de uso.",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "El que devolvió `X-Uso-Id`."
+          },
+          "fecha": {
+            "type": "string",
+            "description": "ISO 8601 en UTC."
+          },
+          "modelo_pedido": {
+            "type": "string"
+          },
+          "modelo_servido": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Puede no ser el pedido: OpenRouter enruta."
+          },
+          "proveedor": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "tokens_entrada": {
+            "type": "integer"
+          },
+          "tokens_salida": {
+            "type": "integer"
+          },
+          "tokens_razonamiento": {
+            "type": "integer"
+          },
+          "tokens_cache": {
+            "type": "integer"
+          },
+          "coste": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "description": "Dólares."
+          },
+          "coste_origen": {
+            "type": "string",
+            "enum": [
+              "desconocido",
+              "estimado",
+              "openrouter"
+            ],
+            "description": "`estimado` con los precios del catálogo; `openrouter` cuando ya se reconcilió con lo que factura el proveedor, unos segundos después de la llamada."
+          },
+          "latencia_ms": {
+            "type": "integer"
+          },
+          "motivo_fin": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "`stop`, `length`… o el código de error si la llamada falló."
+          },
+          "estado": {
+            "type": "integer",
+            "description": "Código HTTP con el que se resolvió."
+          },
+          "id_openrouter": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "fecha",
+          "modelo_pedido",
+          "tokens_entrada",
+          "tokens_salida",
+          "latencia_ms",
+          "estado"
+        ]
       }
     },
     "responses": {
       "NoAutorizado": {
         "description": "Falta la clave de servicio o no es válida.",
-        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" }, "example": { "ok": false, "error": { "message": "Falta la cabecera Authorization: Bearer <clave de servicio>.", "code": "sin_clave", "type": "authentication_error" } } } }
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            },
+            "example": {
+              "ok": false,
+              "error": {
+                "message": "Falta la cabecera Authorization: Bearer <clave de servicio>.",
+                "code": "sin_clave",
+                "type": "authentication_error"
+              }
+            }
+          }
+        }
       },
       "PeticionInvalida": {
         "description": "El cuerpo no es un objeto JSON, o pide streaming, que aún no existe.",
-        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" }, "example": { "ok": false, "error": { "message": "El streaming llega en la etapa 7; manda la consulta sin \"stream\".", "code": "streaming_no_disponible", "type": "invalid_request_error" } } } }
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            },
+            "example": {
+              "ok": false,
+              "error": {
+                "message": "El streaming llega en la etapa 7; manda la consulta sin \"stream\".",
+                "code": "streaming_no_disponible",
+                "type": "invalid_request_error"
+              }
+            }
+          }
+        }
       },
       "NoEncontrado": {
         "description": "La ruta no existe, o el modelo pedido no existe o no está autorizado para la cuenta.",
-        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" }, "example": { "ok": false, "error": { "message": "No endpoints found for modelo/inexistente.", "code": "openrouter_rechaza", "type": "not_found_error", "upstream": { "error": { "message": "No endpoints found for modelo/inexistente.", "code": 404 } } } } } }
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            },
+            "example": {
+              "ok": false,
+              "error": {
+                "message": "No endpoints found for modelo/inexistente.",
+                "code": "openrouter_rechaza",
+                "type": "not_found_error",
+                "upstream": {
+                  "error": {
+                    "message": "No endpoints found for modelo/inexistente.",
+                    "code": 404
+                  }
+                }
+              }
+            }
+          }
+        }
       },
       "SinSaldo": {
         "description": "OpenRouter rechaza por crédito insuficiente.",
-        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" }, "example": { "ok": false, "error": { "message": "Insufficient credits", "code": "openrouter_rechaza", "type": "insufficient_quota", "upstream": { "error": { "message": "Insufficient credits", "code": 402 } } } } } }
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            },
+            "example": {
+              "ok": false,
+              "error": {
+                "message": "Insufficient credits",
+                "code": "openrouter_rechaza",
+                "type": "insufficient_quota",
+                "upstream": {
+                  "error": {
+                    "message": "Insufficient credits",
+                    "code": 402
+                  }
+                }
+              }
+            }
+          }
+        }
       },
       "DemasiadasPeticiones": {
         "description": "Límite de ritmo del proveedor. Las cuotas propias por aplicación llegan en la etapa 6.",
-        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } }
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
       },
       "FalloDeProveedor": {
         "description": "No se pudo alcanzar a OpenRouter, tardó demasiado o devolvió algo ilegible.",
-        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" }, "example": { "ok": false, "error": { "message": "no se pudo lanzar la consulta: operation timed out", "code": "openrouter_tardo_demasiado", "type": "api_error" } } } }
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            },
+            "example": {
+              "ok": false,
+              "error": {
+                "message": "no se pudo lanzar la consulta: operation timed out",
+                "code": "openrouter_tardo_demasiado",
+                "type": "api_error"
+              }
+            }
+          }
+        }
       },
       "SinConfigurar": {
         "description": "Al servicio le falta un secreto y no puede atender.",
-        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" }, "example": { "ok": false, "error": { "message": "El servicio no tiene clave de OpenRouter configurada; revisa los secretos de Fly.", "code": "sin_configurar", "type": "api_error" } } } }
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            },
+            "example": {
+              "ok": false,
+              "error": {
+                "message": "El servicio no tiene clave de OpenRouter configurada; revisa los secretos de Fly.",
+                "code": "sin_configurar",
+                "type": "api_error"
+              }
+            }
+          }
+        }
       }
     }
   },
   "x-codigos-de-error": [
-    { "code": "sin_clave", "http": 401, "cuando": "La petición no lleva la cabecera Authorization." },
-    { "code": "clave_invalida", "http": 401, "cuando": "La clave de servicio no coincide." },
-    { "code": "sin_configurar", "http": 503, "cuando": "Falta un secreto en el backend: clave de OpenRouter o clave de servicio." },
-    { "code": "ruta_desconocida", "http": 404, "cuando": "La ruta no existe. Suele significar que el cliente es más nuevo que el backend desplegado." },
-    { "code": "cuerpo_invalido", "http": 400, "cuando": "El cuerpo de la consulta no es un objeto JSON." },
-    { "code": "streaming_no_disponible", "http": 400, "cuando": "La consulta pide stream. Llega en la etapa 7." },
-    { "code": "openrouter_rechaza", "http": "el del proveedor", "cuando": "OpenRouter rechazó la llamada: modelo inexistente, saldo, permisos. Su cuerpo queda en error.upstream." },
-    { "code": "openrouter_inalcanzable", "http": 502, "cuando": "No hubo forma de conectar con OpenRouter." },
-    { "code": "openrouter_tardo_demasiado", "http": 502, "cuando": "Se agotó la espera: 120 segundos en consultas, 20 en el resto." },
-    { "code": "respuesta_ilegible", "http": 502, "cuando": "OpenRouter devolvió algo que no es JSON." }
+    {
+      "code": "sin_clave",
+      "http": 401,
+      "cuando": "La petición no lleva la cabecera Authorization."
+    },
+    {
+      "code": "clave_invalida",
+      "http": 401,
+      "cuando": "La clave de servicio no coincide."
+    },
+    {
+      "code": "sin_configurar",
+      "http": 503,
+      "cuando": "Falta un secreto en el backend: clave de OpenRouter o clave de servicio."
+    },
+    {
+      "code": "ruta_desconocida",
+      "http": 404,
+      "cuando": "La ruta no existe. Suele significar que el cliente es más nuevo que el backend desplegado."
+    },
+    {
+      "code": "cuerpo_invalido",
+      "http": 400,
+      "cuando": "El cuerpo de la consulta no es un objeto JSON."
+    },
+    {
+      "code": "streaming_no_disponible",
+      "http": 400,
+      "cuando": "La consulta pide stream. Llega en la etapa 7."
+    },
+    {
+      "code": "openrouter_rechaza",
+      "http": "el del proveedor",
+      "cuando": "OpenRouter rechazó la llamada: modelo inexistente, saldo, permisos. Su cuerpo queda en error.upstream."
+    },
+    {
+      "code": "openrouter_inalcanzable",
+      "http": 502,
+      "cuando": "No hubo forma de conectar con OpenRouter."
+    },
+    {
+      "code": "openrouter_tardo_demasiado",
+      "http": 502,
+      "cuando": "Se agotó la espera: 120 segundos en consultas, 20 en el resto."
+    },
+    {
+      "code": "respuesta_ilegible",
+      "http": 502,
+      "cuando": "OpenRouter devolvió algo que no es JSON."
+    },
+    {
+      "code": "uso_desconocido",
+      "http": 404,
+      "cuando": "Se pidió un registro de uso que no existe o ya salió del anillo de las últimas mil."
+    }
   ],
   "x-etapas": [
     {
@@ -340,8 +1041,14 @@
       "titulo": "Conexión a OpenRouter y una consulta",
       "estado": "entregada",
       "rutas": [
-        { "metodo": "GET", "ruta": "/v1/estado" },
-        { "metodo": "POST", "ruta": "/v1/chat/completions" }
+        {
+          "metodo": "GET",
+          "ruta": "/v1/estado"
+        },
+        {
+          "metodo": "POST",
+          "ruta": "/v1/chat/completions"
+        }
       ],
       "nota": "Clave de servicio obligatoria en todo /v1 desde el primer día."
     },
@@ -349,26 +1056,43 @@
       "numero": 2,
       "titulo": "Catálogo de modelos",
       "estado": "entregada",
-      "rutas": [{ "metodo": "GET", "ruta": "/v1/models" }],
+      "rutas": [
+        {
+          "metodo": "GET",
+          "ruta": "/v1/models"
+        }
+      ],
       "nota": "Caché de una hora, filtros y copia caducada si el proveedor falla."
     },
     {
       "numero": 3,
       "titulo": "Medición por llamada",
-      "estado": "siguiente",
+      "estado": "entregada",
       "rutas": [
-        { "metodo": "GET", "ruta": "/v1/uso" },
-        { "metodo": "GET", "ruta": "/v1/uso/{id}" }
+        {
+          "metodo": "GET",
+          "ruta": "/v1/uso"
+        },
+        {
+          "metodo": "GET",
+          "ruta": "/v1/uso/{id}"
+        }
       ],
-      "nota": "Cada consulta devolverá una cabecera X-Uso-Id con la que consultar después tokens, coste real, latencia y proveedor que la sirvió. Anillo de las últimas mil llamadas, en memoria."
+      "nota": "Cada consulta devuelve la cabecera X-Uso-Id con la que consultar después tokens, coste, latencia y proveedor que la sirvió. El coste se estima con el catálogo y se reconcilia con lo que factura OpenRouter. Anillo de las últimas mil llamadas, en memoria."
     },
     {
       "numero": 4,
       "titulo": "Persistencia y agregados",
-      "estado": "planificada",
+      "estado": "siguiente",
       "rutas": [
-        { "metodo": "GET", "ruta": "/v1/uso/resumen" },
-        { "metodo": "GET", "ruta": "/v1/uso/exportar" }
+        {
+          "metodo": "GET",
+          "ruta": "/v1/uso/resumen"
+        },
+        {
+          "metodo": "GET",
+          "ruta": "/v1/uso/exportar"
+        }
       ],
       "nota": "El histórico deja de perderse al reiniciar. Totales por día y por modelo, y exportación en CSV o JSON."
     },
@@ -377,9 +1101,18 @@
       "titulo": "Aplicaciones consumidoras",
       "estado": "planificada",
       "rutas": [
-        { "metodo": "POST", "ruta": "/v1/apps" },
-        { "metodo": "GET", "ruta": "/v1/apps" },
-        { "metodo": "DELETE", "ruta": "/v1/apps/{id}" }
+        {
+          "metodo": "POST",
+          "ruta": "/v1/apps"
+        },
+        {
+          "metodo": "GET",
+          "ruta": "/v1/apps"
+        },
+        {
+          "metodo": "DELETE",
+          "ruta": "/v1/apps/{id}"
+        }
       ],
       "nota": "Una clave por aplicación, con su etiqueta, en vez de la clave única de hoy. Cada registro de uso pasa a saber quién lo causó, y la cabecera X-Operacion permitirá agrupar varias llamadas de un mismo trabajo."
     },
@@ -388,8 +1121,14 @@
       "titulo": "Presupuestos, cuotas y cortacircuitos",
       "estado": "planificada",
       "rutas": [
-        { "metodo": "GET", "ruta": "/v1/presupuesto" },
-        { "metodo": "PUT", "ruta": "/v1/apps/{id}/presupuesto" }
+        {
+          "metodo": "GET",
+          "ruta": "/v1/presupuesto"
+        },
+        {
+          "metodo": "PUT",
+          "ruta": "/v1/apps/{id}/presupuesto"
+        }
       ],
       "nota": "Una aplicación podrá preguntar cuánto margen le queda antes de gastar. Al pasarse, 402; al exceder el ritmo, 429."
     },
@@ -397,7 +1136,13 @@
       "numero": 7,
       "titulo": "Streaming",
       "estado": "planificada",
-      "rutas": [{ "metodo": "POST", "ruta": "/v1/chat/completions", "nota": "con stream: true" }],
+      "rutas": [
+        {
+          "metodo": "POST",
+          "ruta": "/v1/chat/completions",
+          "nota": "con stream: true"
+        }
+      ],
       "nota": "Eventos servidos según se generan, midiendo el tiempo hasta el primer token. Hasta entonces, stream: true devuelve 400."
     },
     {
@@ -405,9 +1150,18 @@
       "titulo": "Alias y enrutado",
       "estado": "planificada",
       "rutas": [
-        { "metodo": "GET", "ruta": "/v1/alias" },
-        { "metodo": "PUT", "ruta": "/v1/alias/{nombre}" },
-        { "metodo": "GET", "ruta": "/v1/alias/{nombre}/simular" }
+        {
+          "metodo": "GET",
+          "ruta": "/v1/alias"
+        },
+        {
+          "metodo": "PUT",
+          "ruta": "/v1/alias/{nombre}"
+        },
+        {
+          "metodo": "GET",
+          "ruta": "/v1/alias/{nombre}/simular"
+        }
       ],
       "nota": "Una aplicación pedirá \"alias:redactor\" en vez de un modelo concreto, y el servicio decidirá el modelo, la cadena de respaldo y los parámetros. Cambiar de modelo dejará de tocar el código de las aplicaciones."
     }

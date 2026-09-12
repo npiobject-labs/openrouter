@@ -4,6 +4,7 @@ mod config;
 mod error;
 mod openrouter;
 mod rutas;
+mod uso;
 
 use std::sync::Arc;
 
@@ -18,13 +19,14 @@ use axum::{
 };
 use tower_http::cors::{Any, CorsLayer};
 
-use crate::{catalogo::Catalogo, config::Config, openrouter::Cliente};
+use crate::{catalogo::Catalogo, config::Config, openrouter::Cliente, uso::Uso};
 
 /// Lo que comparten todas las rutas.
 pub struct Servicio {
     pub config: Config,
     pub openrouter: Cliente,
     pub catalogo: Catalogo,
+    pub uso: Uso,
 }
 
 #[tokio::main]
@@ -35,6 +37,7 @@ async fn main() {
     let servicio = Arc::new(Servicio {
         openrouter: Cliente::nuevo(&config),
         catalogo: Catalogo::default(),
+        uso: Uso::default(),
         config,
     });
 
@@ -44,6 +47,8 @@ async fn main() {
         .route("/estado", get(rutas::estado::estado))
         .route("/models", get(rutas::modelos::modelos))
         .route("/chat/completions", post(rutas::chat::chat))
+        .route("/uso", get(rutas::uso::lista))
+        .route("/uso/{id}", get(rutas::uso::una))
         .route_layer(middleware::from_fn_with_state(
             servicio.clone(),
             auth::exigir_clave,
@@ -55,8 +60,11 @@ async fn main() {
         .allow_origin(Any)
         .allow_methods([Method::GET, Method::POST, Method::OPTIONS])
         .allow_headers([AUTHORIZATION, CONTENT_TYPE])
-        // Sin esto el navegador no puede leer X-Cache aunque viaje.
-        .expose_headers([HeaderName::from_static("x-cache")]);
+        // Sin esto el navegador no puede leer estas dos aunque viajen.
+        .expose_headers([
+            HeaderName::from_static("x-cache"),
+            HeaderName::from_static("x-uso-id"),
+        ]);
 
     let app = Router::new()
         .route("/", get(rutas::basicas::raiz))
