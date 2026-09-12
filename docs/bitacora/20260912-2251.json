@@ -1,0 +1,76 @@
+{
+  "fecha": "2026-09-12T22:51:00+02:00",
+  "titulo": "La prueba del BOM contra modelos reales: tres lecciones",
+  "objetivo": "Ejecutar la prueba del BOM contra modelos de verdad, comparar escalones de precio y decidir con qué modelo debería trabajar una futura aplicación de presupuestos.",
+  "prompts": [
+    {
+      "texto": "comomo veo el histórico en SQLite en un volumen de Fly?"
+    },
+    {
+      "texto": "[pega la salida de probar-bom.ps1: el script pide la clave y no la encuentra]",
+      "nota": "Resumido: el pegado incluia la clave de servicio."
+    },
+    {
+      "texto": "[pega la salida de probar-bom.ps1: el modelo elegido mapea una columna de siete con confianza 0.99]",
+      "nota": "Resumido por la misma razon. Es el hallazgo que motivo el resto de la sesion."
+    },
+    {
+      "texto": "Sí, ajústalo y prueba con dos o tres modelos"
+    },
+    {
+      "texto": "fusiona y probaré con -Comparar"
+    },
+    {
+      "texto": "[pega dos salidas mas: una con el fallo mudo del script y otra con la version anterior todavia sin actualizar]",
+      "nota": "Resumidos: ambos pegados incluian la clave."
+    },
+    {
+      "texto": "[pega la comparacion de tres modelos: el de la casa, uno intermedio y uno caro]",
+      "nota": "Resumido. De aqui salieron los tres arreglos y la decision de modelo."
+    },
+    {
+      "texto": "Sí, aplica los tres arreglos"
+    },
+    {
+      "texto": "cierra sesion"
+    }
+  ],
+  "cambios": [
+    "tools/probar-bom.ps1: sin -Modelo se usa el del servicio, y no el primero del catalogo que admita salida estructurada.",
+    "tools/probar-bom.ps1: -Comparar mide tres escalones de precio del catalogo con un tope de gasto por llamada (-Tope) y ensena lo que costaria cada uno antes de llamar.",
+    "tools/probar-bom.ps1: el prompt lleva delante la lista exacta de columnas y la orden de revisarla entera antes de responder null.",
+    "tools/probar-bom.ps1: los errores se leen de ErrorDetails, que funciona en las dos versiones de PowerShell, y salen con codigo HTTP, codigo del servicio, mensaje y cuerpo de OpenRouter.",
+    "tools/probar-bom.ps1: max_tokens en la peticion y maxLength en el esquema; una respuesta cortada se avisa por su nombre.",
+    "tools/probar-bom.ps1: la estimacion de coste se calcula con el prompt real, no con un numero fijo.",
+    "tools/probar-bom.ps1: la clave se pide por consola si falta, para que no quede en el historial.",
+    "docs/planificacion/prueba-bom.md: guia actualizada con -Comparar, -Tope, -MaxSalida y la tabla de la comparacion real.",
+    "CLAUDE.md: la herramienta documentada con su modo de comparacion."
+  ],
+  "sha": "119c0a1",
+  "sha_completo": "119c0a18bd3ee813699ff9942671f4cc30133a76",
+  "run": null,
+  "mock": null,
+  "build": "OP-B1-20260912-012",
+  "pagina": "consola.html",
+  "fly": "https://openrouter-npiobject-labs.fly.dev/salud",
+  "pendiente": [
+    "Rotar SERVICIO_CLAVE: quedo expuesta al pegarla en la conversacion",
+    "Etapa 5: claves por aplicacion, requisito antes de que una aplicacion de presupuestos use el servicio",
+    "Drive: carpeta antigua de la cuenta vieja, carpeta 08 Openrouter y plan-etapas.md duplicado"
+  ],
+  "enlaces": [
+    {
+      "texto": "Guia de la prueba con un BOM",
+      "url": "https://github.com/npiobject-labs/openrouter/blob/main/docs/planificacion/prueba-bom.md"
+    },
+    {
+      "texto": "Documentacion de la API",
+      "url": "https://npiobject-labs.github.io/openrouter/api.html"
+    },
+    {
+      "texto": "Pull request de los arreglos de la prueba",
+      "url": "https://github.com/npiobject-labs/openrouter/pull/19"
+    }
+  ],
+  "notas": "Tercera sesion del mismo dia. Varios prompts eran pegados de la consola que incluian la clave de servicio: se resumen en vez de transcribirse, y por eso ningun valor de clave aparece aqui. Sin cambios en el backend ni en docs publicados, asi que no hay run de despliegue asociado. Conclusion tecnica de la sesion: para mapear columnas de un BOM, el modelo barato iguala a los caros; la calidad del mapeo depende del modelo, no del formato, y una validacion de esquema no habria detectado el mapeo malo porque el JSON era valido."
+}
