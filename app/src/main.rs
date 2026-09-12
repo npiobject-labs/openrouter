@@ -63,6 +63,7 @@ async fn main() {
         .route("/salud", get(rutas::basicas::salud))
         .route("/holamundo", get(rutas::basicas::holamundo))
         .nest("/v1", v1)
+        .fallback(rutas::basicas::desconocida)
         .layer(cors)
         .with_state(servicio);
 
