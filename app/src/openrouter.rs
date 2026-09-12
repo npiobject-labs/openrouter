@@ -59,8 +59,9 @@ impl Cliente {
             return Err(ErrorApi::nuevo(
                 StatusCode::SERVICE_UNAVAILABLE,
                 "openrouter_rechaza",
-                format!("OpenRouter respondió {estado} al comprobar la clave: {cuerpo}"),
-            ));
+                format!("OpenRouter respondió {estado} al comprobar la clave."),
+            )
+            .con_upstream(cuerpo));
         }
 
         // La respuesta viene envuelta en "data"; devolvemos solo el contenido.
@@ -87,14 +88,16 @@ impl Cliente {
                 StatusCode::BAD_GATEWAY,
                 "openrouter_rechaza",
                 format!("OpenRouter respondió {estado} al pedir el catálogo."),
-            ));
+            )
+            .con_upstream(cuerpo));
         }
         Ok(cuerpo)
     }
 
     /// `POST /chat/completions`: se reenvía el cuerpo tal cual y se devuelve la
-    /// respuesta tal cual, con su código de estado y su bloque `usage`.
-    pub async fn chat(&self, cuerpo: Value) -> Result<(StatusCode, Value), ErrorApi> {
+    /// respuesta tal cual, con su bloque `usage`. Si rechaza, el fallo sale por
+    /// `ErrorApi` como cualquier otro: quien llama ve un solo formato de error.
+    pub async fn chat(&self, cuerpo: Value) -> Result<Value, ErrorApi> {
         let respuesta = self
             .http
             .post(format!("{}/chat/completions", self.base))
@@ -110,7 +113,11 @@ impl Cliente {
 
         let estado = respuesta.status();
         let cuerpo: Value = respuesta.json().await.map_err(respuesta_ilegible)?;
-        Ok((estado, cuerpo))
+
+        if !estado.is_success() {
+            return Err(ErrorApi::de_openrouter(estado, cuerpo));
+        }
+        Ok(cuerpo)
     }
 }
 
