@@ -1,0 +1,41 @@
+{
+  "fecha": "2026-09-12T11:58:00+02:00",
+  "titulo": "Etapa 2: catálogo de modelos con caché y filtros",
+  "objetivo": "Entregar la etapa 2 completa: elegir modelo con el precio delante, desde el catalogo de OpenRouter, y dejarla probada en produccion.",
+  "prompts": [
+    { "texto": "empieza la etapa 2 hasta el final, dame el enlace para probarlo y dime brevemente como funciona" },
+    { "texto": "ya funciona, faltaba el key servicio", "nota": "Tras una captura en la que el catalogo respondia 404. El desfase entre la publicacion de Pages y la de Fly dejo un minuto con la consola nueva contra el backend viejo." },
+    { "texto": "[captura de la consola con Error: HTTP 404 al enviar una consulta con un modelo gratuito]" },
+    { "texto": "que hago?", "nota": "Sobre la pantalla de privacidad de OpenRouter y sus interruptores de entrenamiento con datos. Se recomendo no activar ninguno y usar modelos de pago." },
+    { "texto": "cierra sesion" }
+  ],
+  "cambios": [
+    "app/src/catalogo.rs: modelo de datos del catalogo, cache en memoria de una hora, filtros y orden (gratuitos primero, luego de mas barato a mas caro).",
+    "app/src/rutas/modelos.rs: GET /v1/models con formato de la API de OpenAI mas precio por millon, contexto, modalidades y capacidades; cabecera X-Cache con miss, hit o stale.",
+    "app/src/openrouter.rs: metodo para traer el catalogo de OpenRouter.",
+    "app/src/main.rs: ruta del catalogo, X-Cache expuesta en el CORS y handler de ultima instancia para rutas desconocidas.",
+    "app/src/rutas/basicas.rs: una ruta que el servicio no conoce responde el JSON de error del servicio en vez de un 404 vacio.",
+    "docs/consola.html: panel de modelo con buscador, proveedor, contexto minimo, solo gratuitos, boton de refrescar, selector con precio y ficha del modelo; regla [hidden] para que las fichas nazcan ocultas; y los errores de OpenRouter se muestran con su mensaje y su JSON.",
+    ".github/workflows/deploy.yml: verifica /v1/models y falla si el catalogo viene vacio.",
+    "CLAUDE.md: documentado el catalogo, sus filtros y la cabecera X-Cache."
+  ],
+  "sha": "9e2dea9",
+  "sha_completo": "9e2dea99f8662ff2cd24ed52917a673c44c7d571",
+  "run": "34686600815",
+  "mock": null,
+  "build": "OP-B1-20260912-008",
+  "pagina": "consola.html",
+  "fly": "https://openrouter-npiobject-labs.fly.dev/salud",
+  "pendiente": [
+    "Los modelos gratuitos devuelven 404: la cuenta no autoriza endpoints que entrenen o publiquen prompts, y se decidio no activarlo",
+    "Probar de principio a fin una consulta a un modelo de pago desde la consola",
+    "Etapa 3: medicion por llamada con tokens, coste y latencia",
+    "Drive: carpeta antigua de la cuenta vieja, carpeta 08 Openrouter y plan-etapas.md duplicado"
+  ],
+  "enlaces": [
+    { "texto": "Consola del servicio", "url": "https://npiobject-labs.github.io/openrouter/consola.html" },
+    { "texto": "Pull request de la etapa 2", "url": "https://github.com/npiobject-labs/openrouter/pull/7" },
+    { "texto": "Plan por etapas", "url": "https://github.com/npiobject-labs/openrouter/blob/main/docs/planificacion/plan-etapas.md" }
+  ],
+  "notas": "Sesion continuada de la anterior del mismo dia, que cerro la etapa 1. Sin mock nuevo: la consola es pagina viva, no mock. Ningun valor de clave aparece aqui ni en el repositorio."
+}
