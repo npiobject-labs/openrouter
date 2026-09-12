@@ -75,11 +75,18 @@ pwsh -File tools\probar-bom.ps1 -Fichero BOM.xlsx -Comparar
 ```
 
 Coge tres escalones de precio del catálogo, entre los que admiten salida
-estructurada: el modelo por defecto del servicio, uno intermedio y el más caro.
+estructurada y caben en el tope de gasto: el modelo por defecto del servicio,
+uno intermedio y el más caro que quepa. Antes de llamar enseña lo que costaría
+cada uno.
 Después enseña una tabla con cuántos campos mapeó cada uno, lo que tardó y lo
 que costó, y otra con lo que dijo cada modelo en cada campo.
 
 Con `-Modelo a/uno,b/dos` comparas los que quieras.
+
+El tope está en 0,02 dólares por llamada y se cambia con `-Tope`. Existe porque
+el catálogo llega hasta modelos de 150 dólares por millón de tokens: uno de esos
+cuesta más de diez céntimos por análisis, mil veces el modelo de la casa, y no
+tiene por qué acertar más.
 
 **Por qué existe esta comparación.** La primera versión de la prueba elegía sola
 el primer modelo del catálogo que admitiera salida estructurada, y le tocó uno
@@ -90,10 +97,13 @@ del mapeo depende del modelo, y por eso conviene medirla antes de elegir.
 
 ## Cuánto cuesta ejecutarla
 
-Con la cabecera y seis filas son del orden de 700 tokens de entrada y 200 de
-salida. En una prueba real con un modelo barato salió por 0,000182 dólares. Aun
-comparando tres modelos, incluido el más caro del catálogo, la prueba entera
-cuesta céntesimas de céntimo.
+Con la cabecera y seis filas son del orden de 750 tokens de entrada y 150 de
+salida. En una prueba real, el modelo por defecto del servicio mapeó seis de
+siete campos en 0,6 segundos por 0,000128 dólares.
+
+El coste de comparar depende del tope: con el de serie, los tres modelos juntos
+no llegan a dos céntimos. Sin tope, el extremo caro del catálogo se lleva él
+solo más de diez céntimos por llamada.
 
 ## Si algo falla
 
@@ -104,6 +114,7 @@ cuesta céntesimas de céntimo.
 | `el modelo no devolvio JSON valido` | El modelo se salió del esquema. Si se repite, toca añadir validación con reintento en el servicio. |
 | `coste sin calcular` | El catálogo no tenía precio de ese modelo. La confirmación posterior lo arregla. |
 | Mapeo lleno de «no esta en el fichero» | El modelo es demasiado pequeño para la tarea. Compara con `-Comparar` y fija uno mejor con `-Modelo`. |
+| `no support response_format` | Ese modelo no admite salida estructurada aunque el catálogo lo anuncie. Descártalo para esta tarea. |
 
 ## Contra el backend local
 

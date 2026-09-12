@@ -9,6 +9,7 @@
 # Uso: pwsh -File tools\probar-bom.ps1 -Fichero C:\ruta\BOM.xlsx -Clave <clave>
 #      pwsh -File tools\probar-bom.ps1 -Fichero BOM.xlsx -SoloMuestra
 #      pwsh -File tools\probar-bom.ps1 -Fichero BOM.xlsx -Comparar
+#      pwsh -File tools\probar-bom.ps1 -Fichero BOM.xlsx -Comparar -Tope 0.5
 #      pwsh -File tools\probar-bom.ps1 -Fichero BOM.xlsx -Modelo a/uno,b/dos
 #      pwsh -File tools\probar-bom.ps1 -Fichero BOM.xlsx -Api http://localhost:8080
 param(
@@ -18,6 +19,7 @@ param(
   [string[]]$Modelo = @(),
   [int]$Filas = 6,
   [switch]$Comparar,
+  [double]$Tope = 0.02,
   [switch]$SoloMuestra
 )
 $ErrorActionPreference = 'Stop'
@@ -169,16 +171,23 @@ function Llamar($ruta, $metodo = 'GET', $cuerpo = $null, [switch]$Tolerante) {
   try {
     $r = Invoke-WebRequest @parametros
   } catch {
-    $respuesta = $_.Exception.Response
-    if ($respuesta) {
-      $lector = New-Object IO.StreamReader($respuesta.GetResponseStream(), [Text.Encoding]::UTF8)
-      $texto = $lector.ReadToEnd()
-      $lector.Dispose()
-      try {
-        $fallo = ($texto | ConvertFrom-Json).error
-        Malo "$($fallo.code): $($fallo.message)"
-      } catch { Malo "respuesta ilegible: $texto" }
-    } else { Malo $_.Exception.Message }
+    # ErrorDetails trae el cuerpo en las dos versiones de PowerShell; leerlo del
+    # stream solo funciona en 5.1, y ahi ya viene consumido.
+    $texto = $_.ErrorDetails.Message
+    $estado = $null
+    try { $estado = [int]$_.Exception.Response.StatusCode } catch {}
+
+    $fallo = $null
+    if ($texto) { try { $fallo = ($texto | ConvertFrom-Json).error } catch {} }
+
+    if ($fallo -and $fallo.message) {
+      Malo ("HTTP {0} {1}: {2}" -f $estado, $fallo.code, $fallo.message)
+      if ($fallo.upstream) { Aviso ("  lo que dijo OpenRouter: " + ($fallo.upstream | ConvertTo-Json -Depth 6 -Compress)) }
+    } elseif ($texto) {
+      Malo ("HTTP {0}: {1}" -f $estado, $texto.Trim())
+    } else {
+      Malo $_.Exception.Message
+    }
     if ($Tolerante) { return $null }
     exit 1
   }
@@ -200,15 +209,32 @@ if (-not $Modelo -and -not $Comparar) {
 # nombres escritos a mano, que cambian cada pocos meses. Con una cabecera y
 # unas filas, hasta el modelo caro cuesta centesimas de centimo.
 if ($Comparar -and -not $Modelo) {
+  # La muestra ronda estos tamaños; sirve para estimar antes de gastar.
+  $entradaAprox = 800
+  $salidaAprox  = 200
+
   $catalogo = @((Llamar '/v1/models').datos.data |
     Where-Object { $_.json -and -not $_.gratis } |
+    Where-Object { (($_.entrada * $entradaAprox + $_.salida * $salidaAprox) / 1000000) -le $Tope } |
     Sort-Object entrada)
-  if ($catalogo.Count -lt 3) { Malo "el catalogo no trae modelos suficientes con salida estructurada"; exit 1 }
+  if ($catalogo.Count -lt 2) { Malo "con un tope de $Tope `$ por llamada no hay modelos suficientes; sube -Tope"; exit 1 }
 
+  # El mas caro del catalogo puede costar mil veces mas que el barato sin
+  # acertar mas: se compara el de la casa, la mediana y el techo del tope.
   $medio = $catalogo[[math]::Floor($catalogo.Count / 2)]
   $caro  = $catalogo[-1]
   $Modelo = @($porDefecto, $medio.id, $caro.id) | Select-Object -Unique
-  Aviso "comparando: el del servicio, uno intermedio ($($medio.entrada) `$/M) y el mas caro ($($caro.entrada) `$/M)"
+
+  Aviso "comparando, con tope de $Tope `$ por llamada:"
+  foreach ($id in $Modelo) {
+    $m = $catalogo | Where-Object { $_.id -eq $id } | Select-Object -First 1
+    if ($m) {
+      $coste = ($m.entrada * $entradaAprox + $m.salida * $salidaAprox) / 1000000
+      "  {0,-42} unos {1:N6} `$ por llamada" -f $m.id, $coste
+    } else {
+      "  {0,-42} (el del servicio)" -f $id
+    }
+  }
 }
 
 $esquema = @{
@@ -303,7 +329,7 @@ foreach ($unModelo in $Modelo) {
   if (-not $r) { continue }
 
   Write-Host ""
-  Bien "$($r.modelo) · confianza $($r.mapeo.confianza)"
+  Bien "$($r.modelo) - confianza $($r.mapeo.confianza)"
   $r.mapeo.columnas.PSObject.Properties | ForEach-Object {
     $valor = if ($_.Value) { $_.Value } else { '(no esta en el fichero)' }
     "  {0,-24} {1}" -f $_.Name, $valor
