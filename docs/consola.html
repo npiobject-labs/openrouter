@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="build" content="OP-B1-20260912-006">
+<meta name="build" content="OP-B1-20260912-007">
 <!-- App de Fly: <repo>-<owner>, el mismo nombre que deriva deploy.yml.
      Con otro nombre, cambia este content o abre la pagina con ?app=<nombre>. -->
 <meta name="fly-app" content="openrouter-npiobject-labs">
@@ -21,6 +21,8 @@
   --corte:#e57373; --corte-suave:#3a1d1d;
 }}
 *{box-sizing:border-box}
+/* El display de .ficha le gana al display:none del atributo hidden. */
+[hidden]{display:none!important}
 html{color-scheme:light dark}
 body{margin:0;background:var(--fondo);color:var(--tinta);font:14px/1.5 var(--sans);padding-inline:16px;padding-block:1.5rem 3rem}
 main{max-width:58rem;margin:0 auto;display:flex;flex-direction:column;gap:1rem}
@@ -144,7 +146,7 @@ footer{display:flex;flex-wrap:wrap;gap:.4rem 1.2rem;font-size:.8rem;color:var(--
   </section>
 
   <footer>
-    <span>Build <code>OP-B1-20260912-006</code></span>
+    <span>Build <code>OP-B1-20260912-007</code></span>
     <span>Backend: <a id="url-backend" href="#">–</a></span>
     <a href="./">Mock de todas las etapas</a>
     <a href="holamundo.html">Comprobación del backend</a>
@@ -189,7 +191,9 @@ footer{display:flex;flex-wrap:wrap;gap:.4rem 1.2rem;font-size:.8rem;color:var(--
     // La máquina de Fly se apaga sola sin tráfico: la primera llamada puede tardar.
     opciones.signal = AbortSignal.timeout(opciones.espera || 60000);
     return fetch(base + ruta, opciones).then(function(r){
-      return r.json().catch(function(){ return { error: { mensaje: 'respuesta ilegible, HTTP ' + r.status } }; })
+      return r.json().catch(function(){
+        return { error: { mensaje: 'respuesta ilegible de ' + ruta.split('?')[0] + ', HTTP ' + r.status } };
+      })
         .then(function(j){
           if (!r.ok) throw new Error((j.error && j.error.mensaje) || ('HTTP ' + r.status));
           return { datos: j, respuesta: r };
