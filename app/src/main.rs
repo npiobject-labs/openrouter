@@ -3,6 +3,7 @@ mod auth;
 mod catalogo;
 mod config;
 mod error;
+mod flujo;
 mod guardia;
 mod openrouter;
 mod rutas;

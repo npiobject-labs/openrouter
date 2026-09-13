@@ -453,15 +453,20 @@ footer{grid-column:1/-1;display:flex;flex-wrap:wrap;gap:.4rem 1.2rem;font-size:.
     s.appendChild(el('h3', { texto: 'Respuestas' }));
     s.appendChild(tabla(['HTTP', 'Qué significa'], respuestas));
 
+    // Una misma respuesta puede venir en varios formatos: la consulta normal
+    // devuelve JSON y, en flujo, eventos. Se enseña un ejemplo de cada uno.
     var correcta = o.op.responses['200'];
-    var contenido = correcta && correcta.content && (correcta.content['application/json'] || correcta.content['text/plain']);
-    if (contenido && contenido.example !== undefined){
-      var det = el('details', {}, [el('summary', { texto: 'Ejemplo de respuesta' })]);
+    var tipos = (correcta && correcta.content) ? Object.keys(correcta.content) : [];
+    tipos.forEach(function(tipo){
+      var contenido = correcta.content[tipo];
+      if (contenido.example === undefined) return;
+      var titulo = 'Ejemplo de respuesta' + (tipos.length > 1 ? ' (' + tipo + ')' : '');
+      var det = el('details', {}, [el('summary', { texto: titulo })]);
       det.appendChild(bloque(typeof contenido.example === 'string'
         ? contenido.example
         : JSON.stringify(contenido.example, null, 2)));
       s.appendChild(det);
-    }
+    });
     if (correcta && correcta.headers){
       Object.keys(correcta.headers).forEach(function(h){
         s.appendChild(formatea('Cabecera `' + h + '`: ' + correcta.headers[h].description));

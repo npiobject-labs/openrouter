@@ -1,14 +1,21 @@
 use std::{sync::Arc, time::Duration, time::Instant};
 
 use axum::{
+    body::Body,
     extract::State,
-    http::{header::HeaderName, HeaderMap, HeaderValue, StatusCode},
+    http::{
+        header::{HeaderName, CONTENT_TYPE},
+        HeaderMap, HeaderValue, StatusCode,
+    },
     response::{IntoResponse, Response},
     Extension, Json,
 };
-use serde_json::Value;
+use futures_util::StreamExt;
+use serde_json::{json, Value};
 
-use crate::{apps::Identidad, error::ErrorApi, guardia, rutas::uso::CABECERA_USO, Servicio};
+use crate::{
+    apps::Identidad, error::ErrorApi, flujo::Medidor, guardia, rutas::uso::CABECERA_USO, Servicio,
+};
 
 /// Cuánto se espera entre intentos de reconciliación. OpenRouter tarda un poco
 /// en dejar lista la contabilidad de una generación.
@@ -37,12 +44,14 @@ pub async fn chat(
         )
     })?;
 
-    if objeto.get("stream").and_then(Value::as_bool).unwrap_or(false) {
-        return Err(ErrorApi::nuevo(
-            StatusCode::BAD_REQUEST,
-            "streaming_no_disponible",
-            "El streaming llega en la etapa 7; manda la consulta sin \"stream\".",
-        ));
+    let en_flujo = objeto.get("stream").and_then(Value::as_bool).unwrap_or(false);
+    if en_flujo {
+        // Sin esto, el último evento no trae usage y la llamada no se puede
+        // medir: el coste de un flujo se sabría solo por la reconciliación.
+        objeto.insert(
+            "stream_options".to_string(),
+            json!({ "include_usage": true }),
+        );
     }
 
     // Sin modelo, el de la casa: así una app puede empezar a llamar sin elegir.
@@ -75,6 +84,10 @@ pub async fn chat(
         .map(|v| v.trim().chars().take(120).collect::<String>())
         .filter(|v| !v.is_empty());
     let id_uso = registro.id.clone();
+
+    if en_flujo {
+        return en_directo(servicio, cuerpo, registro, id_uso, aviso).await;
+    }
 
     let reloj = Instant::now();
     let resultado = servicio.openrouter.chat(cuerpo).await;
@@ -122,7 +135,7 @@ fn con_uso(id: &str, aviso: Option<&str>, respuesta: impl IntoResponse) -> Respo
 /// Pregunta a OpenRouter qué costó de verdad la generación y lo sustituye en el
 /// registro. Va en segundo plano: el cliente ya tiene su respuesta y no debe
 /// esperar por esto. Si no sale, se queda la estimación del catálogo.
-fn reconcilia(servicio: Arc<Servicio>, id_uso: String, generacion: String) {
+pub fn reconcilia(servicio: Arc<Servicio>, id_uso: String, generacion: String) {
     tokio::spawn(async move {
         for espera in REINTENTOS {
             tokio::time::sleep(Duration::from_millis(espera)).await;
@@ -141,4 +154,52 @@ fn reconcilia(servicio: Arc<Servicio>, id_uso: String, generacion: String) {
             }
         }
     });
+}
+
+/// La misma consulta, servida según llega.
+///
+/// El cuerpo se reenvía tal cual: son eventos de OpenRouter y un cliente de la
+/// API de OpenAI los entiende sin tocar nada. Lo único que añade el servicio es
+/// un medidor que mira los eventos de pasada y, al cerrarse el flujo, escribe
+/// el registro de uso.
+async fn en_directo(
+    servicio: Arc<Servicio>,
+    cuerpo: Value,
+    registro: crate::uso::Registro,
+    id_uso: String,
+    aviso: Option<String>,
+) -> Result<Response, ErrorApi> {
+    let respuesta = match servicio.openrouter.chat_en_flujo(cuerpo).await {
+        Ok(r) => r,
+        Err(fallo) => {
+            // Un rechazo antes de abrir el flujo se anota como cualquier otro.
+            let mut registro = registro;
+            registro.estado = fallo.estado.as_u16();
+            registro.motivo_fin = Some(fallo.codigo.to_string());
+            servicio.uso.anota(registro);
+            return Err(fallo.con_uso(&id_uso));
+        }
+    };
+
+    let mut registro = registro;
+    registro.estado = StatusCode::OK.as_u16();
+
+    let mut medidor = Medidor::nuevo(servicio.clone(), registro);
+    let eventos = respuesta.bytes_stream().map(move |trozo| {
+        if let Ok(bytes) = &trozo {
+            medidor.anota(bytes);
+        }
+        trozo
+    });
+
+    let mut cabeceras = HeaderMap::new();
+    cabeceras.insert(CONTENT_TYPE, HeaderValue::from_static("text/event-stream"));
+    if let Ok(valor) = HeaderValue::from_str(&id_uso) {
+        cabeceras.insert(CABECERA_USO, valor);
+    }
+    if let Some(valor) = aviso.as_deref().and_then(|a| HeaderValue::from_str(a).ok()) {
+        cabeceras.insert(CABECERA_AVISO, valor);
+    }
+
+    Ok((cabeceras, Body::from_stream(eventos)).into_response())
 }

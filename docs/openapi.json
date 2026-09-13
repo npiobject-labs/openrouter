@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "openrouter · servicio",
-    "version": "0.6.0",
+    "version": "0.7.0",
     "summary": "Pasarela propia sobre OpenRouter, pensada para ser llamada por otras aplicaciones.",
     "description": "Esto no es una aplicación con interfaz: es un conjunto de servicios HTTP. La clave de OpenRouter vive solo en el backend y nunca sale de él. Cada aplicación consumidora tiene su propia clave, que se da de alta y se revoca sin tocar el despliegue.\n\nEl contrato sigue el de la API de OpenAI donde existe equivalente, así que cualquier cliente de OpenAI funciona cambiando la URL base. Lo propio del servicio va en rutas propias y en cabeceras `X-...`. Una ruta publicada no se rompe: lo incompatible iría a `/v2/`.\n\nLa versión de este documento acompaña a la etapa entregada: `0.6.0` es la etapa 6.",
     "license": {
@@ -267,7 +267,7 @@
           "Consultas"
         ],
         "summary": "Consulta a un modelo",
-        "description": "Proxy fino sobre OpenRouter con el contrato de OpenAI. El cuerpo se reenvía tal cual salvo dos retoques: si no traes `model` se rellena con el modelo por defecto del servicio, y `stream: true` se rechaza con `400` porque el streaming llega en la etapa 7.\n\nLa respuesta es la de OpenRouter sin tocar, incluido el bloque `usage`, que es lo que permite saber qué costó la llamada.\n\nToda llamada que llega a salir queda anotada en el registro de uso, vaya bien o mal, y su identificador vuelve en la cabecera `X-Uso-Id`. Con él se consulta después lo que costó, en `/v1/uso/{id}`.\n\nCon clave de aplicación, la llamada pasa antes por tres controles: el cortacircuitos de bucles, la cuota por minuto y el presupuesto. La clave de administración no tiene ninguno.",
+        "description": "Proxy fino sobre OpenRouter con el contrato de OpenAI. El cuerpo se reenvía tal cual salvo dos retoques: si no traes `model` se rellena con el modelo por defecto del servicio, y con `stream: true` se fuerza `stream_options.include_usage` para poder medir la llamada.\n\nLa respuesta es la de OpenRouter sin tocar, incluido el bloque `usage`, que es lo que permite saber qué costó la llamada. Con `stream: true` son los mismos eventos de OpenRouter, servidos según se generan.\n\nToda llamada que llega a salir queda anotada en el registro de uso, vaya bien o mal, y su identificador vuelve en la cabecera `X-Uso-Id`. Con él se consulta después lo que costó, en `/v1/uso/{id}`. En flujo la cabecera llega con el primer byte, antes de que haya nada que medir: el registro termina de escribirse al cerrarse el flujo, así que conviene esperar un instante antes de consultarlo. Un flujo cortado a mitad también queda anotado, con `motivo_fin: \"cancelado\"` y lo que costó hasta ahí.\n\nCon clave de aplicación, la llamada pasa antes por tres controles: el cortacircuitos de bucles, la cuota por minuto y el presupuesto. La clave de administración no tiene ninguno.",
         "requestBody": {
           "required": true,
           "content": {
@@ -289,7 +289,7 @@
         },
         "responses": {
           "200": {
-            "description": "Respuesta del modelo, con el formato de OpenAI.",
+            "description": "Respuesta del modelo. Con el formato de OpenAI en un único JSON, o en flujo de eventos si se pidió `stream: true`.",
             "content": {
               "application/json": {
                 "schema": {
@@ -315,6 +315,13 @@
                     "total_tokens": 35
                   }
                 }
+              },
+              "text/event-stream": {
+                "schema": {
+                  "type": "string",
+                  "description": "Eventos `data:` con el formato de OpenAI (`chat.completion.chunk`), uno por línea, cerrados con `data: [DONE]`. El anterior a `[DONE]` trae el `usage` de la llamada entera."
+                },
+                "example": "data: {\"id\":\"gen-1757000000-abc\",\"model\":\"google/gemini-2.5-flash-lite\",\"object\":\"chat.completion.chunk\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":\"Una \"}}]}\n\ndata: {\"id\":\"gen-1757000000-abc\",\"object\":\"chat.completion.chunk\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"pasarela.\"},\"finish_reason\":\"stop\"}]}\n\ndata: {\"id\":\"gen-1757000000-abc\",\"object\":\"chat.completion.chunk\",\"choices\":[],\"usage\":{\"prompt_tokens\":14,\"completion_tokens\":21,\"total_tokens\":35}}\n\ndata: [DONE]\n\n"
               }
             },
             "headers": {
@@ -1375,7 +1382,16 @@
           },
           "stream": {
             "type": "boolean",
-            "description": "Rechazado hasta la etapa 7: con `true` la respuesta es `400`."
+            "description": "Con `true` la respuesta llega en flujo (`text/event-stream`) en vez de en un único JSON. El servicio fuerza `stream_options.include_usage` para poder medir la llamada, así que el último evento antes de `[DONE]` trae el bloque `usage`."
+          },
+          "stream_options": {
+            "type": "object",
+            "description": "Opciones del flujo. `include_usage` se pone a `true` siempre que `stream` es `true`, venga o no en la consulta.",
+            "properties": {
+              "include_usage": {
+                "type": "boolean"
+              }
+            }
           }
         },
         "required": [
@@ -1520,6 +1536,13 @@
           },
           "latencia_ms": {
             "type": "integer"
+          },
+          "primer_token_ms": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "Milisegundos hasta el primer trozo con contenido. Solo lo llevan las llamadas servidas en flujo; en el resto es `null`. Es lo que percibe quien espera delante de una pantalla, y no tiene que ver con la latencia total."
           },
           "motivo_fin": {
             "type": [
@@ -1705,7 +1728,7 @@
         }
       },
       "PeticionInvalida": {
-        "description": "El cuerpo no es un objeto JSON, o pide streaming, que aún no existe.",
+        "description": "El cuerpo no es un objeto JSON.",
         "content": {
           "application/json": {
             "schema": {
@@ -1714,8 +1737,8 @@
             "example": {
               "ok": false,
               "error": {
-                "message": "El streaming llega en la etapa 7; manda la consulta sin \"stream\".",
-                "code": "streaming_no_disponible",
+                "message": "El cuerpo tiene que ser un objeto JSON.",
+                "code": "cuerpo_invalido",
                 "type": "invalid_request_error"
               }
             }
@@ -1861,11 +1884,6 @@
       "code": "cuerpo_invalido",
       "http": 400,
       "cuando": "El cuerpo de la consulta no es un objeto JSON."
-    },
-    {
-      "code": "streaming_no_disponible",
-      "http": 400,
-      "cuando": "La consulta pide stream. Llega en la etapa 7."
     },
     {
       "code": "openrouter_rechaza",
@@ -2033,7 +2051,7 @@
     {
       "numero": 7,
       "titulo": "Streaming",
-      "estado": "siguiente",
+      "estado": "entregada",
       "rutas": [
         {
           "metodo": "POST",
@@ -2041,7 +2059,7 @@
           "nota": "con stream: true"
         }
       ],
-      "nota": "Eventos servidos según se generan, midiendo el tiempo hasta el primer token. Hasta entonces, stream: true devuelve 400."
+      "nota": "Eventos servidos según se generan, midiendo el tiempo hasta el primer token. El flujo se mide de pasada sin tocar los eventos, y el registro se escribe al cerrarse: también si el cliente corta a mitad, que queda anotado como cancelado con lo que costó hasta ahí."
     },
     {
       "numero": 8,

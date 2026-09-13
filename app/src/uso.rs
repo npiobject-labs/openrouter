@@ -36,7 +36,8 @@ CREATE TABLE IF NOT EXISTS uso (
     id_openrouter  TEXT,
     app_id         TEXT,
     operacion      TEXT,
-    huella         TEXT
+    huella         TEXT,
+    primer_token_ms INTEGER
 );
 CREATE INDEX IF NOT EXISTS uso_fecha ON uso(fecha);
 CREATE INDEX IF NOT EXISTS uso_modelo ON uso(modelo_servido);
@@ -72,6 +73,10 @@ pub struct Registro {
     pub id_openrouter: Option<String>,
     /// Qué aplicación llamó. `None` es la clave de administración.
     pub app_id: Option<String>,
+    /// Milisegundos hasta el primer token en una respuesta servida en flujo.
+    /// Es lo que percibe quien espera delante de una pantalla, y no tiene nada
+    /// que ver con la latencia total.
+    pub primer_token_ms: Option<i64>,
     /// Hash del cuerpo de la consulta. Sirve para cortar bucles: la misma
     /// aplicación repitiendo la misma pregunta una y otra vez.
     pub huella: Option<String>,
@@ -82,10 +87,21 @@ pub struct Registro {
 
 impl Registro {
     /// Saca de la respuesta lo que se puede medir sin consultar a nadie.
+    ///
+    /// Lo que no viene no se toca: en streaming esto se aplica evento a evento
+    /// y el último, el que trae el `usage`, suele venir sin `id` ni `model`.
+    /// Machacar con `None` perdería el id de la generación y con él la
+    /// reconciliación del coste.
     pub fn desde_respuesta(&mut self, cuerpo: &Value) {
-        self.id_openrouter = texto(cuerpo.get("id"));
-        self.modelo_servido = texto(cuerpo.get("model"));
-        self.proveedor = texto(cuerpo.get("provider"));
+        if let Some(v) = texto(cuerpo.get("id")) {
+            self.id_openrouter = Some(v);
+        }
+        if let Some(v) = texto(cuerpo.get("model")) {
+            self.modelo_servido = Some(v);
+        }
+        if let Some(v) = texto(cuerpo.get("provider")) {
+            self.proveedor = Some(v);
+        }
 
         if let Some(u) = cuerpo.get("usage") {
             self.tokens_entrada = entero(u.get("prompt_tokens"));
@@ -106,11 +122,14 @@ impl Registro {
             }
         }
 
-        self.motivo_fin = cuerpo
+        if let Some(v) = cuerpo
             .get("choices")
             .and_then(Value::as_array)
             .and_then(|c| c.first())
-            .and_then(|e| texto(e.get("finish_reason")));
+            .and_then(|e| texto(e.get("finish_reason")))
+        {
+            self.motivo_fin = Some(v);
+        }
     }
 
     /// Coste con los precios del catálogo, que están en dólares por millón.
@@ -147,6 +166,7 @@ impl Registro {
             app_id: f.get("app_id")?,
             operacion: f.get("operacion")?,
             huella: f.get("huella")?,
+            primer_token_ms: f.get("primer_token_ms")?,
         })
     }
 }
@@ -272,6 +292,7 @@ impl Uso {
             app_id: None,
             operacion: None,
             huella: None,
+            primer_token_ms: None,
         }
     }
 
@@ -281,13 +302,13 @@ impl Uso {
             "INSERT OR REPLACE INTO uso (id, fecha, modelo_pedido, modelo_servido, proveedor,
                 tokens_entrada, tokens_salida, tokens_razonamiento, tokens_cache,
                 coste, coste_origen, latencia_ms, motivo_fin, estado, id_openrouter,
-                app_id, operacion, huella)
-             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18)",
+                app_id, operacion, huella, primer_token_ms)
+             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?19)",
             params![
                 r.id, r.fecha, r.modelo_pedido, r.modelo_servido, r.proveedor,
                 r.tokens_entrada, r.tokens_salida, r.tokens_razonamiento, r.tokens_cache,
                 r.coste, r.coste_origen, r.latencia_ms, r.motivo_fin, r.estado, r.id_openrouter,
-                r.app_id, r.operacion, r.huella
+                r.app_id, r.operacion, r.huella, r.primer_token_ms
             ],
         );
         if let Err(e) = hecho {
@@ -491,7 +512,12 @@ fn ahora_unix() -> u64 {
 fn prepara(conexion: &Connection) -> rusqlite::Result<()> {
     conexion.execute_batch(ESQUEMA)?;
     conexion.execute_batch(apps::ESQUEMA)?;
-    for (columna, tipo) in [("app_id", "TEXT"), ("operacion", "TEXT"), ("huella", "TEXT")] {
+    for (columna, tipo) in [
+        ("app_id", "TEXT"),
+        ("operacion", "TEXT"),
+        ("huella", "TEXT"),
+        ("primer_token_ms", "INTEGER"),
+    ] {
         asegura_columna(conexion, "uso", columna, tipo)?;
     }
     for (columna, tipo) in apps::COLUMNAS {
