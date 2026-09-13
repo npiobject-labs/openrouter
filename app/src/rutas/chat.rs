@@ -14,7 +14,8 @@ use futures_util::StreamExt;
 use serde_json::{json, Value};
 
 use crate::{
-    apps::Identidad, error::ErrorApi, flujo::Medidor, guardia, rutas::uso::CABECERA_USO, Servicio,
+    alias, apps::Identidad, error::ErrorApi, flujo::Medidor, guardia, rutas::uso::CABECERA_USO,
+    Servicio,
 };
 
 /// Cuánto se espera entre intentos de reconciliación. OpenRouter tarda un poco
@@ -26,10 +27,10 @@ const CABECERA_AVISO: HeaderName = HeaderName::from_static("x-presupuesto");
 
 /// `POST /v1/chat/completions`: proxy fino con el contrato de OpenAI.
 ///
-/// El cuerpo se reenvía tal cual salvo dos retoques: se rellena `model` si no
-/// viene, y se rechaza `stream`, que es de la etapa 7. Toda llamada que llega a
-/// salir queda anotada en el registro de uso, vaya bien o mal, y su id viaja de
-/// vuelta en la cabecera `X-Uso-Id`.
+/// El cuerpo se reenvía tal cual salvo tres retoques: se rellena `model` si no
+/// viene, se resuelve si pide un alias, y con `stream` se fuerza el `usage` del
+/// último evento. Toda llamada que llega a salir queda anotada en el registro de
+/// uso, vaya bien o mal, y su id viaja de vuelta en la cabecera `X-Uso-Id`.
 pub async fn chat(
     State(servicio): State<Arc<Servicio>>,
     Extension(quien): Extension<Identidad>,
@@ -55,26 +56,44 @@ pub async fn chat(
     }
 
     // Sin modelo, el de la casa: así una app puede empezar a llamar sin elegir.
-    if !objeto.contains_key("model") {
-        objeto.insert(
-            "model".to_string(),
-            Value::String(servicio.config.modelo_defecto.clone()),
-        );
-    }
-
     let pedido = objeto
         .get("model")
         .and_then(Value::as_str)
-        .unwrap_or_default()
-        .to_string();
+        .map(str::to_string)
+        .unwrap_or_else(|| servicio.config.modelo_defecto.clone());
+
+    // Un alias no es un modelo: detrás hay una cadena de modelos que se
+    // intentan en orden, y unos parámetros por defecto que no pisan lo que
+    // mande quien llama.
+    let (nombre_alias, cadena) = match alias::pedido(&pedido) {
+        Some(nombre) => {
+            let a = servicio
+                .uso
+                .con(|c| alias::una(c, nombre))
+                .ok_or_else(|| {
+                    ErrorApi::nuevo(
+                        StatusCode::NOT_FOUND,
+                        "alias_desconocido",
+                        format!("No hay ningún alias llamado {nombre}."),
+                    )
+                })?;
+            a.aplica(objeto);
+            (Some(nombre.to_string()), a.cadena())
+        }
+        None => (None, vec![pedido]),
+    };
+
+    // El cuerpo sale ya con un modelo de verdad: OpenRouter no sabe de alias.
+    objeto.insert("model".to_string(), Value::String(cadena[0].clone()));
 
     // La huella identifica una consulta repetida; se calcula sobre el cuerpo ya
     // completado, para que dos peticiones sin modelo cuenten como la misma.
     let huella = crate::apps::hash(&cuerpo.to_string());
     let aviso = guardia::comprueba(&servicio, &quien, &huella)?;
 
-    let mut registro = servicio.uso.abre(pedido.clone());
+    let mut registro = servicio.uso.abre(cadena[0].clone());
     registro.app_id = quien.app_id();
+    registro.alias = nombre_alias;
     registro.huella = Some(huella);
     // El trabajo de negocio al que pertenece la llamada: varias consultas de un
     // mismo presupuesto se agrupan luego por aqui.
@@ -86,19 +105,29 @@ pub async fn chat(
     let id_uso = registro.id.clone();
 
     if en_flujo {
-        return en_directo(servicio, cuerpo, registro, id_uso, aviso).await;
+        return en_directo(servicio, cuerpo, cadena, registro, id_uso, aviso).await;
     }
 
     let reloj = Instant::now();
-    let resultado = servicio.openrouter.chat(cuerpo).await;
+    let (intentado, resultado) = por_la_cadena(&cadena, |modelo| {
+        let mut cuerpo = cuerpo.clone();
+        cuerpo["model"] = Value::String(modelo.to_string());
+        let servicio = servicio.clone();
+        async move { servicio.openrouter.chat(cuerpo).await }
+    })
+    .await;
     registro.latencia_ms = reloj.elapsed().as_millis() as i64;
+    registro.modelo_pedido = intentado;
 
     match resultado {
         Ok(respuesta) => {
             registro.estado = StatusCode::OK.as_u16();
             registro.desde_respuesta(&respuesta);
             // El modelo servido puede no ser el pedido: OpenRouter enruta.
-            let servido = registro.modelo_servido.clone().unwrap_or(pedido);
+            let servido = registro
+                .modelo_servido
+                .clone()
+                .unwrap_or_else(|| registro.modelo_pedido.clone());
             registro.estima(servicio.catalogo.precio(&servido));
 
             let pendiente = registro.id_openrouter.clone();
@@ -165,15 +194,28 @@ pub fn reconcilia(servicio: Arc<Servicio>, id_uso: String, generacion: String) {
 async fn en_directo(
     servicio: Arc<Servicio>,
     cuerpo: Value,
+    cadena: Vec<String>,
     registro: crate::uso::Registro,
     id_uso: String,
     aviso: Option<String>,
 ) -> Result<Response, ErrorApi> {
-    let respuesta = match servicio.openrouter.chat_en_flujo(cuerpo).await {
+    // El respaldo solo cabe aquí, antes de abrir el flujo: una vez ha salido la
+    // primera cabecera no hay forma de cambiar de modelo sin mentir al cliente.
+    let (intentado, resultado) = por_la_cadena(&cadena, |modelo| {
+        let mut cuerpo = cuerpo.clone();
+        cuerpo["model"] = Value::String(modelo.to_string());
+        let servicio = servicio.clone();
+        async move { servicio.openrouter.chat_en_flujo(cuerpo).await }
+    })
+    .await;
+
+    let mut registro = registro;
+    registro.modelo_pedido = intentado;
+
+    let respuesta = match resultado {
         Ok(r) => r,
         Err(fallo) => {
             // Un rechazo antes de abrir el flujo se anota como cualquier otro.
-            let mut registro = registro;
             registro.estado = fallo.estado.as_u16();
             registro.motivo_fin = Some(fallo.codigo.to_string());
             servicio.uso.anota(registro);
@@ -181,7 +223,6 @@ async fn en_directo(
         }
     };
 
-    let mut registro = registro;
     registro.estado = StatusCode::OK.as_u16();
 
     let mut medidor = Medidor::nuevo(servicio.clone(), registro);
@@ -202,4 +243,129 @@ async fn en_directo(
     }
 
     Ok((cabeceras, Body::from_stream(eventos)).into_response())
+}
+
+/// Cuándo tiene sentido probar el siguiente modelo de la cadena: cuando el fallo
+/// es del proveedor o del modelo, no de la consulta. Un cuerpo mal formado o una
+/// clave sin crédito fallan igual en todos, y reintentarlos solo gasta tiempo.
+fn se_reintenta(estado: StatusCode) -> bool {
+    estado == StatusCode::TOO_MANY_REQUESTS
+        || estado == StatusCode::NOT_FOUND
+        || estado == StatusCode::REQUEST_TIMEOUT
+        || estado.is_server_error()
+}
+
+/// Intenta la cadena de modelos en orden y devuelve el que se llegó a usar junto
+/// con su resultado. El primero que responde manda; si ninguno responde, vuelve
+/// el fallo del último, que es el que más se acerca a la verdad.
+async fn por_la_cadena<T, F, Fut>(cadena: &[String], mut intento: F) -> (String, Result<T, ErrorApi>)
+where
+    F: FnMut(&str) -> Fut,
+    Fut: std::future::Future<Output = Result<T, ErrorApi>>,
+{
+    let mut ultimo = None;
+    for (orden, modelo) in cadena.iter().enumerate() {
+        match intento(modelo).await {
+            Ok(valor) => return (modelo.clone(), Ok(valor)),
+            Err(fallo) => {
+                let hay_mas = orden + 1 < cadena.len();
+                if !hay_mas || !se_reintenta(fallo.estado) {
+                    return (modelo.clone(), Err(fallo));
+                }
+                eprintln!(
+                    "{modelo} respondió {} ({}); se prueba el respaldo",
+                    fallo.estado, fallo.codigo
+                );
+                ultimo = Some(modelo.clone());
+            }
+        }
+    }
+    // Una cadena vacía no se construye en ninguna parte, pero el tipo lo admite.
+    (
+        ultimo.unwrap_or_default(),
+        Err(ErrorApi::nuevo(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "cadena_vacia",
+            "El alias no tiene ningún modelo al que salir.",
+        )),
+    )
+}
+
+#[cfg(test)]
+mod pruebas {
+    use super::*;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    fn cadena(modelos: &[&str]) -> Vec<String> {
+        modelos.iter().map(|m| m.to_string()).collect()
+    }
+
+    fn falla(estado: StatusCode) -> ErrorApi {
+        ErrorApi::nuevo(estado, "openrouter_rechaza", "el proveedor dijo que no")
+    }
+
+    #[tokio::test]
+    async fn el_primero_que_responde_manda_y_nadie_mas_se_intenta() {
+        let intentos = AtomicUsize::new(0);
+        let (modelo, salida) = por_la_cadena(&cadena(&["bueno", "respaldo"]), |m| {
+            intentos.fetch_add(1, Ordering::Relaxed);
+            let m = m.to_string();
+            async move { Ok::<_, ErrorApi>(m) }
+        })
+        .await;
+
+        assert_eq!(modelo, "bueno");
+        assert_eq!(salida.unwrap(), "bueno");
+        assert_eq!(intentos.load(Ordering::Relaxed), 1);
+    }
+
+    #[tokio::test]
+    async fn un_fallo_del_proveedor_pasa_al_respaldo() {
+        let (modelo, salida) = por_la_cadena(&cadena(&["caido", "respaldo"]), |m| {
+            let m = m.to_string();
+            async move {
+                if m == "caido" {
+                    return Err(falla(StatusCode::SERVICE_UNAVAILABLE));
+                }
+                Ok(m)
+            }
+        })
+        .await;
+
+        assert_eq!(modelo, "respaldo");
+        assert_eq!(salida.unwrap(), "respaldo");
+    }
+
+    #[tokio::test]
+    async fn una_consulta_mal_formada_no_se_reintenta_en_otro_modelo() {
+        let intentos = AtomicUsize::new(0);
+        let (modelo, salida) = por_la_cadena(&cadena(&["primero", "respaldo"]), |_| {
+            intentos.fetch_add(1, Ordering::Relaxed);
+            async { Err::<String, _>(falla(StatusCode::BAD_REQUEST)) }
+        })
+        .await;
+
+        // Fallaría igual en el respaldo: probarlo solo gastaría tiempo.
+        assert_eq!(modelo, "primero");
+        assert_eq!(intentos.load(Ordering::Relaxed), 1);
+        assert_eq!(salida.unwrap_err().estado, StatusCode::BAD_REQUEST);
+    }
+
+    #[tokio::test]
+    async fn si_cae_la_cadena_entera_vuelve_el_fallo_del_ultimo() {
+        let (modelo, salida) = por_la_cadena(&cadena(&["uno", "dos"]), |m| {
+            let m = m.to_string();
+            async move {
+                Err::<String, _>(falla(if m == "uno" {
+                    StatusCode::SERVICE_UNAVAILABLE
+                } else {
+                    StatusCode::TOO_MANY_REQUESTS
+                }))
+            }
+        })
+        .await;
+
+        assert_eq!(modelo, "dos");
+        assert_eq!(salida.unwrap_err().estado, StatusCode::TOO_MANY_REQUESTS);
+    }
 }

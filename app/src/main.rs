@@ -1,3 +1,4 @@
+mod alias;
 mod apps;
 mod auth;
 mod catalogo;
@@ -58,6 +59,12 @@ async fn main() {
         .route("/apps/{id}", delete(rutas::apps::baja))
         .route("/apps/{id}/presupuesto", put(rutas::apps::limites))
         .route("/presupuesto", get(rutas::apps::presupuesto))
+        .route("/alias", get(rutas::alias::lista))
+        .route(
+            "/alias/{nombre}",
+            put(rutas::alias::guarda).delete(rutas::alias::borra),
+        )
+        .route("/alias/{nombre}/simular", get(rutas::alias::simula))
         .route_layer(middleware::from_fn_with_state(
             servicio.clone(),
             auth::exigir_clave,

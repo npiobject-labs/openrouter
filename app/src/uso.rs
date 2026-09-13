@@ -37,7 +37,8 @@ CREATE TABLE IF NOT EXISTS uso (
     app_id         TEXT,
     operacion      TEXT,
     huella         TEXT,
-    primer_token_ms INTEGER
+    primer_token_ms INTEGER,
+    alias          TEXT
 );
 CREATE INDEX IF NOT EXISTS uso_fecha ON uso(fecha);
 CREATE INDEX IF NOT EXISTS uso_modelo ON uso(modelo_servido);
@@ -77,6 +78,10 @@ pub struct Registro {
     /// Es lo que percibe quien espera delante de una pantalla, y no tiene nada
     /// que ver con la latencia total.
     pub primer_token_ms: Option<i64>,
+    /// El alias por el que se pidió la llamada, si se pidió por alias. Se
+    /// guarda el nombre como texto: un informe viejo tiene que poder decir por
+    /// dónde salió la llamada aunque el alias ya no exista.
+    pub alias: Option<String>,
     /// Hash del cuerpo de la consulta. Sirve para cortar bucles: la misma
     /// aplicación repitiendo la misma pregunta una y otra vez.
     pub huella: Option<String>,
@@ -167,6 +172,7 @@ impl Registro {
             operacion: f.get("operacion")?,
             huella: f.get("huella")?,
             primer_token_ms: f.get("primer_token_ms")?,
+            alias: f.get("alias")?,
         })
     }
 }
@@ -186,6 +192,7 @@ pub enum Agrupacion {
     Dia,
     Modelo,
     App,
+    Alias,
 }
 
 impl Agrupacion {
@@ -195,6 +202,7 @@ impl Agrupacion {
         match texto {
             Some("modelo") => Self::Modelo,
             Some("app") => Self::App,
+            Some("alias") => Self::Alias,
             _ => Self::Dia,
         }
     }
@@ -205,6 +213,7 @@ impl Agrupacion {
             Self::Dia => "substr(fecha, 1, 10)",
             Self::Modelo => "coalesce(modelo_servido, modelo_pedido)",
             Self::App => "coalesce(app_id, 'administracion')",
+            Self::Alias => "coalesce(alias, 'sin alias')",
         }
     }
 }
@@ -293,6 +302,7 @@ impl Uso {
             operacion: None,
             huella: None,
             primer_token_ms: None,
+            alias: None,
         }
     }
 
@@ -302,13 +312,13 @@ impl Uso {
             "INSERT OR REPLACE INTO uso (id, fecha, modelo_pedido, modelo_servido, proveedor,
                 tokens_entrada, tokens_salida, tokens_razonamiento, tokens_cache,
                 coste, coste_origen, latencia_ms, motivo_fin, estado, id_openrouter,
-                app_id, operacion, huella, primer_token_ms)
-             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?19)",
+                app_id, operacion, huella, primer_token_ms, alias)
+             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?19,?20)",
             params![
                 r.id, r.fecha, r.modelo_pedido, r.modelo_servido, r.proveedor,
                 r.tokens_entrada, r.tokens_salida, r.tokens_razonamiento, r.tokens_cache,
                 r.coste, r.coste_origen, r.latencia_ms, r.motivo_fin, r.estado, r.id_openrouter,
-                r.app_id, r.operacion, r.huella, r.primer_token_ms
+                r.app_id, r.operacion, r.huella, r.primer_token_ms, r.alias
             ],
         );
         if let Err(e) = hecho {
@@ -512,11 +522,13 @@ fn ahora_unix() -> u64 {
 fn prepara(conexion: &Connection) -> rusqlite::Result<()> {
     conexion.execute_batch(ESQUEMA)?;
     conexion.execute_batch(apps::ESQUEMA)?;
+    conexion.execute_batch(crate::alias::ESQUEMA)?;
     for (columna, tipo) in [
         ("app_id", "TEXT"),
         ("operacion", "TEXT"),
         ("huella", "TEXT"),
         ("primer_token_ms", "INTEGER"),
+        ("alias", "TEXT"),
     ] {
         asegura_columna(conexion, "uso", columna, tipo)?;
     }
