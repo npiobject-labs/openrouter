@@ -39,6 +39,11 @@ CREATE TABLE IF NOT EXISTS uso (
 );
 CREATE INDEX IF NOT EXISTS uso_fecha ON uso(fecha);
 CREATE INDEX IF NOT EXISTS uso_modelo ON uso(modelo_servido);
+";
+
+/// Índices sobre columnas que pueden faltar en una base anterior: van después
+/// de asegurarlas, nunca en el esquema.
+const INDICES: &str = "
 CREATE INDEX IF NOT EXISTS uso_app ON uso(app_id);
 ";
 
@@ -195,26 +200,21 @@ impl Uso {
     pub fn nuevo(ruta: Option<&str>) -> Self {
         let ruta = ruta.unwrap_or(RUTA_DEFECTO);
 
-        let (conexion, en_disco) = match Self::en_fichero(ruta) {
+        let en_fichero = Self::en_fichero(ruta).and_then(|c| {
+            prepara(&c)?;
+            Ok(c)
+        });
+
+        let (conexion, en_disco) = match en_fichero {
             Ok(c) => (c, true),
             Err(e) => {
-                eprintln!("no se pudo abrir {ruta} ({e}); el uso se guarda solo en memoria");
-                (
-                    Connection::open_in_memory().expect("SQLite en memoria siempre debe abrir"),
-                    false,
-                )
+                eprintln!("no se pudo usar {ruta} ({e}); el uso se guarda solo en memoria");
+                let memoria =
+                    Connection::open_in_memory().expect("SQLite en memoria siempre debe abrir");
+                prepara(&memoria).expect("el esquema en memoria debe crearse");
+                (memoria, false)
             }
         };
-        conexion
-            .execute_batch(ESQUEMA)
-            .expect("el esquema de uso debe crearse");
-        conexion
-            .execute_batch(apps::ESQUEMA)
-            .expect("el esquema de aplicaciones debe crearse");
-        // Las bases creadas antes de la etapa 5 no tienen estas columnas.
-        for (columna, tipo) in [("app_id", "TEXT"), ("operacion", "TEXT")] {
-            asegura_columna(&conexion, columna, tipo);
-        }
 
         Self {
             conexion: Mutex::new(conexion),
@@ -426,21 +426,31 @@ pub fn ahora_iso() -> String {
     iso(segundos)
 }
 
+/// Deja la base lista: tablas, columnas que falten y, solo entonces, índices.
+/// El orden importa, porque un índice sobre una columna recién añadida falla si
+/// se intenta antes.
+fn prepara(conexion: &Connection) -> rusqlite::Result<()> {
+    conexion.execute_batch(ESQUEMA)?;
+    conexion.execute_batch(apps::ESQUEMA)?;
+    for (columna, tipo) in [("app_id", "TEXT"), ("operacion", "TEXT")] {
+        asegura_columna(conexion, columna, tipo)?;
+    }
+    conexion.execute_batch(INDICES)
+}
+
 /// Añade una columna si la base viene de una versión anterior. SQLite no tiene
 /// `ADD COLUMN IF NOT EXISTS`, así que se mira primero qué columnas hay.
-fn asegura_columna(conexion: &Connection, columna: &str, tipo: &str) {
+fn asegura_columna(conexion: &Connection, columna: &str, tipo: &str) -> rusqlite::Result<()> {
     let existe = conexion
-        .prepare("SELECT 1 FROM pragma_table_info('uso') WHERE name = ?1")
-        .and_then(|mut s| s.query_one(params![columna], |_| Ok(())).optional())
-        .map(|r| r.is_some())
-        .unwrap_or(false);
+        .prepare("SELECT 1 FROM pragma_table_info('uso') WHERE name = ?1")?
+        .query_one(params![columna], |_| Ok(()))
+        .optional()?
+        .is_some();
 
     if !existe {
-        if let Err(e) = conexion.execute(&format!("ALTER TABLE uso ADD COLUMN {columna} {tipo}"), [])
-        {
-            eprintln!("no se pudo añadir la columna {columna} al historico: {e}");
-        }
+        conexion.execute(&format!("ALTER TABLE uso ADD COLUMN {columna} {tipo}"), [])?;
     }
+    Ok(())
 }
 
 /// Fecha ISO 8601 en UTC desde segundos Unix, sin dependencias: el algoritmo de
@@ -571,6 +581,46 @@ mod pruebas {
         assert_eq!(uso.intervalo(None, Some("2026-09-12T23:59:59Z"), None).len(), 1);
         // Sin normalizar, la fecha suelta dejaria el dia fuera.
         assert_eq!(uso.intervalo(None, Some("2026-09-12"), None).len(), 0);
+    }
+
+    /// El esquema tal como quedaba en la etapa 4, sin aplicaciones.
+    const ESQUEMA_ANTERIOR: &str = "
+    CREATE TABLE uso (
+        id TEXT PRIMARY KEY, fecha TEXT NOT NULL, modelo_pedido TEXT NOT NULL,
+        modelo_servido TEXT, proveedor TEXT,
+        tokens_entrada INTEGER NOT NULL DEFAULT 0, tokens_salida INTEGER NOT NULL DEFAULT 0,
+        tokens_razonamiento INTEGER NOT NULL DEFAULT 0, tokens_cache INTEGER NOT NULL DEFAULT 0,
+        coste REAL, coste_origen TEXT NOT NULL, latencia_ms INTEGER NOT NULL DEFAULT 0,
+        motivo_fin TEXT, estado INTEGER NOT NULL DEFAULT 0, id_openrouter TEXT);
+    ";
+
+    #[test]
+    fn una_base_de_la_etapa_anterior_se_migra_sin_caerse() {
+        let ruta = std::env::temp_dir().join(format!("uso-vieja-{}.db", std::process::id()));
+        let ruta = ruta.to_str().unwrap();
+        let _ = std::fs::remove_file(ruta);
+
+        {
+            let vieja = Connection::open(ruta).unwrap();
+            vieja.execute_batch(ESQUEMA_ANTERIOR).unwrap();
+            vieja
+                .execute(
+                    "INSERT INTO uso (id, fecha, modelo_pedido, coste_origen) VALUES ('u-1','2026-09-12T10:00:00Z','m','estimado')",
+                    [],
+                )
+                .unwrap();
+        }
+
+        // Antes de la etapa 5 esto reventaba al crear el indice de app_id.
+        let uso = Uso::nuevo(Some(ruta));
+        assert_eq!(uso.almacen(), "sqlite", "tiene que seguir en disco, no caer a memoria");
+        assert_eq!(uso.total(), 1, "el historico anterior se conserva");
+
+        let mut r = uso.abre("m".into());
+        r.app_id = Some("app_uno".into());
+        uso.anota(r);
+        assert_eq!(uso.ultimos(50, Some("app_uno")).len(), 1);
+        let _ = std::fs::remove_file(ruta);
     }
 
     #[test]
