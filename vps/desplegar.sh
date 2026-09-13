@@ -39,7 +39,8 @@ if ! caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile > /dev/nul
   echo "::error::el Caddyfile actual no valida; no se toca"; exit 1
 fi
 mv "${SITIO}.nuevo" "$SITIO"
-if ! caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile; then
+if ! caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile > /tmp/caddy-validate.log 2>&1; then
+  grep -v '"level":"warn"' /tmp/caddy-validate.log | tail -5
   echo "::error::el sitio nuevo no valida; Caddy sigue con el anterior cargado"; exit 1
 fi
 systemctl reload caddy

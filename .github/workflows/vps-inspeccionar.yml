@@ -63,6 +63,7 @@ jobs:
 
       - name: Ejecutar la inspeccion
         run: |
+          set -o pipefail
           {
             echo "## Inspeccion del VPS para ${API_DOMINIO}"
             ssh -i ~/.ssh/vps -p "${VPS_PUERTO:-22}" \

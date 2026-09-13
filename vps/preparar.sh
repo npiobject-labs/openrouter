@@ -56,23 +56,36 @@ else
   echo "- sqlite3 presente"
 fi
 
-# --- La unica linea que se toca de una configuracion ajena -----------------
+# --- El sitio y, solo si hace falta, la linea import ------------------------
+# El sitio importado tiene que existir o Caddy no valida: si aun no se ha
+# desplegado, se deja uno provisional que solo declara el dominio.
+if [ ! -f "$SITIO" ]; then
+  printf '%s {\n\trespond "openrouter: pendiente de desplegar" 503\n}\n' "$DOMINIO" > "$SITIO"
+  echo "- sitio provisional en ${SITIO}"
+fi
+# Si el Caddyfile ya importa sites.d con comodin, nuestro fichero ya esta
+# cargado y una linea import explicita lo duplicaria ("ambiguous site").
+# Se quita la nuestra si existe y se mira en la configuracion adaptada si el
+# dominio aparece; solo si no aparece se anade la linea.
 if grep -qF "import ${SITIO}" /etc/caddy/Caddyfile; then
-  echo "- el Caddyfile ya importa ${SITIO}"
+  cp /etc/caddy/Caddyfile "/etc/caddy/Caddyfile.antes-de-${DOMINIO}"
+  sed -i "\#^import ${SITIO}\$#d" /etc/caddy/Caddyfile
+  sed -i -e :a -e '/^\n*$/{$d;N;ba' -e '}' /etc/caddy/Caddyfile
+fi
+if caddy adapt --config /etc/caddy/Caddyfile --adapter caddyfile 2> /dev/null | grep -qF "\"${DOMINIO}\""; then
+  echo "- el Caddyfile ya carga ${SITIO} (import con comodin)"
 else
   cp /etc/caddy/Caddyfile "/etc/caddy/Caddyfile.antes-de-${DOMINIO}"
   printf '\nimport %s\n' "${SITIO}" >> /etc/caddy/Caddyfile
   echo "- anadida la linea import al Caddyfile (copia en Caddyfile.antes-de-${DOMINIO})"
 fi
-# El sitio importado tiene que existir o Caddy no recarga: si aun no se ha
-# desplegado, se deja uno vacio que solo declara el dominio.
-if [ ! -f "$SITIO" ]; then
-  printf '%s {\n\trespond "openrouter: pendiente de desplegar" 503\n}\n' "$DOMINIO" > "$SITIO"
-  echo "- sitio provisional en ${SITIO}"
+if ! caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile > /tmp/caddy-validate.log 2>&1; then
+  grep -v '"level":"warn"' /tmp/caddy-validate.log | tail -5
+  echo "::error::el Caddyfile no valida; Caddy sigue con la configuracion cargada, pero hay que arreglarlo antes de reiniciarlo"
+  exit 1
 fi
-caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile > /dev/null
 systemctl reload caddy
-echo "- caddy validado y recargado"
+echo "- caddy validado y recargado; ${DOMINIO} cargado: $(caddy adapt --config /etc/caddy/Caddyfile --adapter caddyfile 2> /dev/null | grep -cF "\"${DOMINIO}\"") vez/veces"
 
 # --- Copias diarias ---------------------------------------------------------
 # vps/ ya esta en $RAIZ/vps (lo deja el workflow); si se ejecuta desde otro

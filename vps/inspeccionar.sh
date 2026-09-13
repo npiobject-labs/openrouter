@@ -69,7 +69,9 @@ done
 if $SUDO test -r /etc/caddy/Caddyfile; then
   importa="$($SUDO grep -E '^[[:space:]]*import[[:space:]]' /etc/caddy/Caddyfile 2> /dev/null | awk '{print $2}')"
   if [ -n "$importa" ]; then
+    set -f
     for patron in $importa; do
+      set +f
       echo "- import $patron:"
       # Las rutas relativas lo son respecto al propio Caddyfile.
       case "$patron" in /*) ;; *) patron="/etc/caddy/$patron" ;; esac
@@ -78,7 +80,9 @@ if $SUDO test -r /etc/caddy/Caddyfile; then
         echo "    - $g"
         $SUDO grep -E '^[^[:space:]#].*\{[[:space:]]*$' "$g" 2> /dev/null | sed 's/[[:space:]]*{[[:space:]]*$//; s/^/        - sitio: /'
       done
+      set -f
     done
+    set +f
   else
     echo "- el Caddyfile no importa ninguna carpeta"
   fi
