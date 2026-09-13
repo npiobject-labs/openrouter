@@ -20,6 +20,7 @@
     "app/src/flujo.rs: el registro se escribe en Drop, no al terminar el bucle, para que un flujo cortado a mitad quede anotado como cancelado con lo que costo.",
     "app/src/rutas/chat.rs: stream: true fuerza stream_options.include_usage, sin lo cual el ultimo evento no trae usage y el coste solo se sabria por la reconciliacion.",
     "app/src/uso.rs: desde_respuesta deja de machacar con vacio lo que ya tiene; en flujo se aplica evento a evento y el del usage viene sin id ni model.",
+    "app/src/rutas/chat.rs y app/src/flujo.rs: el reloj del primer token arranca cuando entra la peticion, no cuando vuelven las cabeceras de OpenRouter; ese tramo es casi todo lo que tarda el primer token y la verificacion del despliegue anoto 0 ms por no contarlo.",
     "app/src/uso.rs: columnas nuevas primer_token_ms y alias, y agrupacion por alias en el resumen.",
     "app/src/alias.rs y app/src/rutas/alias.rs: nuevos. GET /v1/alias, PUT y DELETE /v1/alias/{nombre} y GET /v1/alias/{nombre}/simular.",
     "app/src/rutas/chat.rs: model con prefijo alias: se resuelve, y se recurre al respaldo solo cuando el fallo es del proveedor o del modelo (429, 404, 408, 5xx).",
@@ -30,7 +31,7 @@
     ".github/workflows/deploy.yml: verifica el flujo pidiendo ocho tokens, y crea, simula y borra un alias en cada despliegue.",
     "CLAUDE.md: las dos etapas documentadas."
   ],
-  "sha": "e4f9644",
+  "sha": "fe8be51",
   "sha_completo": "e4f96444734e42749ac44521ddfca606e15c60c5",
   "run": "34748990873",
   "mock": null,
@@ -57,5 +58,5 @@
       "url": "https://github.com/npiobject-labs/openrouter/blob/main/docs/planificacion/despliegue-vps.md"
     }
   ],
-  "notas": "Transcripcion fiel salvo el prompt del VPS, que se resume porque incluia configuracion SSH y este repositorio es publico. El plan de ocho etapas queda completo. Dos hallazgos tecnicos: el registro de un flujo tiene que escribirse en Drop, porque un cliente que corta a mitad no ejecuta ninguna otra cosa; y desde_respuesta machacaba con vacio el id de la generacion al aplicarse evento a evento, lo que dejaba sin reconciliar el coste de toda respuesta en flujo."
+  "notas": "Transcripcion fiel salvo el prompt del VPS, que se resume porque incluia configuracion SSH y este repositorio es publico. El plan de ocho etapas queda completo. Tres hallazgos tecnicos, el tercero encontrado leyendo el log del despliegue y no en las pruebas: el registro de un flujo tiene que escribirse en Drop, porque un cliente que corta a mitad no ejecuta ninguna otra cosa; y desde_respuesta machacaba con vacio el id de la generacion al aplicarse evento a evento, lo que dejaba sin reconciliar el coste de toda respuesta en flujo. Y el reloj del primer token arrancaba demasiado tarde: se media desde las cabeceras de OpenRouter, con lo que una llamada real anotaba 0 ms."
 }
