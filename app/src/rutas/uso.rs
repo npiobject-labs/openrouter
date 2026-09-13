@@ -101,6 +101,7 @@ pub async fn resumen(
         "agrupar": match agrupar {
             Agrupacion::Modelo => "modelo",
             Agrupacion::App => "app",
+            Agrupacion::Alias => "alias",
             Agrupacion::Dia => "dia",
         },
         "data": filas,

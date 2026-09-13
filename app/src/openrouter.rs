@@ -146,6 +146,30 @@ impl Cliente {
         }
         Ok(cuerpo.get("data").cloned().unwrap_or(cuerpo))
     }
+
+    /// Igual que `chat`, pero devuelve la respuesta sin leer: el cuerpo se va
+    /// reenviando al cliente según llega. Un rechazo sí se lee entero, porque
+    /// es corto y hay que traducirlo a nuestro sobre de error.
+    pub async fn chat_en_flujo(&self, cuerpo: Value) -> Result<reqwest::Response, ErrorApi> {
+        let respuesta = self
+            .http
+            .post(format!("{}/chat/completions", self.base))
+            .bearer_auth(self.clave()?)
+            .header("HTTP-Referer", REFERER)
+            .header("X-Title", TITULO)
+            .json(&cuerpo)
+            .timeout(ESPERA_CHAT)
+            .send()
+            .await
+            .map_err(|e| sin_alcanzar("no se pudo abrir el flujo", e))?;
+
+        let estado = respuesta.status();
+        if !estado.is_success() {
+            let cuerpo: Value = respuesta.json().await.map_err(respuesta_ilegible)?;
+            return Err(ErrorApi::de_openrouter(estado, cuerpo));
+        }
+        Ok(respuesta)
+    }
 }
 
 fn sin_alcanzar(que: &str, e: reqwest::Error) -> ErrorApi {

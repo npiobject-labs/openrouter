@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "openrouter · servicio",
-    "version": "0.6.0",
+    "version": "0.8.0",
     "summary": "Pasarela propia sobre OpenRouter, pensada para ser llamada por otras aplicaciones.",
     "description": "Esto no es una aplicación con interfaz: es un conjunto de servicios HTTP. La clave de OpenRouter vive solo en el backend y nunca sale de él. Cada aplicación consumidora tiene su propia clave, que se da de alta y se revoca sin tocar el despliegue.\n\nEl contrato sigue el de la API de OpenAI donde existe equivalente, así que cualquier cliente de OpenAI funciona cambiando la URL base. Lo propio del servicio va en rutas propias y en cabeceras `X-...`. Una ruta publicada no se rompe: lo incompatible iría a `/v2/`.\n\nLa versión de este documento acompaña a la etapa entregada: `0.6.0` es la etapa 6.",
     "license": {
@@ -48,6 +48,10 @@
     {
       "name": "Presupuestos",
       "description": "Topes de gasto y de ritmo por aplicación, y cuánto margen queda."
+    },
+    {
+      "name": "Alias",
+      "description": "Nombres de trabajo que apuntan a un modelo, sus parámetros por defecto y su cadena de respaldo. Cambiar de modelo deja así de tocar el código de las aplicaciones."
     }
   ],
   "paths": {
@@ -267,7 +271,7 @@
           "Consultas"
         ],
         "summary": "Consulta a un modelo",
-        "description": "Proxy fino sobre OpenRouter con el contrato de OpenAI. El cuerpo se reenvía tal cual salvo dos retoques: si no traes `model` se rellena con el modelo por defecto del servicio, y `stream: true` se rechaza con `400` porque el streaming llega en la etapa 7.\n\nLa respuesta es la de OpenRouter sin tocar, incluido el bloque `usage`, que es lo que permite saber qué costó la llamada.\n\nToda llamada que llega a salir queda anotada en el registro de uso, vaya bien o mal, y su identificador vuelve en la cabecera `X-Uso-Id`. Con él se consulta después lo que costó, en `/v1/uso/{id}`.\n\nCon clave de aplicación, la llamada pasa antes por tres controles: el cortacircuitos de bucles, la cuota por minuto y el presupuesto. La clave de administración no tiene ninguno.",
+        "description": "Proxy fino sobre OpenRouter con el contrato de OpenAI. El cuerpo se reenvía tal cual salvo tres retoques: si no traes `model` se rellena con el modelo por defecto del servicio, si `model` empieza por `alias:` se resuelve el alias, y con `stream: true` se fuerza `stream_options.include_usage` para poder medir la llamada.\n\nUn alias trae detrás una cadena de modelos: si el principal responde con `429`, `404`, `408` o un `5xx`, se prueba el siguiente sin que la aplicación se entere. Un `400` no se reintenta, porque una consulta mal formada falla igual en todos. En flujo el respaldo solo cabe antes de abrir el flujo: una vez ha salido la primera cabecera, no hay forma de cambiar de modelo sin mentir al cliente.\n\nLa respuesta es la de OpenRouter sin tocar, incluido el bloque `usage`, que es lo que permite saber qué costó la llamada. Con `stream: true` son los mismos eventos de OpenRouter, servidos según se generan.\n\nToda llamada que llega a salir queda anotada en el registro de uso, vaya bien o mal, y su identificador vuelve en la cabecera `X-Uso-Id`. Con él se consulta después lo que costó, en `/v1/uso/{id}`. En flujo la cabecera llega con el primer byte, antes de que haya nada que medir: el registro termina de escribirse al cerrarse el flujo, así que conviene esperar un instante antes de consultarlo. Un flujo cortado a mitad también queda anotado, con `motivo_fin: \"cancelado\"` y lo que costó hasta ahí.\n\nCon clave de aplicación, la llamada pasa antes por tres controles: el cortacircuitos de bucles, la cuota por minuto y el presupuesto. La clave de administración no tiene ninguno.",
         "requestBody": {
           "required": true,
           "content": {
@@ -289,7 +293,7 @@
         },
         "responses": {
           "200": {
-            "description": "Respuesta del modelo, con el formato de OpenAI.",
+            "description": "Respuesta del modelo. Con el formato de OpenAI en un único JSON, o en flujo de eventos si se pidió `stream: true`.",
             "content": {
               "application/json": {
                 "schema": {
@@ -315,6 +319,13 @@
                     "total_tokens": 35
                   }
                 }
+              },
+              "text/event-stream": {
+                "schema": {
+                  "type": "string",
+                  "description": "Eventos `data:` con el formato de OpenAI (`chat.completion.chunk`), uno por línea, cerrados con `data: [DONE]`. El anterior a `[DONE]` trae el `usage` de la llamada entera."
+                },
+                "example": "data: {\"id\":\"gen-1757000000-abc\",\"model\":\"google/gemini-2.5-flash-lite\",\"object\":\"chat.completion.chunk\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":\"Una \"}}]}\n\ndata: {\"id\":\"gen-1757000000-abc\",\"object\":\"chat.completion.chunk\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"pasarela.\"},\"finish_reason\":\"stop\"}]}\n\ndata: {\"id\":\"gen-1757000000-abc\",\"object\":\"chat.completion.chunk\",\"choices\":[],\"usage\":{\"prompt_tokens\":14,\"completion_tokens\":21,\"total_tokens\":35}}\n\ndata: [DONE]\n\n"
               }
             },
             "headers": {
@@ -357,7 +368,22 @@
             }
           },
           "404": {
-            "$ref": "#/components/responses/NoEncontrado"
+            "description": "El `model` pide un alias que no existe.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "ok": false,
+                  "error": {
+                    "message": "No hay ningún alias llamado mapeador.",
+                    "code": "alias_desconocido",
+                    "type": "not_found_error"
+                  }
+                }
+              }
+            }
           },
           "429": {
             "description": "Cuota por minuto superada, o la misma consulta repetida demasiadas veces seguidas.",
@@ -582,13 +608,14 @@
           {
             "name": "agrupar",
             "in": "query",
-            "description": "`dia` (por defecto), `modelo` o `app`.",
+            "description": "`dia` (por defecto), `modelo` o `app`. Con `alias` reparte el gasto por el nombre de trabajo con el que se pidió, incluidos los alias ya borrados.",
             "schema": {
               "type": "string",
               "enum": [
                 "dia",
                 "modelo",
-                "app"
+                "app",
+                "alias"
               ],
               "default": "dia"
             },
@@ -1152,6 +1179,415 @@
           }
         }
       }
+    },
+    "/v1/alias": {
+      "get": {
+        "tags": [
+          "Alias"
+        ],
+        "summary": "Los alias dados de alta",
+        "description": "Cualquier clave puede verlos: una aplicación necesita saber qué nombres tiene a mano. Tocarlos es de administración.",
+        "responses": {
+          "200": {
+            "description": "Los alias, ordenados por nombre.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "object": {
+                      "type": "string"
+                    },
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Alias"
+                      }
+                    },
+                    "total": {
+                      "type": "integer"
+                    }
+                  }
+                },
+                "example": {
+                  "object": "list",
+                  "data": [
+                    {
+                      "nombre": "mapeador",
+                      "modelo": "google/gemini-2.5-flash-lite",
+                      "respaldos": [
+                        "openai/gpt-5-mini"
+                      ],
+                      "parametros": {
+                        "temperature": 0.1,
+                        "max_tokens": 700
+                      },
+                      "nota": "Mapeo de columnas de un BOM",
+                      "actualizado": "2026-09-13T09:00:00Z"
+                    }
+                  ],
+                  "total": 1
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/NoAutorizado"
+          },
+          "503": {
+            "$ref": "#/components/responses/SinConfigurar"
+          }
+        }
+      }
+    },
+    "/v1/alias/{nombre}": {
+      "put": {
+        "tags": [
+          "Alias"
+        ],
+        "summary": "Crear o reemplazar un alias",
+        "description": "Es un reemplazo, no un parche: un alias es corto y se entiende mejor mandándolo completo que parcheándolo a trozos. Lo que no venga, se queda sin poner.\n\nSolo con la clave de administración: cambiar un alias cambia a qué modelo salen todas las llamadas que lo usan.",
+        "parameters": [
+          {
+            "name": "nombre",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "mapeador"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "modelo": {
+                    "type": "string"
+                  },
+                  "respaldos": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "parametros": {
+                    "type": "object",
+                    "additionalProperties": true
+                  },
+                  "nota": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "modelo"
+                ]
+              },
+              "example": {
+                "modelo": "google/gemini-2.5-flash-lite",
+                "respaldos": [
+                  "openai/gpt-5-mini"
+                ],
+                "parametros": {
+                  "temperature": 0.1,
+                  "max_tokens": 700
+                },
+                "nota": "Mapeo de columnas de un BOM"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Guardado.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    },
+                    "alias": {
+                      "$ref": "#/components/schemas/Alias"
+                    }
+                  }
+                },
+                "example": {
+                  "ok": true,
+                  "alias": {
+                    "nombre": "mapeador",
+                    "modelo": "google/gemini-2.5-flash-lite",
+                    "respaldos": [
+                      "openai/gpt-5-mini"
+                    ],
+                    "parametros": {
+                      "temperature": 0.1,
+                      "max_tokens": 700
+                    },
+                    "nota": "Mapeo de columnas de un BOM",
+                    "actualizado": "2026-09-13T09:00:00Z"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/PeticionInvalida"
+          },
+          "401": {
+            "$ref": "#/components/responses/NoAutorizado"
+          },
+          "403": {
+            "$ref": "#/components/responses/SinPermiso"
+          },
+          "503": {
+            "$ref": "#/components/responses/SinConfigurar"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Alias"
+        ],
+        "summary": "Borrar un alias",
+        "description": "Aquí sí se borra de verdad, al revés que con una aplicación: el histórico guarda el nombre del alias como texto, así que un informe viejo sigue diciendo por dónde salió la llamada aunque el alias ya no exista.\n\nLas aplicaciones que pidan ese alias empezarán a recibir `404 alias_desconocido`.",
+        "parameters": [
+          {
+            "name": "nombre",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "mapeador"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Borrado.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    },
+                    "nombre": {
+                      "type": "string"
+                    },
+                    "borrado": {
+                      "type": "boolean"
+                    }
+                  }
+                },
+                "example": {
+                  "ok": true,
+                  "nombre": "mapeador",
+                  "borrado": true
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/NoAutorizado"
+          },
+          "403": {
+            "$ref": "#/components/responses/SinPermiso"
+          },
+          "404": {
+            "description": "No hay ningún alias con ese nombre.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "ok": false,
+                  "error": {
+                    "message": "No hay ningún alias llamado mapeador.",
+                    "code": "alias_desconocido",
+                    "type": "not_found_error"
+                  }
+                }
+              }
+            }
+          },
+          "503": {
+            "$ref": "#/components/responses/SinConfigurar"
+          }
+        }
+      }
+    },
+    "/v1/alias/{nombre}/simular": {
+      "get": {
+        "tags": [
+          "Alias"
+        ],
+        "summary": "A qué saldría una llamada por este alias",
+        "description": "Resuelve la cadena entera y le pone precio con el catálogo, sin llamar a nadie ni gastar un céntimo. Sirve para ver de un vistazo cuánto encarece el respaldo si el principal no responde.\n\n`conocido: false` no es un error: es que el catálogo todavía no se ha pedido a OpenRouter, o que ese modelo ya no está en él.",
+        "parameters": [
+          {
+            "name": "nombre",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "mapeador"
+          },
+          {
+            "name": "entrada",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "number",
+              "default": 1000
+            },
+            "description": "Tokens de entrada de la consulta de ejemplo."
+          },
+          {
+            "name": "salida",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "number",
+              "default": 500
+            },
+            "description": "Tokens de salida de la consulta de ejemplo."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "La cadena con su precio, escalón a escalón.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "alias": {
+                      "$ref": "#/components/schemas/Alias"
+                    },
+                    "muestra": {
+                      "type": "object"
+                    },
+                    "cadena": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "orden": {
+                            "type": "integer"
+                          },
+                          "modelo": {
+                            "type": "string"
+                          },
+                          "papel": {
+                            "type": "string",
+                            "enum": [
+                              "principal",
+                              "respaldo"
+                            ]
+                          },
+                          "conocido": {
+                            "type": "boolean"
+                          },
+                          "precio_entrada": {
+                            "type": [
+                              "number",
+                              "null"
+                            ]
+                          },
+                          "precio_salida": {
+                            "type": [
+                              "number",
+                              "null"
+                            ]
+                          },
+                          "coste_estimado": {
+                            "type": [
+                              "number",
+                              "null"
+                            ],
+                            "description": "Dólares de la consulta de ejemplo."
+                          }
+                        }
+                      }
+                    }
+                  }
+                },
+                "example": {
+                  "alias": {
+                    "nombre": "mapeador",
+                    "modelo": "google/gemini-2.5-flash-lite",
+                    "respaldos": [
+                      "openai/gpt-5-mini"
+                    ],
+                    "parametros": {
+                      "temperature": 0.1,
+                      "max_tokens": 700
+                    },
+                    "nota": "Mapeo de columnas de un BOM",
+                    "actualizado": "2026-09-13T09:00:00Z"
+                  },
+                  "muestra": {
+                    "tokens_entrada": 1000,
+                    "tokens_salida": 500
+                  },
+                  "cadena": [
+                    {
+                      "orden": 0,
+                      "modelo": "google/gemini-2.5-flash-lite",
+                      "papel": "principal",
+                      "conocido": true,
+                      "precio_entrada": 0.1,
+                      "precio_salida": 0.4,
+                      "coste_estimado": 0.0003
+                    },
+                    {
+                      "orden": 1,
+                      "modelo": "openai/gpt-5-mini",
+                      "papel": "respaldo",
+                      "conocido": true,
+                      "precio_entrada": 0.25,
+                      "precio_salida": 2.0,
+                      "coste_estimado": 0.00125
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/NoAutorizado"
+          },
+          "404": {
+            "description": "No hay ningún alias con ese nombre.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "ok": false,
+                  "error": {
+                    "message": "No hay ningún alias llamado mapeador.",
+                    "code": "alias_desconocido",
+                    "type": "not_found_error"
+                  }
+                }
+              }
+            }
+          },
+          "503": {
+            "$ref": "#/components/responses/SinConfigurar"
+          }
+        }
+      }
     }
   },
   "components": {
@@ -1346,7 +1782,8 @@
         "properties": {
           "model": {
             "type": "string",
-            "description": "Opcional. Si falta, el modelo por defecto del servicio."
+            "description": "Opcional. Si falta, el modelo por defecto del servicio. Con el prefijo `alias:` se pide un alias en vez de un modelo: el servicio resuelve el modelo, le pone los parámetros por defecto del alias (sin pisar lo que mandes) y recurre a su cadena de respaldo si el proveedor no responde.",
+            "example": "alias:mapeador"
           },
           "messages": {
             "type": "array",
@@ -1375,7 +1812,16 @@
           },
           "stream": {
             "type": "boolean",
-            "description": "Rechazado hasta la etapa 7: con `true` la respuesta es `400`."
+            "description": "Con `true` la respuesta llega en flujo (`text/event-stream`) en vez de en un único JSON. El servicio fuerza `stream_options.include_usage` para poder medir la llamada, así que el último evento antes de `[DONE]` trae el bloque `usage`."
+          },
+          "stream_options": {
+            "type": "object",
+            "description": "Opciones del flujo. `include_usage` se pone a `true` siempre que `stream` es `true`, venga o no en la consulta.",
+            "properties": {
+              "include_usage": {
+                "type": "boolean"
+              }
+            }
           }
         },
         "required": [
@@ -1475,7 +1921,8 @@
             "description": "ISO 8601 en UTC."
           },
           "modelo_pedido": {
-            "type": "string"
+            "type": "string",
+            "description": "El modelo que se llegó a intentar. Si la llamada salió por un alias y el principal falló, es el respaldo que acabó sirviéndola."
           },
           "modelo_servido": {
             "type": [
@@ -1521,6 +1968,13 @@
           "latencia_ms": {
             "type": "integer"
           },
+          "primer_token_ms": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "Milisegundos desde que entra la petición hasta el primer trozo con contenido, esperas de OpenRouter incluidas. Solo lo llevan las llamadas servidas en flujo; en el resto es `null`. Es lo que percibe quien espera delante de una pantalla, y no tiene que ver con la latencia total."
+          },
           "motivo_fin": {
             "type": [
               "string",
@@ -1544,6 +1998,13 @@
               "null"
             ],
             "description": "Qué aplicación llamó. `null` es la clave de administración."
+          },
+          "alias": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "El alias por el que se pidió la llamada, si se pidió por alias. Se guarda el nombre como texto: un informe viejo tiene que poder decir por dónde salió la llamada aunque el alias ya no exista."
           },
           "operacion": {
             "type": [
@@ -1683,6 +2144,42 @@
             "type": "boolean"
           }
         }
+      },
+      "Alias": {
+        "type": "object",
+        "properties": {
+          "nombre": {
+            "type": "string",
+            "description": "Minúsculas, dígitos y guiones, hasta 40 caracteres."
+          },
+          "modelo": {
+            "type": "string",
+            "description": "El modelo que se intenta primero."
+          },
+          "respaldos": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "A qué recurrir, en orden, si el anterior no responde."
+          },
+          "parametros": {
+            "type": "object",
+            "additionalProperties": true,
+            "description": "Valores por defecto del cuerpo de la consulta. Lo que mande la aplicación gana. No puede fijar `model`, `messages`, `stream` ni `stream_options`."
+          },
+          "nota": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Para qué es. Hasta 200 caracteres."
+          },
+          "actualizado": {
+            "type": "string",
+            "description": "Cuándo se guardó por última vez."
+          }
+        }
       }
     },
     "responses": {
@@ -1705,7 +2202,7 @@
         }
       },
       "PeticionInvalida": {
-        "description": "El cuerpo no es un objeto JSON, o pide streaming, que aún no existe.",
+        "description": "El cuerpo no es un objeto JSON.",
         "content": {
           "application/json": {
             "schema": {
@@ -1714,8 +2211,8 @@
             "example": {
               "ok": false,
               "error": {
-                "message": "El streaming llega en la etapa 7; manda la consulta sin \"stream\".",
-                "code": "streaming_no_disponible",
+                "message": "El cuerpo tiene que ser un objeto JSON.",
+                "code": "cuerpo_invalido",
                 "type": "invalid_request_error"
               }
             }
@@ -1863,11 +2360,6 @@
       "cuando": "El cuerpo de la consulta no es un objeto JSON."
     },
     {
-      "code": "streaming_no_disponible",
-      "http": 400,
-      "cuando": "La consulta pide stream. Llega en la etapa 7."
-    },
-    {
       "code": "openrouter_rechaza",
       "http": "el del proveedor",
       "cuando": "OpenRouter rechazó la llamada: modelo inexistente, saldo, permisos. Su cuerpo queda en error.upstream."
@@ -1931,6 +2423,11 @@
       "code": "periodo_invalido",
       "http": 400,
       "cuando": "Se fijó un presupuesto con un periodo que no es dia ni mes, o sin periodo."
+    },
+    {
+      "code": "alias_desconocido",
+      "http": 404,
+      "cuando": "La consulta pide `alias:<nombre>` y no hay ningún alias con ese nombre, o se intenta borrar o simular uno que no existe."
     }
   ],
   "x-etapas": [
@@ -2033,7 +2530,7 @@
     {
       "numero": 7,
       "titulo": "Streaming",
-      "estado": "siguiente",
+      "estado": "entregada",
       "rutas": [
         {
           "metodo": "POST",
@@ -2041,12 +2538,12 @@
           "nota": "con stream: true"
         }
       ],
-      "nota": "Eventos servidos según se generan, midiendo el tiempo hasta el primer token. Hasta entonces, stream: true devuelve 400."
+      "nota": "Eventos servidos según se generan, midiendo el tiempo hasta el primer token. El flujo se mide de pasada sin tocar los eventos, y el registro se escribe al cerrarse: también si el cliente corta a mitad, que queda anotado como cancelado con lo que costó hasta ahí."
     },
     {
       "numero": 8,
       "titulo": "Alias y enrutado",
-      "estado": "planificada",
+      "estado": "entregada",
       "rutas": [
         {
           "metodo": "GET",
@@ -2057,11 +2554,15 @@
           "ruta": "/v1/alias/{nombre}"
         },
         {
+          "metodo": "DELETE",
+          "ruta": "/v1/alias/{nombre}"
+        },
+        {
           "metodo": "GET",
           "ruta": "/v1/alias/{nombre}/simular"
         }
       ],
-      "nota": "Una aplicación pedirá \"alias:redactor\" en vez de un modelo concreto, y el servicio decidirá el modelo, la cadena de respaldo y los parámetros. Cambiar de modelo dejará de tocar el código de las aplicaciones."
+      "nota": "Una aplicación pide \"alias:redactor\" en vez de un modelo concreto, y el servicio decide el modelo, la cadena de respaldo y los parámetros por defecto. Cambiar de modelo deja de tocar el código de las aplicaciones. El histórico anota por qué alias salió cada llamada, y el resumen las reparte con agrupar=alias."
     }
   ]
 }

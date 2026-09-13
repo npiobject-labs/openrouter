@@ -1,3 +1,4 @@
+pub mod alias;
 pub mod apps;
 pub mod basicas;
 pub mod chat;

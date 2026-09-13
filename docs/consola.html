@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="build" content="OP-B1-20260913-014">
+<meta name="build" content="OP-B1-20260913-016">
 <!-- App de Fly: <repo>-<owner>, el mismo nombre que deriva deploy.yml.
      Con otro nombre, cambia este content o abre la pagina con ?app=<nombre>. -->
 <meta name="fly-app" content="openrouter-npiobject-labs">
@@ -75,7 +75,7 @@ footer{display:flex;flex-wrap:wrap;gap:.4rem 1.2rem;font-size:.8rem;color:var(--
 <main>
   <header>
     <h1>openrouter <span>· consola</span></h1>
-    <p>Cliente de referencia del servicio. Etapas 1 a 6: conexión, catálogo, consulta, medición, histórico, claves por aplicación y presupuestos.</p>
+    <p>Cliente de referencia del servicio. Etapas 1 a 8: conexión, catálogo, consulta en vivo, medición, histórico, claves por aplicación, presupuestos y alias.</p>
   </header>
 
   <section class="panel">
@@ -137,7 +137,9 @@ footer{display:flex;flex-wrap:wrap;gap:.4rem 1.2rem;font-size:.8rem;color:var(--
       <textarea id="prompt" rows="5">Explica en tres frases por qué la clave de OpenRouter no debe llegar nunca al navegador.</textarea>
     </label>
     <div class="fila">
+      <label class="interruptor" for="en-vivo"><input id="en-vivo" type="checkbox" checked> Respuesta en vivo</label>
       <span style="flex:1"></span>
+      <button id="btn-cancelar" hidden>Cancelar</button>
       <button class="primario" id="btn-enviar">Enviar</button>
     </div>
   </section>
@@ -152,6 +154,7 @@ footer{display:flex;flex-wrap:wrap;gap:.4rem 1.2rem;font-size:.8rem;color:var(--
       <div><dt>Modelo servido</dt><dd id="u-modelo">–</dd></div>
       <div><dt>Fin</dt><dd id="u-fin">–</dd></div>
       <div><dt>Tardó</dt><dd id="u-lat">–</dd></div>
+      <div><dt>Primer token</dt><dd id="u-primero">–</dd></div>
       <div><dt>Proveedor</dt><dd id="u-prov">–</dd></div>
       <div><dt>Registro</dt><dd id="u-id">–</dd></div>
     </dl>
@@ -159,6 +162,43 @@ footer{display:flex;flex-wrap:wrap;gap:.4rem 1.2rem;font-size:.8rem;color:var(--
       <summary>JSON crudo</summary>
       <pre id="crudo">–</pre>
     </details>
+  </section>
+
+  <section class="panel">
+    <h2>Alias <span class="estado" id="alias-estado">sin cargar</span></h2>
+    <p>Un alias es un nombre de trabajo: una aplicación pide <code>alias:mapeador</code> y es el servicio quien decide el modelo, los parámetros por defecto y a qué recurrir si el primero no responde. Cambiar de modelo deja así de tocar el código de nadie. Cualquier clave puede verlos; solo la de administración puede tocarlos.</p>
+    <div class="fila">
+      <span style="flex:1"></span>
+      <button id="btn-alias">Actualizar</button>
+    </div>
+    <div class="tabla"><table>
+      <thead><tr><th>Alias</th><th>Cadena</th><th>Parámetros</th><th>Nota</th><th></th></tr></thead>
+      <tbody id="alias-filas"><tr><td colspan="5" class="texto">Pulsa «Actualizar» para ver los alias.</td></tr></tbody>
+    </table></div>
+
+    <div id="alias-simulacion" hidden>
+      <h3 style="font-size:.95rem;margin:.6rem 0 0">Simulación de <span id="sim-nombre"></span></h3>
+      <p>Lo que costaría una consulta de mil tokens de entrada y quinientos de salida por cada escalón de la cadena. No llama a nadie ni gasta crédito.</p>
+      <div class="tabla"><table>
+        <thead><tr><th>Orden</th><th>Modelo</th><th>Papel</th><th>Precio</th><th>Coste estimado</th></tr></thead>
+        <tbody id="sim-filas"></tbody>
+      </table></div>
+    </div>
+
+    <div id="alias-editor" hidden>
+      <h3 style="font-size:.95rem;margin:.6rem 0 0">Crear o reemplazar</h3>
+      <p>Se manda el alias entero: lo que dejes vacío, se queda sin poner. Guardar sobre un nombre que ya existe lo reemplaza.</p>
+      <div class="fila">
+        <label for="al-nombre">Nombre<input id="al-nombre" type="text" placeholder="mapeador" maxlength="40"></label>
+        <label for="al-modelo">Modelo<input id="al-modelo" type="text" placeholder="google/gemini-2.5-flash-lite"></label>
+        <label for="al-respaldos">Respaldos (uno por coma)<input id="al-respaldos" type="text" placeholder="openai/gpt-5-mini"></label>
+      </div>
+      <div class="fila">
+        <label for="al-parametros">Parámetros (JSON)<input id="al-parametros" type="text" placeholder='{"temperature":0.1}'></label>
+        <label for="al-nota">Nota<input id="al-nota" type="text" maxlength="200" placeholder="Para qué es"></label>
+        <button class="primario" id="btn-alias-guardar">Guardar alias</button>
+      </div>
+    </div>
   </section>
 
   <section class="panel">
@@ -216,10 +256,10 @@ footer{display:flex;flex-wrap:wrap;gap:.4rem 1.2rem;font-size:.8rem;color:var(--
 
   <section class="panel">
     <h2>Resumen <span class="estado" id="res-estado">sin cargar</span></h2>
-    <p>Totales del histórico, por día o por modelo. Sin fechas, todo lo que haya guardado.</p>
+    <p>Totales del histórico, por día, por modelo o por alias. Sin fechas, todo lo que haya guardado.</p>
     <div class="fila">
       <label for="res-agrupar">Agrupar por
-        <select id="res-agrupar"><option value="dia">Día</option><option value="modelo">Modelo</option></select>
+        <select id="res-agrupar"><option value="dia">Día</option><option value="modelo">Modelo</option><option value="alias">Alias</option></select>
       </label>
       <label for="res-desde">Desde <input id="res-desde" type="date"></label>
       <label for="res-hasta">Hasta <input id="res-hasta" type="date"></label>
@@ -240,7 +280,7 @@ footer{display:flex;flex-wrap:wrap;gap:.4rem 1.2rem;font-size:.8rem;color:var(--
   </section>
 
   <footer>
-    <span>Build <code>OP-B1-20260913-014</code></span>
+    <span>Build <code>OP-B1-20260913-016</code></span>
     <span>Backend: <a id="url-backend" href="#">–</a></span>
     <a href="api.html">Documentación de la API</a>
     <a href="./">Mock de todas las etapas</a>
@@ -323,8 +363,11 @@ footer{display:flex;flex-wrap:wrap;gap:.4rem 1.2rem;font-size:.8rem;color:var(--
       texto('k-quien', quien.nombre || '–');
       // El panel de aplicaciones solo tiene sentido con la clave que manda.
       $('panel-apps').hidden = !quien.administracion;
+      // Verlos, cualquiera; tocarlos, solo quien manda.
+      $('alias-editor').hidden = !quien.administracion;
       $('ficha-clave').hidden = false;
       margenPropio();
+      cargarAlias();
       cargarCatalogo(false);
     }).catch(function(e){
       pinta('estado', e.message, 'mal');
@@ -334,6 +377,9 @@ footer{display:flex;flex-wrap:wrap;gap:.4rem 1.2rem;font-size:.8rem;color:var(--
 
   // --- catálogo -----------------------------------------------------------
   var modelos = [];
+  // Los alias se cargan en su propio panel, pero el select de la consulta los
+  // enseña junto a los modelos: se declaran aquí para no depender del orden.
+  var alias = [];
   var proveedoresPuestos = false;
 
   function consulta(refrescar){
@@ -389,6 +435,17 @@ footer{display:flex;flex-wrap:wrap;gap:.4rem 1.2rem;font-size:.8rem;color:var(--
     porDefecto.value = '';
     porDefecto.textContent = '(el que use el servicio por defecto)';
     sel.appendChild(porDefecto);
+    if (alias.length){
+      var grupo = document.createElement('optgroup');
+      grupo.label = 'Alias';
+      alias.forEach(function(a){
+        var o = document.createElement('option');
+        o.value = 'alias:' + a.nombre;
+        o.textContent = 'alias:' + a.nombre + ' · ' + cadenaDe(a);
+        grupo.appendChild(o);
+      });
+      sel.appendChild(grupo);
+    }
     modelos.forEach(function(m){
       var o = document.createElement('option');
       o.value = m.id;
@@ -396,7 +453,9 @@ footer{display:flex;flex-wrap:wrap;gap:.4rem 1.2rem;font-size:.8rem;color:var(--
       sel.appendChild(o);
     });
     // Se conserva la elección anterior si el filtro nuevo la sigue incluyendo.
-    sel.value = modelos.some(function(m){ return m.id === elegido; }) ? elegido : '';
+    var sigue = modelos.some(function(m){ return m.id === elegido; })
+      || alias.some(function(a){ return 'alias:' + a.nombre === elegido; });
+    sel.value = sigue ? elegido : '';
     ponFicha();
   }
 
@@ -447,8 +506,11 @@ footer{display:flex;flex-wrap:wrap;gap:.4rem 1.2rem;font-size:.8rem;color:var(--
       texto('u-coste', dinero6(r.coste));
       texto('u-entrada', r.tokens_entrada + ' tok');
       texto('u-salida', r.tokens_salida + ' tok');
+      texto('u-modelo', r.modelo_servido || r.modelo_pedido || '–');
+      texto('u-fin', r.motivo_fin || '–');
       texto('u-prov', r.proveedor || '–');
       texto('u-lat', duracion(r.latencia_ms));
+      texto('u-primero', r.primer_token_ms == null ? '–' : duracion(r.primer_token_ms));
       texto('u-id', r.id + (r.coste_origen === 'openrouter' ? '' : ' · ' + r.coste_origen));
       if (r.coste_origen !== 'openrouter' && intentos > 0){
         setTimeout(function(){ refinaUso(id, intentos - 1); }, 2500);
@@ -506,6 +568,222 @@ footer{display:flex;flex-wrap:wrap;gap:.4rem 1.2rem;font-size:.8rem;color:var(--
     });
     return tr;
   }
+
+  // --- consulta en vivo -----------------------------------------------------
+  // El servicio devuelve los eventos tal como los emite OpenRouter, asi que
+  // aqui solo hay que ir juntando los trozos de texto segun caen.
+  function enVivo(boton, cuerpo){
+    cuerpo.stream = true;
+    boton.disabled = true;
+    $('btn-cancelar').hidden = false;
+    texto('respuesta', '');
+    $('ficha-uso').hidden = true;
+    corte = new AbortController();
+    var arranque = performance.now();
+    var texto_recibido = '';
+    var idUso = null;
+
+    fetch(base + '/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': 'Bearer ' + clave.value.trim(),
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(cuerpo),
+      signal: corte.signal
+    }).then(function(r){
+      idUso = r.headers.get('X-Uso-Id');
+      var presupuesto = r.headers.get('X-Presupuesto');
+      if (presupuesto) pinta('estado', 'aviso de presupuesto: ' + presupuesto, 'avisa');
+      if (!r.ok){
+        return r.json().then(function(j){
+          var e = (j && j.error) || {};
+          throw new Error((e.code ? e.code + ': ' : '') + (e.message || 'HTTP ' + r.status));
+        });
+      }
+
+      var lector = r.body.getReader();
+      var decodificador = new TextDecoder();
+      var resto = '';
+
+      function siguiente(){
+        return lector.read().then(function(trozo){
+          if (trozo.done) return;
+          resto += decodificador.decode(trozo.value, { stream: true });
+
+          // El ultimo evento del trozo puede venir partido: se guarda.
+          var corte_linea = resto.lastIndexOf('\n');
+          if (corte_linea >= 0){
+            var completas = resto.slice(0, corte_linea);
+            resto = resto.slice(corte_linea + 1);
+            completas.split('\n').forEach(function(linea){
+              if (linea.indexOf('data:') !== 0) return;
+              var datos = linea.slice(5).trim();
+              if (!datos || datos === '[DONE]') return;
+              try {
+                var evento = JSON.parse(datos);
+                var delta = evento.choices && evento.choices[0] && evento.choices[0].delta;
+                if (delta && delta.content){
+                  texto_recibido += delta.content;
+                  texto('respuesta', texto_recibido);
+                }
+              } catch (e) { /* un evento ilegible no tumba la respuesta */ }
+            });
+          }
+          return siguiente();
+        });
+      }
+      return siguiente();
+    }).then(function(){
+      if (!texto_recibido) texto('respuesta', '(sin contenido)');
+      cerrarEnVivo(idUso, arranque);
+    }).catch(function(e){
+      if (e.name === 'AbortError'){
+        texto('respuesta', texto_recibido + '\n\n[cancelado]');
+        cerrarEnVivo(idUso, arranque);
+        return;
+      }
+      texto('respuesta', 'Error: ' + e.message);
+    }).finally(function(){
+      boton.disabled = false;
+      $('btn-cancelar').hidden = true;
+      corte = null;
+    });
+  }
+
+  function cerrarEnVivo(idUso, arranque){
+    texto('u-lat', duracion(performance.now() - arranque));
+    $('ficha-uso').hidden = false;
+    if (idUso){
+      texto('u-id', idUso);
+      // El registro tarda un instante en escribirse al cerrarse el flujo.
+      setTimeout(function(){ refinaUso(idUso, 3); }, 600);
+    }
+    if ($('uso-estado').textContent !== 'sin cargar') setTimeout(cargarUso, 900);
+  }
+
+  // --- alias ----------------------------------------------------------------
+  // Los alias se guardan aparte de los modelos porque el select de la consulta
+  // los enseña juntos: pedir "alias:mapeador" es tan válido como pedir un modelo.
+  function cadenaDe(a){
+    return [a.modelo].concat(a.respaldos || []).join(' → ');
+  }
+
+  function cargarAlias(){
+    var boton = $('btn-alias');
+    boton.disabled = true;
+    pinta('alias-estado', 'cargando…', '');
+    return llama('/v1/alias').then(function(res){
+      alias = res.datos.data;
+      var cuerpo = $('alias-filas');
+      cuerpo.textContent = '';
+      if (!alias.length){
+        var vacia = fila([{ v: 'Todavía no hay ningún alias. Con la clave de administración se crean aquí abajo.', clase: 'texto' }]);
+        vacia.firstChild.colSpan = 5;
+        cuerpo.appendChild(vacia);
+      }
+      alias.forEach(function(a){
+        var parametros = Object.keys(a.parametros || {}).length
+          ? JSON.stringify(a.parametros)
+          : 'ninguno';
+        var tr = fila([
+          { v: a.nombre, clase: 'texto' },
+          { v: cadenaDe(a) },
+          { v: parametros },
+          { v: a.nota || '–', clase: 'texto' },
+          { v: '' }
+        ]);
+        var acciones = tr.lastChild;
+        var simular = document.createElement('button');
+        simular.textContent = 'Simular';
+        simular.addEventListener('click', function(){ simula(a.nombre); });
+        acciones.appendChild(simular);
+        if (!$('alias-editor').hidden){
+          var borrar = document.createElement('button');
+          borrar.textContent = 'Borrar';
+          borrar.style.marginLeft = '.3rem';
+          borrar.addEventListener('click', function(){ borraAlias(a.nombre); });
+          acciones.appendChild(borrar);
+        }
+        cuerpo.appendChild(tr);
+      });
+      pinta('alias-estado', alias.length + (alias.length === 1 ? ' alias' : ' alias'), 'ok');
+      ponModelos();
+    }).catch(function(e){
+      pinta('alias-estado', e.message, 'mal');
+    }).finally(function(){ boton.disabled = false; });
+  }
+
+  function simula(nombre){
+    pinta('alias-estado', 'simulando…', '');
+    llama('/v1/alias/' + encodeURIComponent(nombre) + '/simular').then(function(res){
+      var d = res.datos;
+      texto('sim-nombre', nombre);
+      var cuerpo = $('sim-filas');
+      cuerpo.textContent = '';
+      d.cadena.forEach(function(e){
+        cuerpo.appendChild(fila([
+          { v: e.orden },
+          { v: e.modelo, clase: 'texto' },
+          { v: e.papel },
+          { v: e.conocido ? dinero6(e.precio_entrada) + ' / ' + dinero6(e.precio_salida) + ' por M' : 'sin catálogo' },
+          { v: e.coste_estimado == null ? '–' : dinero6(e.coste_estimado) }
+        ]));
+      });
+      $('alias-simulacion').hidden = false;
+      pinta('alias-estado', 'simulado', 'ok');
+    }).catch(function(e){ pinta('alias-estado', e.message, 'mal'); });
+  }
+
+  function guardaAlias(){
+    var nombre = $('al-nombre').value.trim();
+    var modelo = $('al-modelo').value.trim();
+    if (!nombre || !modelo){
+      pinta('alias-estado', 'hacen falta nombre y modelo', 'mal');
+      return;
+    }
+    var cuerpo = { modelo: modelo };
+    var respaldos = $('al-respaldos').value.split(',').map(function(m){ return m.trim(); }).filter(Boolean);
+    if (respaldos.length) cuerpo.respaldos = respaldos;
+    var crudo = $('al-parametros').value.trim();
+    if (crudo){
+      try {
+        cuerpo.parametros = JSON.parse(crudo);
+      } catch (e) {
+        pinta('alias-estado', 'los parámetros no son JSON válido', 'mal');
+        return;
+      }
+    }
+    if ($('al-nota').value.trim()) cuerpo.nota = $('al-nota').value.trim();
+
+    var boton = $('btn-alias-guardar');
+    boton.disabled = true;
+    pinta('alias-estado', 'guardando…', '');
+    llama('/v1/alias/' + encodeURIComponent(nombre), {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(cuerpo)
+    }).then(function(){
+      pinta('alias-estado', 'guardado', 'ok');
+      cargarAlias();
+    }).catch(function(e){
+      pinta('alias-estado', e.message, 'mal');
+    }).finally(function(){ boton.disabled = false; });
+  }
+
+  function borraAlias(nombre){
+    // Borrar un alias cambia por dónde salen las llamadas que lo usan, así que
+    // se pregunta; el histórico conserva el nombre de todos modos.
+    if (!window.confirm('¿Borrar el alias "' + nombre + '"? Las aplicaciones que lo pidan dejarán de funcionar.')) return;
+    pinta('alias-estado', 'borrando…', '');
+    llama('/v1/alias/' + encodeURIComponent(nombre), { method: 'DELETE' }).then(function(){
+      $('alias-simulacion').hidden = true;
+      cargarAlias();
+    }).catch(function(e){ pinta('alias-estado', e.message, 'mal'); });
+  }
+
+  $('btn-alias').addEventListener('click', cargarAlias);
+  $('btn-alias-guardar').addEventListener('click', guardaAlias);
 
   // --- presupuesto ----------------------------------------------------------
   function tope(p){
@@ -659,7 +937,7 @@ footer{display:flex;flex-wrap:wrap;gap:.4rem 1.2rem;font-size:.8rem;color:var(--
     llama('/v1/uso/resumen?' + fechas().concat('agrupar=' + agrupar).join('&')).then(function(res){
       var d = res.datos;
       var t = d.totales;
-      texto('res-cabecera', agrupar === 'modelo' ? 'Modelo' : 'Día');
+      texto('res-cabecera', agrupar === 'modelo' ? 'Modelo' : (agrupar === 'alias' ? 'Alias' : 'Día'));
       texto('t-coste', dinero6(t.coste));
       texto('t-llamadas', miles(t.llamadas));
       texto('t-fallos', miles(t.fallos));
@@ -721,11 +999,19 @@ footer{display:flex;flex-wrap:wrap;gap:.4rem 1.2rem;font-size:.8rem;color:var(--
   });
 
   // --- consulta -----------------------------------------------------------
+  var corte = null;
+
+  $('btn-cancelar').addEventListener('click', function(){
+    if (corte) corte.abort();
+  });
+
   $('btn-enviar').addEventListener('click', function(){
     var boton = this;
     var cuerpo = { messages: [{ role: 'user', content: $('prompt').value }] };
     var modelo = $('modelo').value;
     if (modelo) cuerpo.model = modelo;
+
+    if ($('en-vivo').checked) return enVivo(boton, cuerpo);
 
     boton.disabled = true;
     texto('respuesta', 'Esperando al modelo…');

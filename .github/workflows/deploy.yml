@@ -307,6 +307,121 @@ jobs:
           fi
           echo "OK: la administracion sigue sin limites"
 
+      - name: Verificar los alias
+        if: steps.fly.outputs.configurado == 'true'
+        env:
+          FLY_APP: ${{ steps.app.outputs.app }}
+          SERVICIO_CLAVE: ${{ secrets.SERVICIO_CLAVE }}
+        run: |
+          if [ -z "${SERVICIO_CLAVE}" ]; then
+            echo "Sin clave de servicio: no se comprueban los alias."
+            exit 0
+          fi
+          base="https://${FLY_APP}.fly.dev"
+          nombre="verificacion-despliegue"
+
+          # Un alias de usar y tirar: se crea, se simula y se borra. Ninguna de
+          # las tres cosas llama a OpenRouter, asi que no gasta credito.
+          codigo="$(curl -s -o /tmp/alias.json -w '%{http_code}' --max-time 20 -X PUT \
+            -H "Authorization: Bearer ${SERVICIO_CLAVE}" -H "Content-Type: application/json" \
+            -d '{"modelo":"google/gemini-2.5-flash-lite","respaldos":["openai/gpt-5-mini"],"parametros":{"temperature":0.1},"nota":"lo crea y lo borra deploy.yml"}' \
+            "${base}/v1/alias/${nombre}" || true)"
+          echo "PUT /v1/alias/${nombre} -> HTTP ${codigo}"
+          if [ "${codigo}" != "200" ]; then
+            echo "::error::no se pudo guardar un alias (HTTP ${codigo})."
+            cat /tmp/alias.json || true
+            exit 1
+          fi
+
+          # La cadena tiene que salir resuelta y en orden: el principal primero.
+          codigo="$(curl -s -o /tmp/simular.json -w '%{http_code}' --max-time 20 \
+            -H "Authorization: Bearer ${SERVICIO_CLAVE}" \
+            "${base}/v1/alias/${nombre}/simular" || true)"
+          if [ "${codigo}" != "200" ] || ! jq -e '
+               (.cadena | length) == 2
+               and .cadena[0].papel == "principal"
+               and .cadena[1].papel == "respaldo"
+               and .cadena[0].modelo == "google/gemini-2.5-flash-lite"' /tmp/simular.json > /dev/null; then
+            echo "::error::la simulacion del alias no devolvio la cadena esperada (HTTP ${codigo})."
+            cat /tmp/simular.json || true
+            exit 1
+          fi
+          jq -r '"OK: cadena " + ([.cadena[].modelo] | join(" -> "))' /tmp/simular.json
+
+          # Un alias que no existe es 404 con el sobre de siempre, no un 500.
+          http="$(curl -s -o /tmp/alias404.json -w '%{http_code}' --max-time 20 \
+            -H "Authorization: Bearer ${SERVICIO_CLAVE}" \
+            "${base}/v1/alias/no-existe-este/simular" || true)"
+          if [ "${http}" != "404" ] || ! jq -e '.ok == false and .error.code == "alias_desconocido"' /tmp/alias404.json > /dev/null; then
+            echo "::error::un alias desconocido respondio ${http} en vez de 404 alias_desconocido."
+            cat /tmp/alias404.json || true
+            exit 1
+          fi
+
+          codigo="$(curl -s -o /tmp/borrado.json -w '%{http_code}' --max-time 20 -X DELETE \
+            -H "Authorization: Bearer ${SERVICIO_CLAVE}" "${base}/v1/alias/${nombre}" || true)"
+          if [ "${codigo}" != "200" ]; then
+            echo "::error::no se pudo borrar el alias de verificacion (HTTP ${codigo}); queda suelto en el servicio."
+            cat /tmp/borrado.json || true
+            exit 1
+          fi
+          echo "OK: alias creado, simulado y borrado"
+
+      - name: Verificar el streaming
+        if: steps.fly.outputs.configurado == 'true'
+        env:
+          FLY_APP: ${{ steps.app.outputs.app }}
+          SERVICIO_CLAVE: ${{ secrets.SERVICIO_CLAVE }}
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+        run: |
+          if [ -z "${SERVICIO_CLAVE}" ] || [ -z "${OPENROUTER_API_KEY}" ]; then
+            echo "Faltan secretos: no se comprueba el streaming."
+            exit 0
+          fi
+          # Unico paso que gasta credito, y por eso pide un token: un flujo solo
+          # se puede comprobar de verdad pidiendo uno. Sale por menos de una
+          # millonesima de dolar con el modelo por defecto.
+          url="https://${FLY_APP}.fly.dev/v1/chat/completions"
+          codigo="$(curl -s -o /tmp/flujo.txt -D /tmp/flujo.cab -w '%{http_code}' --max-time 60 \
+            -H "Authorization: Bearer ${SERVICIO_CLAVE}" \
+            -H "Content-Type: application/json" \
+            -d '{"messages":[{"role":"user","content":"Di hola."}],"max_tokens":8,"stream":true}' \
+            "${url}" || true)"
+          echo "HTTP ${codigo}"
+          if [ "${codigo}" != "200" ]; then
+            echo "::error::/v1/chat/completions con stream respondio ${codigo}."
+            cat /tmp/flujo.txt || true
+            exit 1
+          fi
+          if ! grep -qi '^content-type:.*text/event-stream' /tmp/flujo.cab; then
+            echo "::error::la respuesta en flujo no vino como text/event-stream."
+            cat /tmp/flujo.cab || true
+            exit 1
+          fi
+          if ! grep -q '^data: ' /tmp/flujo.txt || ! grep -q '\[DONE\]' /tmp/flujo.txt; then
+            echo "::error::el flujo no trajo eventos data: cerrados con [DONE]."
+            head -20 /tmp/flujo.txt || true
+            exit 1
+          fi
+          uso="$(grep -i '^x-uso-id:' /tmp/flujo.cab | tr -d '\r' | cut -d' ' -f2)"
+          if [ -z "${uso}" ]; then
+            echo "::error::el flujo no devolvio la cabecera X-Uso-Id."
+            exit 1
+          fi
+          echo "OK: flujo servido, registro ${uso}"
+
+          # El registro se escribe al cerrarse el flujo, no antes.
+          sleep 5
+          codigo="$(curl -s -o /tmp/flujo-uso.json -w '%{http_code}' --max-time 20 \
+            -H "Authorization: Bearer ${SERVICIO_CLAVE}" \
+            "https://${FLY_APP}.fly.dev/v1/uso/${uso}" || true)"
+          if [ "${codigo}" != "200" ] || ! jq -e '.primer_token_ms != null and .tokens_salida > 0' /tmp/flujo-uso.json > /dev/null; then
+            echo "::error::el flujo no quedo medido (HTTP ${codigo})."
+            cat /tmp/flujo-uso.json || true
+            exit 1
+          fi
+          jq -r '"OK: " + (.tokens_salida|tostring) + " tokens de salida, primer token a los " + (.primer_token_ms|tostring) + " ms"' /tmp/flujo-uso.json
+
       - name: Verificar el formato de error
         if: steps.fly.outputs.configurado == 'true'
         env:
