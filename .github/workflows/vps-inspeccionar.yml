@@ -6,6 +6,11 @@ name: Inspeccionar el VPS
 # sesion de claude.ai/code no puede llegar al VPS; este workflow si.
 
 on:
+  # Temporal: hasta que el workflow llegue a main no se puede lanzar a mano,
+  # asi que corre en cada push de la rama del plan. Quitar al fusionar.
+  push:
+    branches: [claude/eager-thompson-dvi9dl]
+    paths: ['.github/workflows/vps-inspeccionar.yml', 'vps/inspeccionar.sh']
   workflow_dispatch:
     inputs:
       dominio:
