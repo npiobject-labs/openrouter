@@ -19,8 +19,8 @@ pub struct Medidor {
     servicio: Arc<Servicio>,
     registro: Option<Registro>,
     reloj: Instant,
-    /// Tiempo hasta el primer trozo con contenido, que es lo que percibe quien
-    /// espera delante de una pantalla.
+    /// Tiempo desde que entró la petición hasta el primer trozo con contenido,
+    /// que es lo que percibe quien espera delante de una pantalla.
     primer_token: Option<Duration>,
     completo: bool,
     /// Lo que quedó a medias de una línea partida entre dos trozos de red.
@@ -28,11 +28,15 @@ pub struct Medidor {
 }
 
 impl Medidor {
-    pub fn nuevo(servicio: Arc<Servicio>, registro: Registro) -> Self {
+    /// `reloj` arranca en quien recibe la petición, no aquí: cuando se
+    /// construye el medidor ya han vuelto las cabeceras de OpenRouter, y ese
+    /// tramo —que es casi todo lo que tarda el primer token— quedaría fuera de
+    /// la cuenta.
+    pub fn nuevo(servicio: Arc<Servicio>, registro: Registro, reloj: Instant) -> Self {
         Self {
             servicio,
             registro: Some(registro),
-            reloj: Instant::now(),
+            reloj,
             primer_token: None,
             completo: false,
             resto: String::new(),
@@ -143,6 +147,7 @@ mod pruebas {
         Medidor::nuevo(
             servicio.clone(),
             servicio.uso.abre("prueba/modelo".to_string()),
+            Instant::now(),
         )
     }
 

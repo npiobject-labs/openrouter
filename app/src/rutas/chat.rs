@@ -104,11 +104,14 @@ pub async fn chat(
         .filter(|v| !v.is_empty());
     let id_uso = registro.id.clone();
 
+    // Un solo reloj para los dos caminos, y arranca aquí: lo que tarda el
+    // primer token es sobre todo lo que tarda OpenRouter en contestar.
+    let reloj = Instant::now();
+
     if en_flujo {
-        return en_directo(servicio, cuerpo, cadena, registro, id_uso, aviso).await;
+        return en_directo(servicio, cuerpo, cadena, registro, id_uso, aviso, reloj).await;
     }
 
-    let reloj = Instant::now();
     let (intentado, resultado) = por_la_cadena(&cadena, |modelo| {
         let mut cuerpo = cuerpo.clone();
         cuerpo["model"] = Value::String(modelo.to_string());
@@ -198,6 +201,7 @@ async fn en_directo(
     registro: crate::uso::Registro,
     id_uso: String,
     aviso: Option<String>,
+    reloj: Instant,
 ) -> Result<Response, ErrorApi> {
     // El respaldo solo cabe aquí, antes de abrir el flujo: una vez ha salido la
     // primera cabecera no hay forma de cambiar de modelo sin mentir al cliente.
@@ -216,6 +220,7 @@ async fn en_directo(
         Ok(r) => r,
         Err(fallo) => {
             // Un rechazo antes de abrir el flujo se anota como cualquier otro.
+            registro.latencia_ms = reloj.elapsed().as_millis() as i64;
             registro.estado = fallo.estado.as_u16();
             registro.motivo_fin = Some(fallo.codigo.to_string());
             servicio.uso.anota(registro);
@@ -225,7 +230,7 @@ async fn en_directo(
 
     registro.estado = StatusCode::OK.as_u16();
 
-    let mut medidor = Medidor::nuevo(servicio.clone(), registro);
+    let mut medidor = Medidor::nuevo(servicio.clone(), registro, reloj);
     let eventos = respuesta.bytes_stream().map(move |trozo| {
         if let Ok(bytes) = &trozo {
             medidor.anota(bytes);

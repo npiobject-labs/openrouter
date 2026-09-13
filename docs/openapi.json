@@ -1973,7 +1973,7 @@
               "integer",
               "null"
             ],
-            "description": "Milisegundos hasta el primer trozo con contenido. Solo lo llevan las llamadas servidas en flujo; en el resto es `null`. Es lo que percibe quien espera delante de una pantalla, y no tiene que ver con la latencia total."
+            "description": "Milisegundos desde que entra la petición hasta el primer trozo con contenido, esperas de OpenRouter incluidas. Solo lo llevan las llamadas servidas en flujo; en el resto es `null`. Es lo que percibe quien espera delante de una pantalla, y no tiene que ver con la latencia total."
           },
           "motivo_fin": {
             "type": [
