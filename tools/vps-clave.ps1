@@ -124,9 +124,15 @@ Ok "entra sin contrasena"
 
 # --- 5. Huella del servidor -----------------------------------------------
 Paso 5 "Huella del servidor"
-# Via cmd para que el comentario que ssh-keyscan manda por stderr no llegue a PowerShell.
-$huella = (& cmd /c "ssh-keyscan -p $Puerto -t ed25519 $HostReal 2>nul") | Where-Object { $_ -match "ssh-ed25519" } | Select-Object -First 1
-if (-not $huella) { Fallo "ssh-keyscan no devolvio la huella ed25519 de $HostReal." }
+# Sin -t: se piden todas y se prefiere la ed25519. El comentario que manda por
+# stderr se descarta (con ErrorActionPreference=Continue ya no para el script).
+$lineas = @(& ssh-keyscan -p $Puerto $HostReal 2>$null | Where-Object { $_ -is [string] -and $_ -notmatch "^#" -and $_.Trim() -ne "" })
+$huella = $lineas | Where-Object { $_ -match "ssh-ed25519" } | Select-Object -First 1
+if (-not $huella) { $huella = $lineas | Select-Object -First 1 }
+if (-not $huella) {
+    Write-Host "   ssh-keyscan no devolvio nada. Prueba a mano: ssh-keyscan -p $Puerto $HostReal"
+    Fallo "sin huella de $HostReal."
+}
 Ok "huella obtenida"
 
 # --- 6. Subir a GitHub -----------------------------------------------------
