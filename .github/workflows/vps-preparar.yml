@@ -50,6 +50,7 @@ jobs:
 
       - name: Copiar vps/ y ejecutar preparar.sh
         run: |
+          set -o pipefail
           tar czf - vps | ssh vps 'sudo -n mkdir -p /srv/openrouter && sudo -n tar xzf - -C /srv/openrouter --no-same-owner'
           {
             echo "## Preparacion de ${API_DOMINIO}"

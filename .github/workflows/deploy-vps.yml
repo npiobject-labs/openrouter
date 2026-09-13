@@ -91,11 +91,14 @@ jobs:
         env:
           SHA: ${{ steps.sha.outputs.sha }}
         run: |
+          set -o pipefail
           docker image ls openrouter-backend --format 'Imagen {{.Repository}}:{{.Tag}} {{.Size}}'
           docker save "openrouter-backend:${SHA}" | gzip -1 | ssh vps 'gunzip | sudo -n docker load'
 
       - name: Copiar vps/
-        run: tar czf - vps | ssh vps 'sudo -n mkdir -p /srv/openrouter && sudo -n tar xzf - -C /srv/openrouter --no-same-owner'
+        run: |
+          set -o pipefail
+          tar czf - vps | ssh vps 'sudo -n mkdir -p /srv/openrouter && sudo -n tar xzf - -C /srv/openrouter --no-same-owner'
 
       # Los valores viajan por la entrada estandar de escribir-env.sh: ni en
       # argumentos ni en el log.
@@ -107,6 +110,7 @@ jobs:
           MODELO_DEFECTO: ${{ vars.MODELO_DEFECTO }}
           CORS_ORIGENES: ${{ vars.VPS_CORS_ORIGENES || 'https://npiobject-labs.github.io' }}
         run: |
+          set -o pipefail
           {
             echo "BUILD_ID=${SHA}"
             echo "IMAGEN_TAG=${SHA}"
