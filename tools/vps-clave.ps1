@@ -34,7 +34,9 @@ param(
     [switch]$SinSubir
 )
 
-$ErrorActionPreference = "Stop"
+# "Continue", no "Stop": ssh y ssh-keyscan escriben avisos por stderr y en
+# PowerShell 5.1 eso pararia el script. Los fallos se miran por $LASTEXITCODE.
+$ErrorActionPreference = "Continue"
 
 function Paso($n, $texto) { Write-Host ""; Write-Host "== Paso $n. $texto" -ForegroundColor Cyan }
 function Ok($texto) { Write-Host "   OK: $texto" -ForegroundColor Green }
@@ -122,7 +124,8 @@ Ok "entra sin contrasena"
 
 # --- 5. Huella del servidor -----------------------------------------------
 Paso 5 "Huella del servidor"
-$huella = (& ssh-keyscan -p $Puerto -t ed25519 $HostReal 2>$null | Where-Object { $_ -match "ssh-ed25519" } | Select-Object -First 1)
+# Via cmd para que el comentario que ssh-keyscan manda por stderr no llegue a PowerShell.
+$huella = (& cmd /c "ssh-keyscan -p $Puerto -t ed25519 $HostReal 2>nul") | Where-Object { $_ -match "ssh-ed25519" } | Select-Object -First 1
 if (-not $huella) { Fallo "ssh-keyscan no devolvio la huella ed25519 de $HostReal." }
 Ok "huella obtenida"
 
