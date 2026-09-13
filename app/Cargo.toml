@@ -12,6 +12,8 @@ reqwest = { version = "0.12", default-features = false, features = ["json", "rus
 tower-http = { version = "0.6", features = ["cors"] }
 # "bundled" compila SQLite con el binario: el runtime no necesita libsqlite3.
 rusqlite = { version = "0.40", features = ["bundled"] }
+# Solo para guardar el hash de las claves de aplicacion, nunca la clave.
+sha2 = "0.10"
 
 [profile.release]
 opt-level = "z"

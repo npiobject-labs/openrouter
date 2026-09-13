@@ -10,6 +10,8 @@ use rusqlite::{params, Connection, OptionalExtension, Row};
 use serde::Serialize;
 use serde_json::Value;
 
+use crate::apps;
+
 /// Dónde vive el histórico. En Fly es el volumen montado en `/datos`; si no se
 /// puede abrir, el servicio sigue funcionando en memoria y lo dice en
 /// `/v1/estado`, que es como se detecta que el volumen no está.
@@ -31,10 +33,13 @@ CREATE TABLE IF NOT EXISTS uso (
     latencia_ms    INTEGER NOT NULL DEFAULT 0,
     motivo_fin     TEXT,
     estado         INTEGER NOT NULL DEFAULT 0,
-    id_openrouter  TEXT
+    id_openrouter  TEXT,
+    app_id         TEXT,
+    operacion      TEXT
 );
 CREATE INDEX IF NOT EXISTS uso_fecha ON uso(fecha);
 CREATE INDEX IF NOT EXISTS uso_modelo ON uso(modelo_servido);
+CREATE INDEX IF NOT EXISTS uso_app ON uso(app_id);
 ";
 
 /// Lo que se sabe de una llamada. Se anota siempre, también cuando falla: un
@@ -59,6 +64,11 @@ pub struct Registro {
     pub estado: u16,
     /// El id de la generación en OpenRouter, con el que se reconcilia el coste.
     pub id_openrouter: Option<String>,
+    /// Qué aplicación llamó. `None` es la clave de administración.
+    pub app_id: Option<String>,
+    /// Lo que venga en la cabecera `X-Operacion`: el trabajo de negocio al que
+    /// pertenece la llamada, para agrupar varias de un mismo presupuesto.
+    pub operacion: Option<String>,
 }
 
 impl Registro {
@@ -125,6 +135,8 @@ impl Registro {
             motivo_fin: f.get("motivo_fin")?,
             estado: f.get("estado")?,
             id_openrouter: f.get("id_openrouter")?,
+            app_id: f.get("app_id")?,
+            operacion: f.get("operacion")?,
         })
     }
 }
@@ -143,6 +155,7 @@ fn entero(v: Option<&Value>) -> i64 {
 pub enum Agrupacion {
     Dia,
     Modelo,
+    App,
 }
 
 impl Agrupacion {
@@ -151,6 +164,7 @@ impl Agrupacion {
     pub fn desde(texto: Option<&str>) -> Self {
         match texto {
             Some("modelo") => Self::Modelo,
+            Some("app") => Self::App,
             _ => Self::Dia,
         }
     }
@@ -160,6 +174,7 @@ impl Agrupacion {
             // La fecha es ISO, así que el día son sus diez primeros caracteres.
             Self::Dia => "substr(fecha, 1, 10)",
             Self::Modelo => "coalesce(modelo_servido, modelo_pedido)",
+            Self::App => "coalesce(app_id, 'administracion')",
         }
     }
 }
@@ -193,6 +208,13 @@ impl Uso {
         conexion
             .execute_batch(ESQUEMA)
             .expect("el esquema de uso debe crearse");
+        conexion
+            .execute_batch(apps::ESQUEMA)
+            .expect("el esquema de aplicaciones debe crearse");
+        // Las bases creadas antes de la etapa 5 no tienen estas columnas.
+        for (columna, tipo) in [("app_id", "TEXT"), ("operacion", "TEXT")] {
+            asegura_columna(&conexion, columna, tipo);
+        }
 
         Self {
             conexion: Mutex::new(conexion),
@@ -242,6 +264,8 @@ impl Uso {
             motivo_fin: None,
             estado: 0,
             id_openrouter: None,
+            app_id: None,
+            operacion: None,
         }
     }
 
@@ -250,12 +274,14 @@ impl Uso {
         let hecho = conexion.execute(
             "INSERT OR REPLACE INTO uso (id, fecha, modelo_pedido, modelo_servido, proveedor,
                 tokens_entrada, tokens_salida, tokens_razonamiento, tokens_cache,
-                coste, coste_origen, latencia_ms, motivo_fin, estado, id_openrouter)
-             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15)",
+                coste, coste_origen, latencia_ms, motivo_fin, estado, id_openrouter,
+                app_id, operacion)
+             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17)",
             params![
                 r.id, r.fecha, r.modelo_pedido, r.modelo_servido, r.proveedor,
                 r.tokens_entrada, r.tokens_salida, r.tokens_razonamiento, r.tokens_cache,
-                r.coste, r.coste_origen, r.latencia_ms, r.motivo_fin, r.estado, r.id_openrouter
+                r.coste, r.coste_origen, r.latencia_ms, r.motivo_fin, r.estado, r.id_openrouter,
+                r.app_id, r.operacion
             ],
         );
         if let Err(e) = hecho {
@@ -263,12 +289,22 @@ impl Uso {
         }
     }
 
-    /// Los últimos `n`, del más reciente al más antiguo.
-    pub fn ultimos(&self, n: usize) -> Vec<Registro> {
+    /// Los últimos `n`, del más reciente al más antiguo. Con `app`, solo los de
+    /// esa aplicación.
+    pub fn ultimos(&self, n: usize, app: Option<&str>) -> Vec<Registro> {
         self.consulta(
-            "SELECT * FROM uso ORDER BY fecha DESC, rowid DESC LIMIT ?1",
-            params![n as i64],
+            "SELECT * FROM uso
+             WHERE (?2 IS NULL OR app_id = ?2)
+             ORDER BY fecha DESC, rowid DESC LIMIT ?1",
+            params![n as i64, app],
         )
+    }
+
+    /// Presta la conexión. La base es una sola y este módulo es su dueño; las
+    /// aplicaciones viven en el mismo fichero y la piden por aquí.
+    pub fn con<T>(&self, f: impl FnOnce(&Connection) -> T) -> T {
+        let conexion = self.conexion.lock().unwrap();
+        f(&conexion)
     }
 
     pub fn uno(&self, id: &str) -> Option<Registro> {
@@ -306,12 +342,18 @@ impl Uso {
 
     /// Las llamadas de un intervalo, de la más antigua a la más reciente, que es
     /// el orden natural para exportar.
-    pub fn intervalo(&self, desde: Option<&str>, hasta: Option<&str>) -> Vec<Registro> {
+    pub fn intervalo(
+        &self,
+        desde: Option<&str>,
+        hasta: Option<&str>,
+        app: Option<&str>,
+    ) -> Vec<Registro> {
         self.consulta(
             "SELECT * FROM uso
              WHERE (?1 IS NULL OR fecha >= ?1) AND (?2 IS NULL OR fecha <= ?2)
+               AND (?3 IS NULL OR app_id = ?3)
              ORDER BY fecha ASC, rowid ASC",
-            params![desde, hasta],
+            params![desde, hasta, app],
         )
     }
 
@@ -321,6 +363,7 @@ impl Uso {
         desde: Option<&str>,
         hasta: Option<&str>,
         agrupar: &Agrupacion,
+        app: Option<&str>,
     ) -> Vec<Value> {
         let consulta = format!(
             "SELECT {columna} AS grupo,
@@ -332,6 +375,7 @@ impl Uso {
                     avg(latencia_ms)        AS latencia_media_ms
              FROM uso
              WHERE (?1 IS NULL OR fecha >= ?1) AND (?2 IS NULL OR fecha <= ?2)
+               AND (?3 IS NULL OR app_id = ?3)
              GROUP BY grupo
              ORDER BY grupo DESC",
             columna = agrupar.columna()
@@ -341,7 +385,7 @@ impl Uso {
         let Ok(mut sentencia) = conexion.prepare(&consulta) else {
             return Vec::new();
         };
-        let filas = sentencia.query_map(params![desde, hasta], |f| {
+        let filas = sentencia.query_map(params![desde, hasta, app], |f| {
             Ok(serde_json::json!({
                 "grupo": f.get::<_, String>("grupo")?,
                 "llamadas": f.get::<_, i64>("llamadas")?,
@@ -369,6 +413,33 @@ impl Uso {
             Err(_) => Vec::new(),
         };
         filas
+    }
+}
+
+/// La fecha de ahora en ISO, que usan tanto el registro como el alta de
+/// aplicaciones.
+pub fn ahora_iso() -> String {
+    let segundos = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+    iso(segundos)
+}
+
+/// Añade una columna si la base viene de una versión anterior. SQLite no tiene
+/// `ADD COLUMN IF NOT EXISTS`, así que se mira primero qué columnas hay.
+fn asegura_columna(conexion: &Connection, columna: &str, tipo: &str) {
+    let existe = conexion
+        .prepare("SELECT 1 FROM pragma_table_info('uso') WHERE name = ?1")
+        .and_then(|mut s| s.query_one(params![columna], |_| Ok(())).optional())
+        .map(|r| r.is_some())
+        .unwrap_or(false);
+
+    if !existe {
+        if let Err(e) = conexion.execute(&format!("ALTER TABLE uso ADD COLUMN {columna} {tipo}"), [])
+        {
+            eprintln!("no se pudo añadir la columna {columna} al historico: {e}");
+        }
     }
 }
 
@@ -475,7 +546,7 @@ mod pruebas {
             uso.anota(r);
         }
 
-        let por_modelo = uso.resumen(None, None, &Agrupacion::Modelo);
+        let por_modelo = uso.resumen(None, None, &Agrupacion::Modelo, None);
         assert_eq!(por_modelo.len(), 2);
         let a = por_modelo.iter().find(|f| f["grupo"] == "a").unwrap();
         assert_eq!(a["llamadas"], 2);
@@ -484,7 +555,7 @@ mod pruebas {
         assert_eq!(a["tokens_entrada"], 20);
 
         // Todas son de hoy, así que por día sale un solo grupo con las tres.
-        let por_dia = uso.resumen(None, None, &Agrupacion::Dia);
+        let por_dia = uso.resumen(None, None, &Agrupacion::Dia, None);
         assert_eq!(por_dia.len(), 1);
         assert_eq!(por_dia[0]["llamadas"], 3);
         assert_eq!(por_dia[0]["coste"], 7.0);
@@ -497,9 +568,33 @@ mod pruebas {
         r.fecha = "2026-09-12T14:48:00Z".into();
         uso.anota(r);
         // Lo que manda la ruta tras normalizar un "hasta" de solo fecha.
-        assert_eq!(uso.intervalo(None, Some("2026-09-12T23:59:59Z")).len(), 1);
+        assert_eq!(uso.intervalo(None, Some("2026-09-12T23:59:59Z"), None).len(), 1);
         // Sin normalizar, la fecha suelta dejaria el dia fuera.
-        assert_eq!(uso.intervalo(None, Some("2026-09-12")).len(), 0);
+        assert_eq!(uso.intervalo(None, Some("2026-09-12"), None).len(), 0);
+    }
+
+    #[test]
+    fn cada_aplicacion_solo_ve_su_gasto() {
+        let uso = en_memoria();
+        for (app, coste) in [(Some("app_uno"), 1.0), (Some("app_uno"), 2.0), (Some("app_dos"), 8.0), (None, 4.0)] {
+            let mut r = uso.abre("m".into());
+            r.app_id = app.map(str::to_string);
+            r.coste = Some(coste);
+            r.estado = 200;
+            uso.anota(r);
+        }
+
+        assert_eq!(uso.ultimos(50, Some("app_uno")).len(), 2);
+        assert_eq!(uso.ultimos(50, Some("app_dos")).len(), 1);
+        assert_eq!(uso.ultimos(50, None).len(), 4, "sin filtro se ve todo");
+
+        let de_una = uso.resumen(None, None, &Agrupacion::Dia, Some("app_uno"));
+        assert_eq!(de_una[0]["coste"], 3.0);
+
+        // Agrupado por aplicacion, la de administracion sale con su etiqueta.
+        let por_app = uso.resumen(None, None, &Agrupacion::App, None);
+        assert_eq!(por_app.len(), 3);
+        assert!(por_app.iter().any(|f| f["grupo"] == "administracion"));
     }
 
     #[test]
@@ -510,8 +605,8 @@ mod pruebas {
             r.fecha = fecha.into();
             uso.anota(r);
         }
-        assert_eq!(uso.intervalo(Some("2026-03-01"), None).len(), 1);
-        assert_eq!(uso.intervalo(None, Some("2026-03-01")).len(), 1);
-        assert_eq!(uso.intervalo(None, None).len(), 2);
+        assert_eq!(uso.intervalo(Some("2026-03-01"), None, None).len(), 1);
+        assert_eq!(uso.intervalo(None, Some("2026-03-01"), None).len(), 1);
+        assert_eq!(uso.intervalo(None, None, None).len(), 2);
     }
 }

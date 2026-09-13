@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="build" content="OP-B1-20260912-012">
+<meta name="build" content="OP-B1-20260913-013">
 <!-- App de Fly: <repo>-<owner>, el mismo nombre que deriva deploy.yml.
      Con otro nombre, cambia este content o abre la pagina con ?app=<nombre>. -->
 <meta name="fly-app" content="openrouter-npiobject-labs">
@@ -64,6 +64,10 @@ td{font-family:var(--mono);font-size:.78rem;font-variant-numeric:tabular-nums}
 td.texto{font-family:var(--sans);font-size:.82rem}
 tr:last-child td{border-bottom:none}
 td.fallo{color:var(--corte)}
+td.baja{color:var(--suave)}
+.aviso-clave{background:var(--aviso-suave);color:var(--aviso);border-radius:6px;padding:.6rem .8rem;font-size:.85rem;display:flex;flex-direction:column;gap:.5rem}
+.aviso-clave p{color:inherit;margin:0}
+.aviso-clave pre{background:var(--superficie);color:var(--tinta);user-select:all}
 footer{display:flex;flex-wrap:wrap;gap:.4rem 1.2rem;font-size:.8rem;color:var(--suave);border-top:1px solid var(--borde);padding-top:1rem}
 </style>
 </head>
@@ -71,7 +75,7 @@ footer{display:flex;flex-wrap:wrap;gap:.4rem 1.2rem;font-size:.8rem;color:var(--
 <main>
   <header>
     <h1>openrouter <span>· consola</span></h1>
-    <p>Cliente de referencia del servicio. Etapas 1 a 4: conexión, catálogo, consulta, medición de lo que cuesta e histórico con totales.</p>
+    <p>Cliente de referencia del servicio. Etapas 1 a 5: conexión, catálogo, consulta, medición, histórico con totales y claves por aplicación.</p>
   </header>
 
   <section class="panel">
@@ -89,6 +93,7 @@ footer{display:flex;flex-wrap:wrap;gap:.4rem 1.2rem;font-size:.8rem;color:var(--
       <div><dt>Límite</dt><dd id="k-limite">–</dd></div>
       <div><dt>Modelo por defecto</dt><dd id="k-modelo">–</dd></div>
       <div><dt>Build</dt><dd id="k-build">–</dd></div>
+      <div><dt>Hablas como</dt><dd id="k-quien">–</dd></div>
     </dl>
     <p>La clave se guarda solo en este navegador. La de OpenRouter nunca sale del backend.</p>
   </section>
@@ -168,6 +173,28 @@ footer{display:flex;flex-wrap:wrap;gap:.4rem 1.2rem;font-size:.8rem;color:var(--
     </table></div>
   </section>
 
+  <section class="panel" id="panel-apps" hidden>
+    <h2>Aplicaciones <span class="estado" id="apps-estado">sin cargar</span></h2>
+    <p>Cada aplicación que llame al servicio debería tener su propia clave. Así se sabe quién gasta, y se puede revocar una sin tocar a las demás ni al despliegue. Este panel solo aparece con la clave de administración.</p>
+    <div class="fila">
+      <label for="app-nombre">Nombre de la aplicación
+        <input id="app-nombre" type="text" placeholder="presupuestos" maxlength="60">
+      </label>
+      <button class="primario" id="btn-app-alta">Crear</button>
+      <button id="btn-apps">Actualizar</button>
+    </div>
+    <div id="app-nueva" hidden>
+      <div class="aviso-clave">
+        <p>Guarda esta clave ahora: el servicio solo conserva su hash y no se puede volver a consultar.</p>
+        <pre id="app-clave"></pre>
+      </div>
+    </div>
+    <div class="tabla"><table>
+      <thead><tr><th>Aplicación</th><th>Id</th><th>Creada</th><th>Estado</th><th></th></tr></thead>
+      <tbody id="apps-filas"><tr><td colspan="5" class="texto">Pulsa «Actualizar» para ver las aplicaciones.</td></tr></tbody>
+    </table></div>
+  </section>
+
   <section class="panel">
     <h2>Resumen <span class="estado" id="res-estado">sin cargar</span></h2>
     <p>Totales del histórico, por día o por modelo. Sin fechas, todo lo que haya guardado.</p>
@@ -194,7 +221,7 @@ footer{display:flex;flex-wrap:wrap;gap:.4rem 1.2rem;font-size:.8rem;color:var(--
   </section>
 
   <footer>
-    <span>Build <code>OP-B1-20260912-012</code></span>
+    <span>Build <code>OP-B1-20260913-013</code></span>
     <span>Backend: <a id="url-backend" href="#">–</a></span>
     <a href="api.html">Documentación de la API</a>
     <a href="./">Mock de todas las etapas</a>
@@ -273,6 +300,10 @@ footer{display:flex;flex-wrap:wrap;gap:.4rem 1.2rem;font-size:.8rem;color:var(--
       texto('k-limite', k.limit == null ? 'sin límite' : Number(k.limit).toFixed(2) + ' $');
       texto('k-modelo', j.modelo_defecto || '–');
       texto('k-build', (j.build || '–').slice(0, 7));
+      var quien = j.identidad || {};
+      texto('k-quien', quien.nombre || '–');
+      // El panel de aplicaciones solo tiene sentido con la clave que manda.
+      $('panel-apps').hidden = !quien.administracion;
       $('ficha-clave').hidden = false;
       cargarCatalogo(false);
     }).catch(function(e){
@@ -441,14 +472,6 @@ footer{display:flex;flex-wrap:wrap;gap:.4rem 1.2rem;font-size:.8rem;color:var(--
 
   $('btn-uso').addEventListener('click', cargarUso);
 
-  // --- resumen --------------------------------------------------------------
-  function fechas(){
-    var q = [];
-    if ($('res-desde').value) q.push('desde=' + $('res-desde').value);
-    if ($('res-hasta').value) q.push('hasta=' + $('res-hasta').value);
-    return q;
-  }
-
   function fila(celdas){
     var tr = document.createElement('tr');
     celdas.forEach(function(c){
@@ -458,6 +481,83 @@ footer{display:flex;flex-wrap:wrap;gap:.4rem 1.2rem;font-size:.8rem;color:var(--
       tr.appendChild(td);
     });
     return tr;
+  }
+
+  // --- aplicaciones ---------------------------------------------------------
+  function cargarApps(){
+    var boton = $('btn-apps');
+    boton.disabled = true;
+    pinta('apps-estado', 'cargando…', '');
+    llama('/v1/apps').then(function(res){
+      var cuerpo = $('apps-filas');
+      cuerpo.textContent = '';
+      if (!res.datos.data.length){
+        var vacia = fila([{ v: 'Todavía no hay ninguna aplicación dada de alta.', clase: 'texto' }]);
+        vacia.firstChild.colSpan = 5;
+        cuerpo.appendChild(vacia);
+      }
+      res.datos.data.forEach(function(a){
+        var tr = fila([
+          { v: a.nombre, clase: 'texto' },
+          { v: a.id },
+          { v: (a.creada || '').slice(0, 10) },
+          { v: a.activa ? 'activa' : 'dada de baja', clase: a.activa ? '' : 'baja' },
+          { v: '' }
+        ]);
+        if (a.activa){
+          var boton = document.createElement('button');
+          boton.textContent = 'Dar de baja';
+          boton.addEventListener('click', function(){ bajaApp(a); });
+          tr.lastChild.appendChild(boton);
+        }
+        cuerpo.appendChild(tr);
+      });
+      var activas = res.datos.data.filter(function(a){ return a.activa; }).length;
+      pinta('apps-estado', activas + ' con clave activa de ' + res.datos.total, 'ok');
+    }).catch(function(e){
+      pinta('apps-estado', e.message, 'mal');
+    }).finally(function(){ boton.disabled = false; });
+  }
+
+  function altaApp(){
+    var nombre = $('app-nombre').value.trim();
+    if (!nombre){ pinta('apps-estado', 'ponle un nombre', 'avisa'); return; }
+    var boton = $('btn-app-alta');
+    boton.disabled = true;
+    pinta('apps-estado', 'creando…', '');
+    llama('/v1/apps', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ nombre: nombre })
+    }).then(function(res){
+      texto('app-clave', res.datos.clave);
+      $('app-nueva').hidden = false;
+      $('app-nombre').value = '';
+      pinta('apps-estado', 'creada ' + res.datos.app.id, 'ok');
+      cargarApps();
+    }).catch(function(e){
+      pinta('apps-estado', e.message, 'mal');
+    }).finally(function(){ boton.disabled = false; });
+  }
+
+  function bajaApp(a){
+    if (!confirm('Dar de baja «' + a.nombre + '». Su clave dejará de funcionar al momento y no se puede recuperar. ¿Seguro?')) return;
+    pinta('apps-estado', 'dando de baja…', '');
+    llama('/v1/apps/' + encodeURIComponent(a.id), { method: 'DELETE' }).then(function(){
+      pinta('apps-estado', a.id + ' dada de baja', 'ok');
+      cargarApps();
+    }).catch(function(e){ pinta('apps-estado', e.message, 'mal'); });
+  }
+
+  $('btn-apps').addEventListener('click', cargarApps);
+  $('btn-app-alta').addEventListener('click', altaApp);
+
+  // --- resumen --------------------------------------------------------------
+  function fechas(){
+    var q = [];
+    if ($('res-desde').value) q.push('desde=' + $('res-desde').value);
+    if ($('res-hasta').value) q.push('hasta=' + $('res-hasta').value);
+    return q;
   }
 
   function cargarResumen(){

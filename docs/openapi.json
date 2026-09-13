@@ -2,9 +2,9 @@
   "openapi": "3.1.0",
   "info": {
     "title": "openrouter · servicio",
-    "version": "0.4.0",
+    "version": "0.5.0",
     "summary": "Pasarela propia sobre OpenRouter, pensada para ser llamada por otras aplicaciones.",
-    "description": "Esto no es una aplicación con interfaz: es un conjunto de servicios HTTP. La clave de OpenRouter vive solo en el backend y nunca sale de él; las apps consumidoras usan una clave de servicio propia.\n\nEl contrato sigue el de la API de OpenAI donde existe equivalente, así que cualquier cliente de OpenAI funciona cambiando la URL base. Lo propio del servicio va en rutas propias y en cabeceras `X-...`. Una ruta publicada no se rompe: lo incompatible iría a `/v2/`.\n\nLa versión de este documento acompaña a la etapa entregada: `0.4.0` es la etapa 4.",
+    "description": "Esto no es una aplicación con interfaz: es un conjunto de servicios HTTP. La clave de OpenRouter vive solo en el backend y nunca sale de él. Cada aplicación consumidora tiene su propia clave, que se da de alta y se revoca sin tocar el despliegue.\n\nEl contrato sigue el de la API de OpenAI donde existe equivalente, así que cualquier cliente de OpenAI funciona cambiando la URL base. Lo propio del servicio va en rutas propias y en cabeceras `X-...`. Una ruta publicada no se rompe: lo incompatible iría a `/v2/`.\n\nLa versión de este documento acompaña a la etapa entregada: `0.5.0` es la etapa 5.",
     "license": {
       "name": "Uso interno"
     }
@@ -40,6 +40,10 @@
     {
       "name": "Uso",
       "description": "Qué consumió cada llamada: tokens, coste, latencia y proveedor."
+    },
+    {
+      "name": "Aplicaciones",
+      "description": "Alta, baja y listado de las aplicaciones que pueden llamar al servicio. Solo con la clave de administración."
     }
   ],
   "paths": {
@@ -120,7 +124,12 @@
                     "is_free_tier": false
                   },
                   "almacen": "sqlite",
-                  "registros": 128
+                  "registros": 128,
+                  "identidad": {
+                    "nombre": "presupuestos",
+                    "app_id": "app_27b1d11e45",
+                    "administracion": false
+                  }
                 }
               }
             }
@@ -334,7 +343,19 @@
           "503": {
             "$ref": "#/components/responses/SinConfigurar"
           }
-        }
+        },
+        "parameters": [
+          {
+            "name": "X-Operacion",
+            "in": "header",
+            "required": false,
+            "description": "Identificador del trabajo de negocio al que pertenece la llamada, por ejemplo el número de presupuesto. Se guarda en el registro para agrupar después varias llamadas del mismo trabajo. Hasta 120 caracteres.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "presupuesto-2026-041"
+          }
+        ]
       }
     },
     "/v1/uso": {
@@ -343,7 +364,7 @@
           "Uso"
         ],
         "summary": "Últimas llamadas",
-        "description": "El registro de las últimas llamadas, de la más reciente a la más antigua.\n\nDesde la etapa 4 salen del histórico en disco, así que sobreviven a un reinicio. Para ventanas de tiempo y totales, `/v1/uso/resumen`; para llevarse los datos, `/v1/uso/exportar`.",
+        "description": "El registro de las últimas llamadas, de la más reciente a la más antigua.\n\nDesde la etapa 4 salen del histórico en disco, así que sobreviven a un reinicio. Para ventanas de tiempo y totales, `/v1/uso/resumen`; para llevarse los datos, `/v1/uso/exportar`.\n\nCon clave de aplicación solo salen sus propias llamadas; `total` sigue siendo el del servicio.",
         "parameters": [
           {
             "name": "n",
@@ -356,6 +377,15 @@
               "default": 50
             },
             "example": 10
+          },
+          {
+            "name": "app",
+            "in": "query",
+            "description": "Con clave de administración, limita a esa aplicación. Con clave de aplicación se ignora: cada una ve solo lo suyo.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "app_27b1d11e45"
           }
         ],
         "responses": {
@@ -419,7 +449,7 @@
           "Uso"
         ],
         "summary": "Una llamada concreta",
-        "description": "El registro que corresponde a un `X-Uso-Id`.\n\nDesde la etapa 4 el histórico está en disco y no caduca.\n\nEl coste llega primero estimado con los precios del catálogo y, un par de segundos después, reconciliado con lo que factura OpenRouter. El campo `coste_origen` dice cuál de los dos estás viendo, así que una aplicación que quiera el dato bueno puede volver a preguntar.",
+        "description": "El registro que corresponde a un `X-Uso-Id`.\n\nDesde la etapa 4 el histórico está en disco y no caduca.\n\nEl coste llega primero estimado con los precios del catálogo y, un par de segundos después, reconciliado con lo que factura OpenRouter. El campo `coste_origen` dice cuál de los dos estás viendo, así que una aplicación que quiera el dato bueno puede volver a preguntar.\n\nUna aplicación solo puede consultar registros suyos: los de otra responden como si no existieran.",
         "parameters": [
           {
             "name": "id",
@@ -512,16 +542,26 @@
           {
             "name": "agrupar",
             "in": "query",
-            "description": "`dia` (por defecto) o `modelo`.",
+            "description": "`dia` (por defecto), `modelo` o `app`.",
             "schema": {
               "type": "string",
               "enum": [
                 "dia",
-                "modelo"
+                "modelo",
+                "app"
               ],
               "default": "dia"
             },
             "example": "modelo"
+          },
+          {
+            "name": "app",
+            "in": "query",
+            "description": "Con clave de administración, limita a esa aplicación. Con clave de aplicación se ignora: cada una ve solo lo suyo.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "app_27b1d11e45"
           }
         ],
         "responses": {
@@ -651,6 +691,15 @@
               "default": "json"
             },
             "example": "csv"
+          },
+          {
+            "name": "app",
+            "in": "query",
+            "description": "Con clave de administración, limita a esa aplicación. Con clave de aplicación se ignora: cada una ve solo lo suyo.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "app_27b1d11e45"
           }
         ],
         "responses": {
@@ -704,6 +753,206 @@
           }
         }
       }
+    },
+    "/v1/apps": {
+      "post": {
+        "tags": [
+          "Aplicaciones"
+        ],
+        "summary": "Dar de alta una aplicación",
+        "description": "Crea una aplicación y devuelve su clave.\n\nLa clave se enseña **una sola vez**: el servicio guarda solo su hash, así que no hay forma de recuperarla. Si se pierde, se da de baja esa aplicación y se crea otra.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "nombre"
+                ],
+                "properties": {
+                  "nombre": {
+                    "type": "string"
+                  }
+                }
+              },
+              "example": {
+                "nombre": "presupuestos"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Creada. Guarda la clave ahora.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    },
+                    "app": {
+                      "$ref": "#/components/schemas/App"
+                    },
+                    "clave": {
+                      "type": "string"
+                    },
+                    "aviso": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "example": {
+                  "ok": true,
+                  "app": {
+                    "id": "app_27b1d11e45",
+                    "nombre": "presupuestos",
+                    "activa": true,
+                    "creada": "2026-09-13T07:29:01Z"
+                  },
+                  "clave": "svc_88045e377b78d526325411e618db18f1510eed4705bc2040",
+                  "aviso": "Guarda la clave ahora: no se puede volver a consultar."
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/PeticionInvalida"
+          },
+          "401": {
+            "$ref": "#/components/responses/NoAutorizado"
+          },
+          "403": {
+            "$ref": "#/components/responses/SinPermiso"
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "Aplicaciones"
+        ],
+        "summary": "Listar aplicaciones",
+        "description": "Las aplicaciones dadas de alta, con clave activa o no. Nunca devuelve claves.",
+        "responses": {
+          "200": {
+            "description": "Lista de aplicaciones.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "object": {
+                      "type": "string",
+                      "const": "list"
+                    },
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/App"
+                      }
+                    },
+                    "total": {
+                      "type": "integer"
+                    }
+                  }
+                },
+                "example": {
+                  "object": "list",
+                  "data": [
+                    {
+                      "id": "app_27b1d11e45",
+                      "nombre": "presupuestos",
+                      "activa": true,
+                      "creada": "2026-09-13T07:29:01Z"
+                    }
+                  ],
+                  "total": 1
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/NoAutorizado"
+          },
+          "403": {
+            "$ref": "#/components/responses/SinPermiso"
+          }
+        }
+      }
+    },
+    "/v1/apps/{id}": {
+      "delete": {
+        "tags": [
+          "Aplicaciones"
+        ],
+        "summary": "Dar de baja una aplicación",
+        "description": "Su clave deja de funcionar al momento.\n\nLa aplicación no se borra: el histórico de uso la sigue referenciando, y un informe del mes pasado tiene que poder decir quién gastó.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "app_27b1d11e45"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Desactivada.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    },
+                    "id": {
+                      "type": "string"
+                    },
+                    "activa": {
+                      "type": "boolean"
+                    }
+                  }
+                },
+                "example": {
+                  "ok": true,
+                  "id": "app_27b1d11e45",
+                  "activa": false
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/NoAutorizado"
+          },
+          "403": {
+            "$ref": "#/components/responses/SinPermiso"
+          },
+          "404": {
+            "description": "No hay ninguna aplicación con ese id.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "ok": false,
+                  "error": {
+                    "message": "No hay ninguna aplicación con id app_1.",
+                    "code": "app_desconocida",
+                    "type": "not_found_error"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -711,7 +960,7 @@
       "claveDeServicio": {
         "type": "http",
         "scheme": "bearer",
-        "description": "Clave de servicio en `Authorization: Bearer <clave>`. Hoy es una sola clave compartida; las claves por aplicación, con su cuota y su presupuesto, llegan en las etapas 5 y 6. Nunca la pongas en código de navegador: llama desde el backend de tu aplicación."
+        "description": "Clave en `Authorization: Bearer <clave>`.\n\nHay dos tipos. La **clave de administración** es la del despliegue y puede con todo, incluidas las rutas de `/v1/apps`. Las **claves de aplicación** se dan de alta en `POST /v1/apps`, se revocan una a una y solo ven su propio gasto.\n\nNunca la pongas en código de navegador: llama desde el backend de tu aplicación. Las cuotas y presupuestos por aplicación llegan en la etapa 6."
       }
     },
     "schemas": {
@@ -768,6 +1017,24 @@
           "registros": {
             "type": "integer",
             "description": "Llamadas guardadas ahora mismo."
+          },
+          "identidad": {
+            "type": "object",
+            "description": "Con qué clave estás hablando.",
+            "properties": {
+              "nombre": {
+                "type": "string"
+              },
+              "app_id": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "administracion": {
+                "type": "boolean"
+              }
+            }
           }
         },
         "required": [
@@ -971,6 +1238,7 @@
                 "enum": [
                   "invalid_request_error",
                   "authentication_error",
+                  "permission_error",
                   "insufficient_quota",
                   "not_found_error",
                   "rate_limit_error",
@@ -1070,6 +1338,20 @@
               "string",
               "null"
             ]
+          },
+          "app_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Qué aplicación llamó. `null` es la clave de administración."
+          },
+          "operacion": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Lo que viniera en la cabecera `X-Operacion`: el trabajo de negocio al que pertenece la llamada."
           }
         },
         "required": [
@@ -1080,6 +1362,31 @@
           "tokens_salida",
           "latencia_ms",
           "estado"
+        ]
+      },
+      "App": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Identificador estable, `app_...`. Es lo que aparece en el registro de uso."
+          },
+          "nombre": {
+            "type": "string"
+          },
+          "activa": {
+            "type": "boolean",
+            "description": "Con `false`, su clave ya no sirve, pero su histórico se conserva."
+          },
+          "creada": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "nombre",
+          "activa",
+          "creada"
         ]
       }
     },
@@ -1213,6 +1520,24 @@
             }
           }
         }
+      },
+      "SinPermiso": {
+        "description": "La clave es válida pero no llega: esta ruta exige la de administración.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            },
+            "example": {
+              "ok": false,
+              "error": {
+                "message": "Esta ruta exige la clave de administración del servicio.",
+                "code": "solo_administracion",
+                "type": "permission_error"
+              }
+            }
+          }
+        }
       }
     }
   },
@@ -1276,6 +1601,21 @@
       "code": "formato_invalido",
       "http": 400,
       "cuando": "La exportación se pidió en un formato que no es csv ni json."
+    },
+    {
+      "code": "solo_administracion",
+      "http": 403,
+      "cuando": "Se llamó a una ruta de administración con una clave de aplicación."
+    },
+    {
+      "code": "app_desconocida",
+      "http": 404,
+      "cuando": "Se intentó dar de baja una aplicación que no existe."
+    },
+    {
+      "code": "alta_fallida",
+      "http": 500,
+      "cuando": "No se pudo escribir la aplicación nueva en el histórico."
     }
   ],
   "x-etapas": [
@@ -1342,7 +1682,7 @@
     {
       "numero": 5,
       "titulo": "Aplicaciones consumidoras",
-      "estado": "siguiente",
+      "estado": "entregada",
       "rutas": [
         {
           "metodo": "POST",
@@ -1357,12 +1697,12 @@
           "ruta": "/v1/apps/{id}"
         }
       ],
-      "nota": "Una clave por aplicación, con su etiqueta, en vez de la clave única de hoy. Cada registro de uso pasa a saber quién lo causó, y la cabecera X-Operacion permitirá agrupar varias llamadas de un mismo trabajo."
+      "nota": "Una clave por aplicación, revocable sin tocar el despliegue. Cada llamada queda anotada con su aplicación, y la cabecera X-Operacion agrupa varias llamadas de un mismo trabajo. Cada aplicación ve solo su gasto; la clave de administración lo ve todo y puede agrupar por aplicación."
     },
     {
       "numero": 6,
       "titulo": "Presupuestos, cuotas y cortacircuitos",
-      "estado": "planificada",
+      "estado": "siguiente",
       "rutas": [
         {
           "metodo": "GET",

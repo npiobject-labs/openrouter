@@ -2,6 +2,7 @@ use std::{collections::HashMap, sync::Arc};
 
 use axum::{
     extract::{Path, Query, State},
+    Extension,
     http::{
         header::{HeaderName, CONTENT_DISPOSITION, CONTENT_TYPE},
         StatusCode,
@@ -11,7 +12,7 @@ use axum::{
 };
 use serde_json::{json, Value};
 
-use crate::{error::ErrorApi, uso::Agrupacion, Servicio};
+use crate::{apps::Identidad, error::ErrorApi, uso::Agrupacion, Servicio};
 
 /// Cabecera con la que el cliente sabe qué registro mirar después. Va en
 /// `expose_headers` del CORS: sin eso el navegador no la deja leer.
@@ -25,6 +26,7 @@ const POR_DEFECTO: usize = 50;
 /// reinicio. Para ventanas de tiempo y totales está `/v1/uso/resumen`.
 pub async fn lista(
     State(servicio): State<Arc<Servicio>>,
+    Extension(quien): Extension<Identidad>,
     Query(parametros): Query<HashMap<String, String>>,
 ) -> Json<Value> {
     let n = parametros
@@ -33,9 +35,10 @@ pub async fn lista(
         .unwrap_or(POR_DEFECTO)
         .clamp(1, 1000);
 
+    let app = filtro_de_app(&quien, &parametros);
     Json(json!({
         "object": "list",
-        "data": servicio.uso.ultimos(n),
+        "data": servicio.uso.ultimos(n, app.as_deref()),
         "total": servicio.uso.total(),
     }))
 }
@@ -43,11 +46,15 @@ pub async fn lista(
 /// `GET /v1/uso/{id}`: una llamada concreta, la que devolvió `X-Uso-Id`.
 pub async fn una(
     State(servicio): State<Arc<Servicio>>,
+    Extension(quien): Extension<Identidad>,
     Path(id): Path<String>,
 ) -> Result<Json<Value>, ErrorApi> {
     servicio
         .uso
         .uno(&id)
+        // Una aplicacion solo ve sus propias llamadas: un registro de otra no
+        // existe para ella.
+        .filter(|r| quien.admin || r.app_id == quien.app_id())
         .map(|r| Json(json!(r)))
         .ok_or_else(|| {
             ErrorApi::nuevo(
@@ -64,13 +71,16 @@ pub async fn una(
 /// tanto `2026-09-12` como `2026-09-12T14:00:00Z`. Sin ellos, todo el histórico.
 pub async fn resumen(
     State(servicio): State<Arc<Servicio>>,
+    Extension(quien): Extension<Identidad>,
     Query(parametros): Query<HashMap<String, String>>,
 ) -> Json<Value> {
     let agrupar = Agrupacion::desde(parametros.get("agrupar").map(String::as_str));
+    let app = filtro_de_app(&quien, &parametros);
     let filas = servicio.uso.resumen(
         intervalo(&parametros, "desde").as_deref(),
         intervalo(&parametros, "hasta").as_deref(),
         &agrupar,
+        app.as_deref(),
     );
 
     // Los contadores se suman como enteros: un "llamadas: 3.0" en el JSON
@@ -88,7 +98,11 @@ pub async fn resumen(
 
     Json(json!({
         "object": "list",
-        "agrupar": match agrupar { Agrupacion::Modelo => "modelo", Agrupacion::Dia => "dia" },
+        "agrupar": match agrupar {
+            Agrupacion::Modelo => "modelo",
+            Agrupacion::App => "app",
+            Agrupacion::Dia => "dia",
+        },
         "data": filas,
         "totales": {
             "llamadas": cuenta("llamadas"),
@@ -106,6 +120,7 @@ pub async fn resumen(
 /// nombre decente en vez de pintarlo en pantalla.
 pub async fn exportar(
     State(servicio): State<Arc<Servicio>>,
+    Extension(quien): Extension<Identidad>,
     Query(parametros): Query<HashMap<String, String>>,
 ) -> Result<Response, ErrorApi> {
     let formato = parametros
@@ -113,9 +128,11 @@ pub async fn exportar(
         .map(String::as_str)
         .unwrap_or("json");
 
+    let app = filtro_de_app(&quien, &parametros);
     let registros = servicio.uso.intervalo(
         intervalo(&parametros, "desde").as_deref(),
         intervalo(&parametros, "hasta").as_deref(),
+        app.as_deref(),
     );
 
     match formato {
@@ -162,6 +179,20 @@ tokens_razonamiento,tokens_cache,coste,coste_origen,latencia_ms,motivo_fin,estad
             format!("Formato {otro} desconocido: usa csv o json."),
         )),
     }
+}
+
+/// Por qué aplicación se filtra. Con clave de aplicación, siempre la suya: no
+/// puede mirar el gasto de otra ni pidiéndolo. Con clave de administración,
+/// lo que diga `?app=`, y sin ese parámetro, todo.
+fn filtro_de_app(quien: &Identidad, parametros: &HashMap<String, String>) -> Option<String> {
+    if !quien.admin {
+        return quien.app_id();
+    }
+    parametros
+        .get("app")
+        .map(String::as_str)
+        .filter(|v| !v.is_empty())
+        .map(str::to_string)
 }
 
 /// Un parámetro de fecha, descartando el vacío para que `?desde=` no filtre.

@@ -2,13 +2,13 @@ use std::{sync::Arc, time::Duration, time::Instant};
 
 use axum::{
     extract::State,
-    http::{HeaderValue, StatusCode},
+    http::{HeaderMap, HeaderValue, StatusCode},
     response::{IntoResponse, Response},
-    Json,
+    Extension, Json,
 };
 use serde_json::Value;
 
-use crate::{error::ErrorApi, rutas::uso::CABECERA_USO, Servicio};
+use crate::{apps::Identidad, error::ErrorApi, rutas::uso::CABECERA_USO, Servicio};
 
 /// Cuánto se espera entre intentos de reconciliación. OpenRouter tarda un poco
 /// en dejar lista la contabilidad de una generación.
@@ -22,6 +22,8 @@ const REINTENTOS: [u64; 3] = [400, 1200, 3000];
 /// vuelta en la cabecera `X-Uso-Id`.
 pub async fn chat(
     State(servicio): State<Arc<Servicio>>,
+    Extension(quien): Extension<Identidad>,
+    cabeceras: HeaderMap,
     Json(mut cuerpo): Json<Value>,
 ) -> Result<Response, ErrorApi> {
     let objeto = cuerpo.as_object_mut().ok_or_else(|| {
@@ -55,6 +57,14 @@ pub async fn chat(
         .to_string();
 
     let mut registro = servicio.uso.abre(pedido.clone());
+    registro.app_id = quien.app_id();
+    // El trabajo de negocio al que pertenece la llamada: varias consultas de un
+    // mismo presupuesto se agrupan luego por aqui.
+    registro.operacion = cabeceras
+        .get("x-operacion")
+        .and_then(|v| v.to_str().ok())
+        .map(|v| v.trim().chars().take(120).collect::<String>())
+        .filter(|v| !v.is_empty());
     let id_uso = registro.id.clone();
 
     let reloj = Instant::now();
