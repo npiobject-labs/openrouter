@@ -1,0 +1,81 @@
+name: Inspeccionar el VPS
+
+# Solo lectura: entra por SSH y ejecuta vps/inspeccionar.sh, que no cambia
+# nada. Sirve para saber que proxy sirve 80/443, que dominios atiende ya, que
+# puerto interno queda libre y si el subdominio resuelve a la maquina. La
+# sesion de claude.ai/code no puede llegar al VPS; este workflow si.
+
+on:
+  workflow_dispatch:
+    inputs:
+      dominio:
+        description: Subdominio que se quiere servir
+        required: false
+        default: apisor.oracle402.com
+
+permissions:
+  contents: read
+
+jobs:
+  inspeccionar:
+    name: Leer el estado del VPS
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      VPS_HOST: ${{ secrets.VPS_HOST }}
+      VPS_PUERTO: ${{ secrets.VPS_PUERTO }}
+      VPS_USUARIO: ${{ secrets.VPS_USUARIO }}
+      VPS_SSH_CLAVE: ${{ secrets.VPS_SSH_CLAVE }}
+      VPS_HOST_KEY: ${{ secrets.VPS_HOST_KEY }}
+      API_DOMINIO: ${{ inputs.dominio || vars.API_DOMINIO || 'apisor.oracle402.com' }}
+    steps:
+      - name: Comprobar los secretos
+        run: |
+          faltan=""
+          for v in VPS_HOST VPS_USUARIO VPS_SSH_CLAVE; do
+            [ -n "${!v}" ] || faltan="${faltan} ${v}"
+          done
+          if [ -n "${faltan}" ]; then
+            echo "::error::Faltan secretos de repositorio:${faltan}. Crealos en Settings → Secrets and variables → Actions."
+            exit 1
+          fi
+          echo "Secretos presentes (valores ocultos). Puerto SSH: ${VPS_PUERTO:-22}."
+
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Preparar la clave SSH
+        run: |
+          mkdir -p ~/.ssh && chmod 700 ~/.ssh
+          printf '%s\n' "${VPS_SSH_CLAVE}" > ~/.ssh/vps
+          chmod 600 ~/.ssh/vps
+          if [ -n "${VPS_HOST_KEY}" ]; then
+            printf '%s\n' "${VPS_HOST_KEY}" > ~/.ssh/known_hosts
+            echo "Huella del servidor tomada del secreto VPS_HOST_KEY."
+          else
+            # Sin huella fijada se acepta la que responda hoy. Vale para
+            # inspeccionar; para desplegar hara falta VPS_HOST_KEY.
+            ssh-keyscan -p "${VPS_PUERTO:-22}" -H "${VPS_HOST}" > ~/.ssh/known_hosts 2> /dev/null
+            echo "::warning::Sin VPS_HOST_KEY: se acepta la huella actual del servidor. Fijala antes de desplegar."
+          fi
+          chmod 600 ~/.ssh/known_hosts
+
+      - name: Ejecutar la inspeccion
+        run: |
+          {
+            echo "## Inspeccion del VPS para ${API_DOMINIO}"
+            ssh -i ~/.ssh/vps -p "${VPS_PUERTO:-22}" \
+                -o BatchMode=yes -o ConnectTimeout=15 -o StrictHostKeyChecking=yes \
+                "${VPS_USUARIO}@${VPS_HOST}" \
+                "API_DOMINIO='${API_DOMINIO}' bash -s" < vps/inspeccionar.sh
+          } | tee informe.md
+          cat informe.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Guardar el informe
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: inspeccion-vps
+          path: informe.md
+          if-no-files-found: ignore
+          retention-days: 14

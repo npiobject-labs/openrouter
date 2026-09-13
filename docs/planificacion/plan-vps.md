@@ -43,14 +43,24 @@ como el resto del proyecto.
   con acceso por SSH con clave y un usuario con `sudo`, y se puede instalar
   Docker.** Plan B: sin Docker, se despliega el binario compilado con
   `x86_64-unknown-linux-musl` desde el runner y se ejecuta con una unidad de
-  systemd endurecida (sección 4.6). La API, los secretos y la verificación no
+  systemd endurecida (mismo `.env`, mismos scripts de copia). La API, los secretos y la verificación no
   cambian; solo cambia cómo se arranca el proceso.
-- **[SUPUESTO] Los puertos 80 y 443 del VPS están libres o los sirve algo que
-  puede integrarse.** Si ya hay un nginx, Traefik o Caddy sirviendo otros
-  dominios, no se instala un segundo proxy: se añade un `server`/`site` para el
-  subdominio que reenvíe a `127.0.0.1:8080`, y Caddy queda fuera del
-  `compose`. La primera tarea del workflow de preparación es precisamente
-  detectar qué hay escuchando en 80/443 y parar si no lo reconoce.
+- **El VPS ya tiene un Caddy sirviendo otros dominios** (lo dice el usuario;
+  la inspección de la fase 0 lo confirma). Eso cambia una cosa importante:
+  **no hace falta ningún puerto público nuevo**. Caddy ya escucha en 80 y
+  443 para todos sus dominios y reparte por nombre de host; el subdominio
+  `apisor.oracle402.com` es un bloque de sitio más en su configuración, con
+  un `reverse_proxy` al backend. Lo que sí hay que elegir es el **puerto
+  interno** en el que el contenedor del backend escucha en `127.0.0.1`,
+  porque el 8080 puede estar ocupado por otro servicio; `vps/inspeccionar.sh`
+  lista los ocupados y propone el primer libre. El `compose` del proyecto
+  **no lleva Caddy**: un segundo Caddy pelearía por 80/443 con el que ya está.
+  [SUPUESTO] ese Caddy corre en el host (paquete `caddy`, unidad de systemd,
+  `/etc/caddy/Caddyfile` con `import` de una carpeta). Plan B si corre en
+  Docker: se añade nuestro sitio a su `Caddyfile` montado y se conecta el
+  backend a su red de Docker por nombre de contenedor en vez de por
+  `127.0.0.1`. Plan C si no es Caddy sino nginx: mismo esquema con un
+  `server` y certbot, que la inspección también detecta.
 - **[SUPUESTO] El subdominio se resuelve por un registro A (y AAAA si el VPS
   tiene IPv6) directo a la IP del VPS, sin proxy de Cloudflare delante.** Con
   el proxy naranja de Cloudflare, Caddy no puede completar el reto HTTP-01
@@ -73,11 +83,12 @@ como el resto del proyecto.
 ## 1. Arquitectura en el VPS
 
 ```
-Internet ──443──▶ Caddy (TLS automático, HSTS, cabeceras, límite de cuerpo)
-                     │ reverse_proxy
+Internet ──443──▶ Caddy que YA existe en el VPS (TLS automático para todos
+                  sus dominios; apisor.oracle402.com es un sitio más)
+                     │ reverse_proxy 127.0.0.1:<PUERTO_INTERNO>
                      ▼
               openrouter-backend (contenedor, uid 10001, sin root,
-              fs de solo lectura, 8080 solo en la red interna de compose)
+              fs de solo lectura, publicado SOLO en 127.0.0.1:<PUERTO_INTERNO>)
                      │
                      ▼
               /srv/openrouter/datos/uso.db  (bind mount, SQLite WAL)
@@ -86,8 +97,16 @@ Internet ──443──▶ Caddy (TLS automático, HSTS, cabeceras, límite de 
               /srv/openrouter/copias/       (copia diaria, rotación 30 días)
 ```
 
-- **Un `compose.yml`** con dos servicios: `caddy` y `openrouter`. El backend no
-  publica ningún puerto al exterior; solo Caddy lo alcanza por la red interna.
+- **Un `compose.yml`** con un solo servicio, `openrouter`. Publica el puerto
+  como `127.0.0.1:${PUERTO_INTERNO}:8080`: alcanzable desde el Caddy del host
+  y desde nada más. `PUERTO_INTERNO` sale de la inspección y va en el `.env`.
+- **El sitio en Caddy** es un fichero propio, `vps/apisor.caddy`, que
+  `desplegar.sh` copia a la carpeta que el `Caddyfile` del VPS importe
+  (`/etc/caddy/conf.d/` o la que la inspección encuentre) y recarga con
+  `caddy reload` (sin corte: Caddy recarga en caliente). Si el `Caddyfile`
+  no importa ninguna carpeta, `preparar.sh` añade una línea `import
+  /etc/caddy/conf.d/*.caddy` al final, y es lo único que toca de una
+  configuración que no es nuestra.
 - **Imagen del backend**: la construye el runner de GitHub con el `Dockerfile`
   de `app/` y la publica en GitHub Container Registry como
   `ghcr.io/npiobject-labs/openrouter:<sha>` y `:release`. El VPS solo hace
@@ -112,15 +131,17 @@ Internet ──443──▶ Caddy (TLS automático, HSTS, cabeceras, límite de 
 
 ```
 vps/
-  compose.yml          # los dos servicios, red interna, límites, healthcheck
-  Caddyfile            # el subdominio, TLS, cabeceras, límites, timeouts
-  preparar.sh          # idempotente: Docker, ufw, fail2ban, usuario, carpetas, sudoers
+  inspeccionar.sh      # solo lectura: proxy en 80/443, dominios, puerto interno libre, DNS (HECHO)
+  compose.yml          # un servicio, publicado solo en 127.0.0.1:<PUERTO_INTERNO>, límites, healthcheck
+  apisor.caddy         # el sitio del subdominio para el Caddy del host: cabeceras, límites, timeouts
+  preparar.sh          # idempotente: Docker, ufw, fail2ban, usuario, carpetas, sudoers, import en Caddy
   desplegar.sh         # el único comando con sudo: pull, up, espera al healthcheck
   copia.sh             # copia diaria de la base con rotación; lo lanza un timer de systemd
   copia.service / copia.timer
 tools/
   verificar-servicio.sh  # las comprobaciones de deploy.yml extraídas, con la URL base como argumento
 .github/workflows/
+  vps-inspeccionar.yml # workflow_dispatch, solo lectura; el informe sale en el resumen del run (HECHO)
   vps-preparar.yml     # workflow_dispatch, una vez (y cuando cambie preparar.sh)
   deploy-vps.yml       # push a release + workflow_dispatch con sha para rollback
 ```
@@ -179,10 +200,13 @@ Ordenado de fuera hacia dentro. Cada punto dice quién lo aplica.
 - Sin `docker.sock` montado en ningún sitio. Nada de Watchtower: la
   actualización la dispara el workflow, que es quien verifica.
 
-### 2.3 Borde (Caddy)
+### 2.3 Borde (el Caddy del VPS)
 
-- TLS automático con Let's Encrypt, renovación sola. HTTP redirige a HTTPS
-  (Caddy lo hace por defecto).
+- Todo lo de esta sección va en `vps/apisor.caddy`, el bloque de sitio de
+  `apisor.oracle402.com`; el resto de la configuración de Caddy no es nuestra
+  y no se toca.
+- TLS automático con Let's Encrypt, renovación sola, como ya hace ese Caddy
+  con sus otros dominios. HTTP redirige a HTTPS (Caddy lo hace por defecto).
 - `Strict-Transport-Security: max-age=31536000` (sin `preload` ni
   `includeSubDomains`: el dominio tiene otros usos que no son nuestros).
 - `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer`, y se
@@ -196,8 +220,8 @@ Ordenado de fuera hacia dentro. Cada punto dice quién lo aplica.
 - Preparado para la etapa 7: `flush_interval -1` en el `reverse_proxy`, para
   que el SSE no se quede en el búfer del proxy. Cuesta nada hoy y evita
   descubrirlo entonces.
-- Solo responde al nombre del subdominio. Una petición a la IP en crudo
-  recibe el `default` de Caddy sin certificado y sin llegar al backend.
+- Solo responde al nombre del subdominio. Una petición a la IP en crudo o a
+  otro dominio del VPS nunca llega a nuestro backend.
 
 ### 2.4 Servicio
 
@@ -234,7 +258,8 @@ Ordenado de fuera hacia dentro. Cada punto dice quién lo aplica.
 | `VPS_SUDO_USUARIO`, `VPS_SUDO_SSH_CLAVE` | secretos de repositorio, **solo para preparar** | `vps-preparar.yml`; se pueden borrar después |
 | `VPS_OPENROUTER_API_KEY` | secreto de repositorio | `deploy-vps.yml` → `.env` del VPS |
 | `VPS_SERVICIO_CLAVE` | secreto de repositorio | idem |
-| `API_DOMINIO` (el subdominio) | variable de repositorio | los dos workflows, `docs/` |
+| `API_DOMINIO` = `apisor.oracle402.com` | variable de repositorio | los workflows del VPS, `docs/` |
+| `VPS_PUERTO_INTERNO` (el que diga la inspección) | variable de repositorio | `deploy-vps.yml` → `.env` y `apisor.caddy` |
 | `MODELO_DEFECTO` | variable de repositorio (ya existe) | idem |
 
 Los secretos del VPS llevan prefijo `VPS_` para no confundirlos con los de Fly,
@@ -306,10 +331,20 @@ Cada fase es un pull request contra `main`, salvo la promoción a `release`,
 que es un merge que solo se hace cuando el usuario lo pide. El orden importa:
 las fases 1 y 2 no tocan el VPS y se pueden hacer sin la conexión.
 
-### Fase 0 — Prerrequisitos del usuario (sin código)
+### Fase 0 — Inspección y prerrequisitos (sin código del servicio)
 
-1. Elegir el subdominio y crear el registro A hacia el VPS. Comprobar con
-   `nslookup` desde el PC que resuelve.
+0. **Inspeccionar el VPS antes de decidir nada.** Crear los secretos
+   `VPS_HOST`, `VPS_USUARIO`, `VPS_SSH_CLAVE` (y `VPS_PUERTO` si no es 22)
+   y lanzar `vps-inspeccionar.yml`. Su informe dice: quién sirve 80/443 y su
+   versión, qué dominios atiende ya Caddy y con qué certificados, si Docker
+   está y qué contenedores corren, el primer puerto interno libre a partir
+   de 8080, si `apisor.oracle402.com` ya resuelve y a qué IP, y el estado de
+   `ufw`. El script es de solo lectura y no imprime el interior de ningún
+   fichero de configuración. Con ese informe se fijan `VPS_PUERTO_INTERNO`
+   y se confirma o se descarta cada supuesto de la sección 0.
+1. Crear el registro A de `apisor.oracle402.com` hacia el VPS (si la
+   inspección dice que aún no resuelve). Repetir la inspección: el veredicto
+   DNS tiene que decir «apunta a esta máquina».
 2. Crear en OpenRouter una clave nueva con límite de crédito para el VPS.
 3. Generar `SERVICIO_CLAVE` nueva en el PC (`openssl rand -base64 32`).
 4. Generar la clave SSH de despliegue en el PC (`ssh-keygen -t ed25519 -f
@@ -319,9 +354,10 @@ las fases 1 y 2 no tocan el VPS y se pueden hacer sin la conexión.
 6. Decidir qué pasa con Fly (sección 7). Por defecto: sigue mientras dure la
    transición.
 
-Criterio de hecho: los secretos existen (la sesión lo comprueba por la API de
-GitHub, que lista nombres sin valores) y el subdominio resuelve (lo comprueba
-`vps-preparar.yml`, no la sesión).
+Criterio de hecho: run de `vps-inspeccionar.yml` en `success` con veredicto
+DNS «apunta a esta máquina», puerto interno anotado en `VPS_PUERTO_INTERNO`,
+y los secretos de la tabla 2.5 creados (la sesión lo comprueba por la API de
+GitHub, que lista nombres sin valores).
 
 ### Fase 1 — Cambios en el backend que el VPS necesita
 
@@ -376,8 +412,8 @@ Criterio de hecho: PR fusionado en `main`, `pages.yml` y `deploy.yml` en verde
    80/443, decidir (sección 0, segundo supuesto).
 2. Con el usuario diciéndolo explícitamente: `release` = `main` (fast-forward)
    y push. Se dispara `deploy-vps.yml`.
-3. Leer el run. Si está en `success`: Caddy tiene certificado, el backend
-   responde con el SHA, `/v1/estado` dice `sqlite` y la clave de OpenRouter es
+3. Leer el run. Si está en `success`: el Caddy del VPS ha emitido el
+   certificado del subdominio, el backend responde con el SHA, `/v1/estado` dice `sqlite` y la clave de OpenRouter es
    válida.
 4. Actualizar `docs/openapi.json` (`servers`) y el `<meta name="api-base">`
    de `docs/` para que apunten al subdominio, y `CLAUDE.md` (URLs vivas,
@@ -542,13 +578,17 @@ base del VPS: son llamadas de otra clave y de otra época.
 | La clave SSH de despliegue se filtra | Acceso al VPS como `deploy` | Solo puede ejecutar dos scripts; se revoca borrando una línea; rotación en el runbook |
 | Un secreto de GitHub se filtra en un log | El log del run lo enseña | GitHub enmascara los secretos; `escribir-env.sh` lee de stdin; nunca `set -x` con secretos |
 | El VPS se queda sin disco | `/salud` responde pero `/v1/estado` dice `memoria` o SQLite falla al escribir | `preparar.sh` exige 5 GB; copias con rotación; tarea mensual del runbook |
-| Let's Encrypt no emite | Caddy en bucle de reintentos, `deploy-vps.yml` en rojo en `/salud` | El informe de `vps-preparar.yml` comprueba DNS y 80/443 antes; el runbook cubre el caso Cloudflare |
+| Let's Encrypt no emite | Caddy en bucle de reintentos, `deploy-vps.yml` en rojo en `/salud` | La inspección comprueba DNS y 80/443 antes; el runbook cubre el caso Cloudflare |
+| Nuestro sitio rompe el Caddy del VPS y tira sus otros dominios | `caddy reload` falla | `desplegar.sh` valida con `caddy validate` antes de recargar y no recarga si falla; un `reload` fallido deja la configuración anterior en pie |
 | Fallo de OpenRouter | `502/504 openrouter_rechaza` con `error.upstream` | Ya se conserva el cuerpo original; la aplicación reintenta; sin respaldo fuera de OpenRouter (fuera de alcance, ver plan por etapas) |
 | Gasto descontrolado | Presupuesto por app, cuota, cortacircuitos, límite de la clave en OpenRouter | Cuatro capas; la última no depende de nuestro código |
 | La sesión no puede ver el VPS | Ningún `curl` ni `ssh` sale del sandbox | Todo pasa por workflows con informe; se acepta como regla, no como problema |
 
 ## 10. Orden de trabajo propuesto para las próximas sesiones
 
+0. Ahora: crear los tres secretos de SSH y lanzar `vps-inspeccionar.yml`
+   (fase 0, paso 0). Con el informe se cierran los supuestos y se elige el
+   puerto interno.
 1. Sesión siguiente: fase 1 entera (backend + script de verificación) en un
    PR, verificado en Fly. No necesita el VPS.
 2. Misma sesión o la siguiente: fase 2 en un PR. Tampoco necesita el VPS,
