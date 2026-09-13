@@ -7,15 +7,21 @@ use axum::{
     response::Response,
 };
 
-use crate::{error::ErrorApi, Servicio};
+use crate::{
+    apps::{self, Identidad},
+    error::ErrorApi,
+    Servicio,
+};
 
-/// Exige `Authorization: Bearer <clave de servicio>` en todo /v1.
+/// Exige `Authorization: Bearer <clave>` en todo /v1 y averigua quién llama.
 ///
-/// Sin `SERVICIO_CLAVE` configurada el servicio no atiende a nadie: un proxy
-/// abierto en una URL pública es crédito de OpenRouter regalado.
+/// La clave del despliegue (`SERVICIO_CLAVE`) es la de administración; las
+/// demás son de aplicaciones dadas de alta, y pueden revocarse una a una sin
+/// tocar el despliegue. Sin secreto configurado el servicio no atiende a nadie:
+/// un proxy abierto en una URL pública es crédito de OpenRouter regalado.
 pub async fn exigir_clave(
     State(servicio): State<Arc<Servicio>>,
-    peticion: Request,
+    mut peticion: Request,
     siguiente: Next,
 ) -> Result<Response, ErrorApi> {
     let esperada = servicio
@@ -38,14 +44,24 @@ pub async fn exigir_clave(
             )
         })?;
 
-    if !iguales(recibida.as_bytes(), esperada.as_bytes()) {
-        return Err(ErrorApi::nuevo(
-            StatusCode::UNAUTHORIZED,
-            "clave_invalida",
-            "La clave de servicio no es válida.",
-        ));
-    }
+    let identidad = if iguales(recibida.as_bytes(), esperada.as_bytes()) {
+        Identidad::administracion()
+    } else {
+        match servicio.uso.con(|c| apps::por_clave(c, recibida)) {
+            Some(app) => Identidad { app: Some(app), admin: false },
+            None => {
+                return Err(ErrorApi::nuevo(
+                    StatusCode::UNAUTHORIZED,
+                    "clave_invalida",
+                    "La clave no es válida o la aplicación está desactivada.",
+                ))
+            }
+        }
+    };
 
+    // Quien llama viaja con la peticion: los handlers deciden con ella qué
+    // puede ver y a quien se le anota el gasto.
+    peticion.extensions_mut().insert(identidad);
     Ok(siguiente.run(peticion).await)
 }
 

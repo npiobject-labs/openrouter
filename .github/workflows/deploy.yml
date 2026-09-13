@@ -256,6 +256,34 @@ jobs:
           fi
           echo "OK: registro de uso con $(jq -r '.total' /tmp/uso.json) llamadas"
 
+      - name: Verificar /v1/apps
+        if: steps.fly.outputs.configurado == 'true'
+        env:
+          FLY_APP: ${{ steps.app.outputs.app }}
+          SERVICIO_CLAVE: ${{ secrets.SERVICIO_CLAVE }}
+        run: |
+          if [ -z "${SERVICIO_CLAVE}" ]; then
+            echo "Sin clave de servicio: no se comprueba /v1/apps."
+            exit 0
+          fi
+          # Solo se lee: dar de alta una aplicacion desde el despliegue dejaria
+          # claves sueltas en produccion.
+          url="https://${FLY_APP}.fly.dev/v1/apps"
+          codigo="$(curl -s -o /tmp/apps.json -w '%{http_code}' --max-time 20 \
+            -H "Authorization: Bearer ${SERVICIO_CLAVE}" "${url}" || true)"
+          echo "HTTP ${codigo}"
+          if [ "${codigo}" != "200" ] || ! jq -e '.object == "list" and (.data | type == "array")' /tmp/apps.json > /dev/null; then
+            echo "::error::/v1/apps no respondio la lista esperada (HTTP ${codigo})."
+            cat /tmp/apps.json || true
+            exit 1
+          fi
+          # Y ninguna clave puede salir de aqui, ni siquiera su hash.
+          if jq -e '[.data[] | keys] | flatten | map(select(. == "clave" or . == "hash")) | length > 0' /tmp/apps.json > /dev/null; then
+            echo "::error::/v1/apps devolvio claves o hashes; eso no puede salir del servicio."
+            exit 1
+          fi
+          echo "OK: $(jq -r '.total' /tmp/apps.json) aplicaciones, sin claves en la respuesta"
+
       - name: Verificar el formato de error
         if: steps.fly.outputs.configurado == 'true'
         env:

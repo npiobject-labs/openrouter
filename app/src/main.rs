@@ -1,3 +1,4 @@
+mod apps;
 mod auth;
 mod catalogo;
 mod config;
@@ -14,7 +15,7 @@ use axum::{
         HeaderName, Method,
     },
     middleware,
-    routing::{get, post},
+    routing::{delete, get, post},
     Router,
 };
 use tower_http::cors::{Any, CorsLayer};
@@ -51,6 +52,8 @@ async fn main() {
         .route("/uso/resumen", get(rutas::uso::resumen))
         .route("/uso/exportar", get(rutas::uso::exportar))
         .route("/uso/{id}", get(rutas::uso::una))
+        .route("/apps", post(rutas::apps::alta).get(rutas::apps::lista))
+        .route("/apps/{id}", delete(rutas::apps::baja))
         .route_layer(middleware::from_fn_with_state(
             servicio.clone(),
             auth::exigir_clave,

@@ -91,7 +91,8 @@ fn mensaje_de(cuerpo: &Value) -> Option<String> {
 fn tipo(estado: StatusCode) -> &'static str {
     match estado {
         StatusCode::BAD_REQUEST => "invalid_request_error",
-        StatusCode::UNAUTHORIZED | StatusCode::FORBIDDEN => "authentication_error",
+        StatusCode::UNAUTHORIZED => "authentication_error",
+        StatusCode::FORBIDDEN => "permission_error",
         StatusCode::PAYMENT_REQUIRED => "insufficient_quota",
         StatusCode::NOT_FOUND => "not_found_error",
         StatusCode::TOO_MANY_REQUESTS => "rate_limit_error",
