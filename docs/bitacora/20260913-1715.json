@@ -1,0 +1,77 @@
+{
+  "fecha": "2026-09-13T17:15:00+02:00",
+  "titulo": "El servicio en el VPS: plan, inspeccion, despliegue bajo apisor.oracle402.com",
+  "objetivo": "Planificar y ejecutar el despliegue del backend en el VPS del usuario bajo un subdominio propio, con las medidas de seguridad, fiabilidad y usabilidad para que otras aplicaciones, empezando por GestionPresupuestos, lo usen como API.",
+  "prompts": [
+    {
+      "texto": "monta una planificación a fondo para montar la app de las APIs montadas en la APP openrouter, en mi VPS, tengo un subdominio y te daré la conexión al VPS. Quiero que esas APIs se puedan utilizar desde otras aplicaciones, para comenzar sería para utilizarla desde GestiónPresupuestos. Ten en cuenta todas las medidas de seguridad, fiabilidad y usabilidad."
+    },
+    {
+      "texto": "no sabemos si los puertos 80 y 443 del VPS están libres, primero tienes que investigar en Caddy qué puerto está libre para utilizarlo con el subdominio apisor.oracle402.com"
+    },
+    {
+      "texto": "ayúdame paso a paso a Settings → Secrets and variables → Actions del repo"
+    },
+    {
+      "texto": "[pregunta si para la clave SSH de despliegue vale la clave personal con la que ya entra al VPS]",
+      "nota": "Resumido: el prompt incluia una ruta local con nombre de usuario."
+    },
+    {
+      "texto": "vamos paso a paso, ok a nueva clave para apisor.orac..."
+    },
+    {
+      "texto": "[varios pegados de la consola de PowerShell y del VPS con la salida de los comandos y del script tools/vps-clave.ps1]",
+      "nota": "Resumidos: incluian el nombre de la maquina, el usuario SSH y la lista de servidores del usuario con sus IPs. Ninguna clave."
+    },
+    {
+      "texto": "no me aclaro, hazlo tú!!!"
+    },
+    {
+      "texto": "Fusiona el PR"
+    },
+    {
+      "texto": "seguir con deployer. Arranca todas las fases y dame enlaces para probar las APIs, ¿puede ser un html simple?"
+    }
+  ],
+  "cambios": [
+    "docs/planificacion/plan-vps.md: plan por fases del VPS con supuestos, seguridad, fiabilidad, usabilidad, riesgos y el estado tras la sesion.",
+    "vps/inspeccionar.sh + .github/workflows/vps-inspeccionar.yml: inspeccion de solo lectura del VPS por SSH desde el runner.",
+    "tools/vps-clave.ps1: desde el PC, clave SSH dedicada, autorizacion en el VPS, huella y secretos del repo con gh.",
+    "app/src/main.rs: apagado limpio con SIGTERM y subcomando --salud para el healthcheck.",
+    "app/src/config.rs: CORS_ORIGENES opcional.",
+    "app/src/uso.rs y rutas/uso.rs: filtro ?operacion= y agrupar=operacion.",
+    "app/src/rutas/estado.rs: las aplicaciones no ven el uso ni el limite de la cuenta.",
+    "tools/verificar-servicio.sh: la verificacion de un despliegue en un solo script, usado por deploy.yml y deploy-vps.yml.",
+    "vps/compose.yml, vps/apisor.caddy, vps/preparar.sh, vps/desplegar.sh, vps/escribir-env.sh, vps/copia.sh y unidades de systemd.",
+    ".github/workflows/vps-preparar.yml y deploy-vps.yml: preparacion a mano y despliegue en push a release con rollback por sha.",
+    "docs/consola.html: selector de servidor (VPS, Fly, ?api=) y clave por servidor; build OP-B1-20260913-015.",
+    "docs/holamundo.html: VPS por defecto y ?api=fly.",
+    "docs/openapi.json 0.6.1: servidor del VPS y parametro operacion.",
+    "docs/planificacion/integracion-gestionpresupuestos.md y runbook-vps.md.",
+    "tools/apps.ps1 y tools/probar-bom.ps1: -Api apunta al VPS por defecto.",
+    "CLAUDE.md: VPS, rama release, secretos VPS_*, verificacion compartida."
+  ],
+  "sha": "87d8850",
+  "sha_completo": "87d88509d71085dd1d06a8ed4ad6b2cc4a3cacdf",
+  "run": "34764606970",
+  "mock": null,
+  "build": "OP-B1-20260913-015",
+  "pagina": "consola.html",
+  "fly": "https://openrouter-npiobject-labs.fly.dev/salud",
+  "pendiente": [
+    "Crear los secretos VPS_OPENROUTER_API_KEY (clave nueva de OpenRouter con limite de credito) y VPS_SERVICIO_CLAVE, y relanzar deploy-vps.yml: hasta entonces /v1 responde 503",
+    "Alta de GestionPresupuestos con tools/apps.ps1 -Crear y su presupuesto",
+    "Probar la restauracion de una copia y activar un monitor externo sobre /salud",
+    "Rotar la SERVICIO_CLAVE de Fly, pendiente desde el 12 de septiembre",
+    "Drive: carpeta antigua de la cuenta vieja, carpeta 08 Openrouter y plan-etapas.md duplicado"
+  ],
+  "enlaces": [
+    { "texto": "Backend en el VPS: /salud", "url": "https://apisor.oracle402.com/salud" },
+    { "texto": "Consola del servicio", "url": "https://npiobject-labs.github.io/openrouter/consola.html" },
+    { "texto": "Plan del VPS", "url": "https://github.com/npiobject-labs/openrouter/blob/main/docs/planificacion/plan-vps.md" },
+    { "texto": "Guia de integracion para GestionPresupuestos", "url": "https://github.com/npiobject-labs/openrouter/blob/main/docs/planificacion/integracion-gestionpresupuestos.md" },
+    { "texto": "Runbook del VPS", "url": "https://github.com/npiobject-labs/openrouter/blob/main/docs/planificacion/runbook-vps.md" },
+    { "texto": "Run del despliegue en el VPS", "url": "https://github.com/npiobject-labs/openrouter/actions/runs/34764606970" }
+  ],
+  "notas": "Sesion larga con tres pull requests. La transcripcion de los prompts es aproximada en los pegados de consola, que se resumen porque llevaban el nombre del VPS, el usuario SSH y las IPs de varios servidores del usuario. El sha es el del despliegue verificado en el VPS; el resumen de sesion y esta entrada van en un commit posterior."
+}

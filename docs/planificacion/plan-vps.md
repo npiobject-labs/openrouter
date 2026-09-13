@@ -10,11 +10,25 @@ mismas garantías que hoy da Fly (o mejores), sin que nada de lo publicado en
 `/v1/` cambie.
 
 Cada fase termina con un criterio de hecho verificable por un workflow, como el
-resto del proyecto. **Estado (2026-09-13)**: fases 0, 1 y 2 entregadas y la 3
-ejecutada en la misma sesión; la 4 tiene el código y la guía, y le falta el
-alta real de la aplicación desde el PC; la 5 tiene el runbook y las copias
-automáticas, y le faltan la prueba de restauración y el monitor externo. Fly
-sigue como previsualización de `main` (opción A de la sección 7).
+resto del proyecto. **Estado (2026-09-13)**: fases 0, 1 y 2 entregadas
+([#25](https://github.com/npiobject-labs/openrouter/pull/25),
+[#26](https://github.com/npiobject-labs/openrouter/pull/26)); fase 3 ejecutada:
+`vps-preparar.yml` en verde (run
+[34764544489](https://github.com/npiobject-labs/openrouter/actions/runs/34764544489))
+y `deploy-vps.yml` en verde (run
+[34764606970](https://github.com/npiobject-labs/openrouter/actions/runs/34764606970),
+SHA `87d8850`), con `https://apisor.oracle402.com/salud` respondiendo el SHA
+con certificado de Let's Encrypt. Le faltan los secretos
+`VPS_OPENROUTER_API_KEY` y `VPS_SERVICIO_CLAVE`: hasta que existan y se
+relance el workflow, `/v1` responde `503 sin_configurar`, que es lo previsto.
+La fase 4 tiene el código y la guía, y le falta el alta real de la aplicación
+desde el PC; la 5 tiene el runbook y las copias automáticas (timer activo), y
+le faltan la prueba de restauración y el monitor externo. Fly sigue como
+previsualización de `main` (opción A de la sección 7). Lección de la fase 3:
+el `Caddyfile` importaba `sites.d/*.caddy` con comodín y la inspección lo
+enseñó expandido; la primera preparación añadió un `import` duplicado que
+`caddy validate` rechazó sin que el run se pusiera en rojo (faltaba
+`pipefail` tras el `tee`). Arreglado en #26 antes de desplegar.
 
 ## 0. Lo que ya se sabe y lo que se supone
 
