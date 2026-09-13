@@ -40,8 +40,8 @@
   "fly": "https://openrouter-npiobject-labs.fly.dev/salud",
   "pendiente": [
     "Rotar SERVICIO_CLAVE: sigue expuesta desde las sesiones del dia 12",
-    "Abrir el pull request: la API de GitHub devolvio 500 seis veces seguidas al crearlo, con cuerpo vacio",
-    "Despliegue en VPS: faltan los secretos VPS_HOST y VPS_SSH_KEY, decidir si sustituye a Fly o convive con el, y el terminador TLS",
+    "Fusionar el PR 23: despliega el arreglo del reloj del primer token, que quedo sin desplegar porque la API de GitHub dejo de aceptar escrituras",
+    "Despliegue en VPS: faltan los secretos VPS_HOST y VPS_SSH_KEY, decidir si sustituye a Fly o convive con el, y el terminador TLS para apisor.oracle402.com",
     "Drive: esta sesion solo tiene permisos de lectura, no se subio copia"
   ],
   "enlaces": [
@@ -56,7 +56,11 @@
     {
       "texto": "Notas del despliegue en VPS",
       "url": "https://github.com/npiobject-labs/openrouter/blob/main/docs/planificacion/despliegue-vps.md"
+    },
+    {
+      "texto": "Pull request de las etapas 7 y 8",
+      "url": "https://github.com/npiobject-labs/openrouter/pull/23"
     }
   ],
-  "notas": "Transcripcion fiel salvo el prompt del VPS, que se resume porque incluia configuracion SSH y este repositorio es publico. El plan de ocho etapas queda completo. Tres hallazgos tecnicos, el tercero encontrado leyendo el log del despliegue y no en las pruebas: el registro de un flujo tiene que escribirse en Drop, porque un cliente que corta a mitad no ejecuta ninguna otra cosa; y desde_respuesta machacaba con vacio el id de la generacion al aplicarse evento a evento, lo que dejaba sin reconciliar el coste de toda respuesta en flujo. Y el reloj del primer token arrancaba demasiado tarde: se media desde las cabeceras de OpenRouter, con lo que una llamada real anotaba 0 ms."
+  "notas": "Transcripcion fiel salvo el prompt del VPS, que se resume porque incluia configuracion SSH y este repositorio es publico. El plan de ocho etapas queda completo. Tres hallazgos tecnicos, el tercero encontrado leyendo el log del despliegue y no en las pruebas: el registro de un flujo tiene que escribirse en Drop, porque un cliente que corta a mitad no ejecuta ninguna otra cosa; y desde_respuesta machacaba con vacio el id de la generacion al aplicarse evento a evento, lo que dejaba sin reconciliar el coste de toda respuesta en flujo. Y el reloj del primer token arrancaba demasiado tarde: se media desde las cabeceras de OpenRouter, con lo que una llamada real anotaba 0 ms. GitHub tuvo una caida de su API a media sesion: devolvia 500 con cuerpo vacio al crear el pull request, que llego a crearse aunque la respuesta se perdiera, y despues dejo de aceptar tambien el workflow_dispatch, por lo que el arreglo del reloj se quedo sin desplegar. Produccion sigue en e4f9644."
 }
