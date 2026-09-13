@@ -9,9 +9,12 @@ subdominio propio con TLS, y que otras aplicaciones lo usen como API con las
 mismas garantías que hoy da Fly (o mejores), sin que nada de lo publicado en
 `/v1/` cambie.
 
-Este documento es un plan, no una entrega: nada de lo que describe está hecho
-todavía. Cada fase termina con un criterio de hecho verificable por un workflow,
-como el resto del proyecto.
+Cada fase termina con un criterio de hecho verificable por un workflow, como el
+resto del proyecto. **Estado (2026-09-13)**: fases 0, 1 y 2 entregadas y la 3
+ejecutada en la misma sesión; la 4 tiene el código y la guía, y le falta el
+alta real de la aplicación desde el PC; la 5 tiene el runbook y las copias
+automáticas, y le faltan la prueba de restauración y el monitor externo. Fly
+sigue como previsualización de `main` (opción A de la sección 7).
 
 ## 0. Lo que ya se sabe y lo que se supone
 
@@ -115,13 +118,12 @@ Internet ──443──▶ Caddy que YA existe en el VPS (TLS automático para 
   `preparar.sh` una sola vez, y es lo único que toca de una configuración
   que no es nuestra.
 - **Imagen del backend**: la construye el runner de GitHub con el `Dockerfile`
-  de `app/` y la publica en GitHub Container Registry como
-  `ghcr.io/npiobject-labs/openrouter:<sha>` y `:release`. El VPS solo hace
-  `pull`. Compilar Rust en el VPS queda descartado: un VPS pequeño tarda
-  minutos y puede quedarse sin memoria, y además el binario que corre debe ser
-  el mismo que verificó el workflow. El repo es público, así que la imagen es
-  pública; solo contiene el binario compilado a partir de código público,
-  ningún secreto.
+  de `app/` (caché de capas entre runs) y la **transfiere por SSH** con
+  `docker save | gzip | ssh 'docker load'`, unos 30 MB. Sin registro de por
+  medio: ni GHCR ni credenciales de pull en el VPS, y la imagen que corre es
+  exactamente la que el workflow construyó y verificó. Compilar Rust en el
+  VPS queda descartado. Las cinco últimas imágenes se conservan en el VPS
+  para el rollback.
 - **Secretos**: en `/srv/openrouter/.env`, propiedad de root, permisos `600`,
   escrito por el workflow desde los secretos de repositorio (igual que hoy
   `deploy.yml` los vuelca a Fly). Nunca se copian al chat, nunca al repo.
@@ -403,8 +405,8 @@ mismas comprobaciones que antes.
   Caddy nuestro**, y lo dice.
 - `.github/workflows/deploy-vps.yml`: en push a `release` y por
   `workflow_dispatch` con entrada `sha` (para rollback). Pasos: construir la
-  imagen con `docker/build-push-action`, publicarla en GHCR con tags `<sha>`
-  y `release`, escribir el `.env` por SSH (`escribir-env.sh` lee de la
+  imagen con `docker/build-push-action`, transferirla por SSH con `docker
+  save | docker load`, escribir el `.env` por SSH (`escribir-env.sh` lee de la
   entrada estándar, así los valores no pasan por argumentos ni por el log),
   ejecutar `desplegar.sh <sha>`, y verificar con
   `tools/verificar-servicio.sh https://<API_DOMINIO>`. Resumen del run con
@@ -493,7 +495,7 @@ posibles.
   `main` y solo cuando el usuario lo pide en la sesión («promociona a
   release», «despliega en el VPS»). Nunca se desarrolla en `release`.
 - Rollback: `deploy-vps.yml` por `workflow_dispatch` con el SHA anterior. La
-  imagen ya está en GHCR; no se recompila. `release` no se mueve hacia atrás:
+  imagen se reconstruye con la caché del runner y se transfiere igual. `release` no se mueve hacia atrás:
   el estado real lo dice `/salud`, y el siguiente fast-forward vuelve a
   desplegar lo último.
 - Un run de `deploy-vps.yml` en rojo deja el VPS como estuviera: si falló

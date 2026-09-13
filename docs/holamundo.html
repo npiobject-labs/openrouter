@@ -3,11 +3,12 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="build" content="OP-B1-20260910-002">
+  <meta name="build" content="OP-B1-20260913-015">
   <!-- App de Fly: <repo>-<owner>, el mismo nombre que deriva deploy.yml.
        Si el proyecto usa la variable FLY_APP con otro nombre, cambia este
        content o abre la pagina con ?app=<nombre>. -->
   <meta name="fly-app" content="openrouter-npiobject-labs">
+  <meta name="api-vps" content="https://apisor.oracle402.com">
   <title>openrouter · comprobación del backend</title>
   <style>
     body { font-family: system-ui, -apple-system, sans-serif; margin: 0; padding: 2rem; background: #fafafa; color: #1a1a1a; }
@@ -40,8 +41,8 @@
       <p style="margin:.5rem 0 0">Build desplegado: <code id="build">–</code></p>
     </section>
 
-    <p>Backend: <a id="url" href="#"></a> · Build de la página: <code>OP-B1-20260910-002</code></p>
-    <p class="pie"><a href="./">Volver al mock</a> · <a href="bitacora.html">Bitácora</a></p>
+    <p>Backend: <a id="url" href="#"></a> · Build de la página: <code>OP-B1-20260913-015</code></p>
+    <p class="pie"><a href="holamundo.html">VPS</a> · <a href="holamundo.html?api=fly">Fly.io</a> · <a href="./">Volver al mock</a> · <a href="bitacora.html">Bitácora</a></p>
   </main>
   <script>
     const meta = document.querySelector('meta[name="fly-app"]').content;
@@ -49,9 +50,13 @@
     const app = parametros.get('app') || meta;
     // Servida desde el PC por tools/arrancar.ps1: el backend es el local, no el de Fly.
     const enLocal = ['localhost', '127.0.0.1'].includes(location.hostname);
+    const api = parametros.get('api') || '';
+    const vps = document.querySelector('meta[name="api-vps"]').content;
+    // ?api=https://... apunta a cualquier servidor; ?api=fly, al de Fly. Por
+    // defecto, el VPS, que es producción.
     const base = enLocal
-      ? location.protocol + '//' + location.hostname + ':' + (parametros.get('api') || '8080')
-      : 'https://' + app + '.fly.dev';
+      ? location.protocol + '//' + location.hostname + ':' + (/^\d+$/.test(api) ? api : '8080')
+      : (/^https?:\/\//.test(api) ? api.replace(/\/$/, '') : (api === 'fly' ? 'https://' + app + '.fly.dev' : vps));
     const enlace = document.getElementById('url');
     enlace.href = base; enlace.textContent = base;
 

@@ -11,7 +11,12 @@ pub async fn estado(
     State(servicio): State<Arc<Servicio>>,
     Extension(quien): Extension<Identidad>,
 ) -> Result<Json<Value>, ErrorApi> {
-    let clave = servicio.openrouter.info_clave().await?;
+    let mut clave = servicio.openrouter.info_clave().await?;
+    // El uso y el límite son de la cuenta, no de la aplicación que pregunta:
+    // una aplicación solo ve que la clave existe y cómo se llama.
+    if !quien.admin {
+        clave = json!({ "label": clave.get("label").cloned().unwrap_or(Value::Null) });
+    }
 
     Ok(Json(json!({
         "ok": true,

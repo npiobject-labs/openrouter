@@ -13,7 +13,7 @@ param(
   [string]$Baja = '',
   [switch]$Gasto,
   [string]$Clave = $env:SERVICIO_CLAVE,
-  [string]$Api = 'https://openrouter-npiobject-labs.fly.dev'
+  [string]$Api = 'https://apisor.oracle402.com'
 )
 $ErrorActionPreference = 'Stop'
 $Api = $Api.TrimEnd('/')

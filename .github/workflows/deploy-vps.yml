@@ -1,0 +1,148 @@
+name: Desplegar backend en el VPS
+
+# Push a release: se construye la imagen en el runner, se transfiere por SSH
+# (docker save | docker load; sin registro de por medio), se escribe el .env
+# desde los secretos, vps/desplegar.sh la levanta y se verifica desde fuera
+# con el mismo script que Fly. A mano con un sha: rollback a esa version.
+
+on:
+  push:
+    branches: [release]
+    paths:
+      - 'app/**'
+      - 'vps/**'
+      - 'tools/verificar-servicio.sh'
+      - '.github/workflows/deploy-vps.yml'
+  workflow_dispatch:
+    inputs:
+      sha:
+        description: SHA a desplegar (vacio = el de la rama). Con uno anterior es un rollback.
+        required: false
+        default: ''
+
+permissions:
+  contents: read
+
+concurrency:
+  group: vps
+  cancel-in-progress: false
+
+jobs:
+  desplegar:
+    name: Construir, transferir y desplegar
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    env:
+      VPS_HOST: ${{ secrets.VPS_HOST }}
+      VPS_USUARIO: ${{ secrets.VPS_USUARIO }}
+      VPS_SSH_CLAVE: ${{ secrets.VPS_SSH_CLAVE }}
+      VPS_HOST_KEY: ${{ secrets.VPS_HOST_KEY }}
+      VPS_PUERTO: ${{ vars.VPS_PUERTO || '22' }}
+      API_DOMINIO: ${{ vars.API_DOMINIO || 'apisor.oracle402.com' }}
+      PUERTO_INTERNO: ${{ vars.VPS_PUERTO_INTERNO || '8081' }}
+    steps:
+      - name: Comprobar los secretos
+        run: |
+          faltan=""
+          for v in VPS_HOST VPS_USUARIO VPS_SSH_CLAVE VPS_HOST_KEY; do
+            [ -n "${!v}" ] || faltan="${faltan} ${v}"
+          done
+          [ -z "${faltan}" ] || { echo "::error::Faltan secretos:${faltan}"; exit 1; }
+          echo "Dominio ${API_DOMINIO}, puerto interno ${PUERTO_INTERNO}"
+
+      - name: Determinar el SHA
+        id: sha
+        env:
+          PEDIDO: ${{ inputs.sha }}
+        run: |
+          sha="${PEDIDO:-${GITHUB_SHA}}"
+          echo "sha=${sha}" >> "$GITHUB_OUTPUT"
+          echo "Se despliega ${sha}"
+
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ steps.sha.outputs.sha }}
+
+      - name: Preparar buildx
+        uses: docker/setup-buildx-action@v3
+
+      # La misma imagen que Fly, construida aqui con cache entre runs: la
+      # compilacion de Rust solo se repite cuando cambian las fuentes.
+      - name: Construir la imagen
+        uses: docker/build-push-action@v6
+        with:
+          context: app
+          load: true
+          tags: openrouter-backend:${{ steps.sha.outputs.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Preparar la clave SSH
+        run: |
+          mkdir -p ~/.ssh && chmod 700 ~/.ssh
+          printf '%s\n' "${VPS_SSH_CLAVE}" > ~/.ssh/vps && chmod 600 ~/.ssh/vps
+          printf '%s\n' "${VPS_HOST_KEY}" > ~/.ssh/known_hosts && chmod 600 ~/.ssh/known_hosts
+          printf 'Host vps\n  HostName %s\n  Port %s\n  User %s\n  IdentityFile ~/.ssh/vps\n  IdentitiesOnly yes\n  BatchMode yes\n  ConnectTimeout 15\n  StrictHostKeyChecking yes\n  ServerAliveInterval 30\n' \
+            "${VPS_HOST}" "${VPS_PUERTO}" "${VPS_USUARIO}" > ~/.ssh/config
+          ssh vps 'echo "conectado a $(hostname) como $(whoami)"'
+
+      - name: Transferir la imagen
+        env:
+          SHA: ${{ steps.sha.outputs.sha }}
+        run: |
+          docker image ls openrouter-backend --format 'Imagen {{.Repository}}:{{.Tag}} {{.Size}}'
+          docker save "openrouter-backend:${SHA}" | gzip -1 | ssh vps 'gunzip | sudo -n docker load'
+
+      - name: Copiar vps/
+        run: tar czf - vps | ssh vps 'sudo -n mkdir -p /srv/openrouter && sudo -n tar xzf - -C /srv/openrouter --no-same-owner'
+
+      # Los valores viajan por la entrada estandar de escribir-env.sh: ni en
+      # argumentos ni en el log.
+      - name: Escribir el .env del servicio
+        env:
+          SHA: ${{ steps.sha.outputs.sha }}
+          OPENROUTER_API_KEY: ${{ secrets.VPS_OPENROUTER_API_KEY }}
+          SERVICIO_CLAVE: ${{ secrets.VPS_SERVICIO_CLAVE }}
+          MODELO_DEFECTO: ${{ vars.MODELO_DEFECTO }}
+          CORS_ORIGENES: ${{ vars.VPS_CORS_ORIGENES || 'https://npiobject-labs.github.io' }}
+        run: |
+          {
+            echo "BUILD_ID=${SHA}"
+            echo "IMAGEN_TAG=${SHA}"
+            echo "PUERTO_INTERNO=${PUERTO_INTERNO}"
+            echo "CORS_ORIGENES=${CORS_ORIGENES}"
+            [ -n "${MODELO_DEFECTO}" ] && echo "MODELO_DEFECTO=${MODELO_DEFECTO}"
+            if [ -n "${OPENROUTER_API_KEY}" ]; then echo "OPENROUTER_API_KEY=${OPENROUTER_API_KEY}"; else echo "::warning::Sin VPS_OPENROUTER_API_KEY: /v1 respondera 503 hasta que se defina." >&2; fi
+            if [ -n "${SERVICIO_CLAVE}" ]; then echo "SERVICIO_CLAVE=${SERVICIO_CLAVE}"; else echo "::warning::Sin VPS_SERVICIO_CLAVE: /v1 queda cerrado, que es lo correcto para un proxy publico." >&2; fi
+          } | ssh vps 'sudo -n /srv/openrouter/vps/escribir-env.sh'
+
+      - name: Desplegar
+        env:
+          SHA: ${{ steps.sha.outputs.sha }}
+        run: ssh vps "sudo -n env API_DOMINIO='${API_DOMINIO}' bash /srv/openrouter/vps/desplegar.sh '${SHA}'"
+
+      - name: Verificar el despliegue
+        env:
+          SHA: ${{ steps.sha.outputs.sha }}
+          SERVICIO_CLAVE: ${{ secrets.VPS_SERVICIO_CLAVE }}
+          OPENROUTER_API_KEY: ${{ secrets.VPS_OPENROUTER_API_KEY }}
+        run: |
+          export CON_OPENROUTER="$([ -n "${OPENROUTER_API_KEY}" ] && echo 1 || echo 0)"
+          tools/verificar-servicio.sh "https://${API_DOMINIO}" "${SHA}"
+
+      - name: Resumen del despliegue
+        if: success()
+        env:
+          SHA: ${{ steps.sha.outputs.sha }}
+        run: |
+          {
+            echo "### Backend desplegado en el VPS"
+            echo ""
+            echo "- URL: https://${API_DOMINIO}/"
+            echo "- Salud: https://${API_DOMINIO}/salud"
+            echo "- Estado del servicio: https://${API_DOMINIO}/v1/estado (requiere clave)"
+            echo "- Consola: https://${GITHUB_REPOSITORY%%/*}.github.io/${GITHUB_REPOSITORY#*/}/consola.html?api=https://${API_DOMINIO}"
+            echo "- Build (SHA): \`${SHA}\`"
+            echo "- Rollback: este workflow a mano con el SHA anterior"
+          } >> "$GITHUB_STEP_SUMMARY"

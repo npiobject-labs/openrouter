@@ -36,9 +36,10 @@ pub async fn lista(
         .clamp(1, 1000);
 
     let app = filtro_de_app(&quien, &parametros);
+    let operacion = filtro_de_operacion(&parametros);
     Json(json!({
         "object": "list",
-        "data": servicio.uso.ultimos(n, app.as_deref()),
+        "data": servicio.uso.ultimos(n, app.as_deref(), operacion.as_deref()),
         "total": servicio.uso.total(),
     }))
 }
@@ -65,7 +66,7 @@ pub async fn una(
         })
 }
 
-/// `GET /v1/uso/resumen`: totales por día o por modelo.
+/// `GET /v1/uso/resumen`: totales por día, modelo, aplicación u operación.
 ///
 /// `desde` y `hasta` se comparan como texto contra la fecha ISO, así que valen
 /// tanto `2026-09-12` como `2026-09-12T14:00:00Z`. Sin ellos, todo el histórico.
@@ -76,11 +77,13 @@ pub async fn resumen(
 ) -> Json<Value> {
     let agrupar = Agrupacion::desde(parametros.get("agrupar").map(String::as_str));
     let app = filtro_de_app(&quien, &parametros);
+    let operacion = filtro_de_operacion(&parametros);
     let filas = servicio.uso.resumen(
         intervalo(&parametros, "desde").as_deref(),
         intervalo(&parametros, "hasta").as_deref(),
         &agrupar,
         app.as_deref(),
+        operacion.as_deref(),
     );
 
     // Los contadores se suman como enteros: un "llamadas: 3.0" en el JSON
@@ -91,16 +94,19 @@ pub async fn resumen(
             .filter_map(|f| f.get(campo).and_then(Value::as_i64))
             .sum()
     };
+    // El `+ 0.0` evita el "-0.0" con el que sale la suma de nada.
     let coste: f64 = filas
         .iter()
         .filter_map(|f| f.get("coste").and_then(Value::as_f64))
-        .sum();
+        .sum::<f64>()
+        + 0.0;
 
     Json(json!({
         "object": "list",
         "agrupar": match agrupar {
             Agrupacion::Modelo => "modelo",
             Agrupacion::App => "app",
+            Agrupacion::Operacion => "operacion",
             Agrupacion::Dia => "dia",
         },
         "data": filas,
@@ -129,10 +135,12 @@ pub async fn exportar(
         .unwrap_or("json");
 
     let app = filtro_de_app(&quien, &parametros);
+    let operacion = filtro_de_operacion(&parametros);
     let registros = servicio.uso.intervalo(
         intervalo(&parametros, "desde").as_deref(),
         intervalo(&parametros, "hasta").as_deref(),
         app.as_deref(),
+        operacion.as_deref(),
     );
 
     match formato {
@@ -190,6 +198,17 @@ fn filtro_de_app(quien: &Identidad, parametros: &HashMap<String, String>) -> Opt
     }
     parametros
         .get("app")
+        .map(String::as_str)
+        .filter(|v| !v.is_empty())
+        .map(str::to_string)
+}
+
+/// `?operacion=`: el trabajo de negocio que la aplicación mandó en
+/// `X-Operacion`. Es la pregunta natural de una aplicación de presupuestos:
+/// cuánto costó analizar este presupuesto.
+fn filtro_de_operacion(parametros: &HashMap<String, String>) -> Option<String> {
+    parametros
+        .get("operacion")
         .map(String::as_str)
         .filter(|v| !v.is_empty())
         .map(str::to_string)

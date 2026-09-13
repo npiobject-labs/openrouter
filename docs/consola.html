@@ -3,10 +3,11 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="build" content="OP-B1-20260913-014">
+<meta name="build" content="OP-B1-20260913-015">
 <!-- App de Fly: <repo>-<owner>, el mismo nombre que deriva deploy.yml.
      Con otro nombre, cambia este content o abre la pagina con ?app=<nombre>. -->
 <meta name="fly-app" content="openrouter-npiobject-labs">
+<meta name="api-vps" content="https://apisor.oracle402.com">
 <title>openrouter · consola</title>
 <style>
 :root{
@@ -81,8 +82,11 @@ footer{display:flex;flex-wrap:wrap;gap:.4rem 1.2rem;font-size:.8rem;color:var(--
   <section class="panel">
     <h2>Conexión</h2>
     <div class="fila">
+      <label for="servidor">Servidor
+        <select id="servidor"></select>
+      </label>
       <label for="clave">Clave de servicio
-        <input id="clave" type="password" autocomplete="off" placeholder="la de SERVICIO_CLAVE">
+        <input id="clave" type="password" autocomplete="off" placeholder="de administración o de aplicación">
       </label>
       <button id="btn-estado">Comprobar estado</button>
     </div>
@@ -96,7 +100,7 @@ footer{display:flex;flex-wrap:wrap;gap:.4rem 1.2rem;font-size:.8rem;color:var(--
       <div><dt>Hablas como</dt><dd id="k-quien">–</dd></div>
       <div><dt>Presupuesto</dt><dd id="k-presupuesto">–</dd></div>
     </dl>
-    <p>La clave se guarda solo en este navegador. La de OpenRouter nunca sale del backend.</p>
+    <p>La clave se guarda solo en este navegador, una por servidor. La de OpenRouter nunca sale del backend.</p>
   </section>
 
   <section class="panel">
@@ -240,7 +244,7 @@ footer{display:flex;flex-wrap:wrap;gap:.4rem 1.2rem;font-size:.8rem;color:var(--
   </section>
 
   <footer>
-    <span>Build <code>OP-B1-20260913-014</code></span>
+    <span>Build <code>OP-B1-20260913-015</code></span>
     <span>Backend: <a id="url-backend" href="#">–</a></span>
     <a href="api.html">Documentación de la API</a>
     <a href="./">Mock de todas las etapas</a>
@@ -251,21 +255,52 @@ footer{display:flex;flex-wrap:wrap;gap:.4rem 1.2rem;font-size:.8rem;color:var(--
 
 <script>
 (function(){
+  var $ = function(id){ return document.getElementById(id); };
   var parametros = new URLSearchParams(location.search);
   var app = parametros.get('app') || document.querySelector('meta[name="fly-app"]').content;
   // Servida desde el PC por tools/arrancar.ps1: el backend es el local, no el de Fly.
   var enLocal = ['localhost','127.0.0.1'].includes(location.hostname);
-  var base = enLocal
-    ? location.protocol + '//' + location.hostname + ':' + (parametros.get('api') || '8080')
-    : 'https://' + app + '.fly.dev';
-  var enlace = document.getElementById('url-backend');
-  enlace.href = base; enlace.textContent = base;
+  var api = parametros.get('api') || '';
 
-  var $ = function(id){ return document.getElementById(id); };
+  // Los servidores entre los que se puede elegir. El VPS es producción; Fly
+  // sirve para previsualizar main; ?api=https://... añade cualquier otro.
+  var servidores = [];
+  if (enLocal) {
+    servidores.push({ id: 'local', nombre: 'Local', url: location.protocol + '//' + location.hostname + ':' + (/^\d+$/.test(api) ? api : '8080') });
+  } else {
+    servidores.push({ id: 'vps', nombre: 'VPS · producción', url: document.querySelector('meta[name="api-vps"]').content });
+    servidores.push({ id: 'fly', nombre: 'Fly.io · previsualización', url: 'https://' + app + '.fly.dev' });
+    if (/^https?:\/\//.test(api)) servidores.push({ id: 'otro', nombre: 'Otro · ' + api, url: api.replace(/\/$/, '') });
+  }
+  var selector = $('servidor');
+  servidores.forEach(function(s){
+    var o = document.createElement('option'); o.value = s.id; o.textContent = s.nombre; selector.appendChild(o);
+  });
+  var elegido = /^https?:\/\//.test(api) ? 'otro' : null;
+  if (!elegido) { try { elegido = localStorage.getItem('openrouter.servidor'); } catch (e) {} }
+  if (!servidores.some(function(s){ return s.id === elegido; })) elegido = servidores[0].id;
+  selector.value = elegido;
+
+  var base = '';
+  var enlace = $('url-backend');
   var clave = $('clave');
-  try { clave.value = localStorage.getItem('openrouter.clave') || ''; } catch (e) {}
+  // Una clave por servidor: la de Fly y la del VPS no son la misma.
+  function claveGuardada(){ try { return localStorage.getItem('openrouter.clave.' + base) || localStorage.getItem('openrouter.clave') || ''; } catch (e) { return ''; } }
+  function eligeServidor(){
+    var s = servidores.filter(function(x){ return x.id === selector.value; })[0] || servidores[0];
+    base = s.url;
+    enlace.href = base; enlace.textContent = base;
+    clave.value = claveGuardada();
+    try { localStorage.setItem('openrouter.servidor', s.id); } catch (e) {}
+  }
+  eligeServidor();
+  selector.addEventListener('change', function(){
+    eligeServidor();
+    pinta('estado', 'sin comprobar', '');
+    $('ficha-clave').hidden = true;
+  });
   clave.addEventListener('change', function(){
-    try { localStorage.setItem('openrouter.clave', clave.value.trim()); } catch (e) {}
+    try { localStorage.setItem('openrouter.clave.' + base, clave.value.trim()); } catch (e) {}
   });
 
   function pinta(id, texto, clase){
