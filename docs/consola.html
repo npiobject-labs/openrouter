@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="build" content="OP-B1-20260913-013">
+<meta name="build" content="OP-B1-20260913-014">
 <!-- App de Fly: <repo>-<owner>, el mismo nombre que deriva deploy.yml.
      Con otro nombre, cambia este content o abre la pagina con ?app=<nombre>. -->
 <meta name="fly-app" content="openrouter-npiobject-labs">
@@ -75,7 +75,7 @@ footer{display:flex;flex-wrap:wrap;gap:.4rem 1.2rem;font-size:.8rem;color:var(--
 <main>
   <header>
     <h1>openrouter <span>· consola</span></h1>
-    <p>Cliente de referencia del servicio. Etapas 1 a 5: conexión, catálogo, consulta, medición, histórico con totales y claves por aplicación.</p>
+    <p>Cliente de referencia del servicio. Etapas 1 a 6: conexión, catálogo, consulta, medición, histórico, claves por aplicación y presupuestos.</p>
   </header>
 
   <section class="panel">
@@ -94,6 +94,7 @@ footer{display:flex;flex-wrap:wrap;gap:.4rem 1.2rem;font-size:.8rem;color:var(--
       <div><dt>Modelo por defecto</dt><dd id="k-modelo">–</dd></div>
       <div><dt>Build</dt><dd id="k-build">–</dd></div>
       <div><dt>Hablas como</dt><dd id="k-quien">–</dd></div>
+      <div><dt>Presupuesto</dt><dd id="k-presupuesto">–</dd></div>
     </dl>
     <p>La clave se guarda solo en este navegador. La de OpenRouter nunca sale del backend.</p>
   </section>
@@ -190,9 +191,27 @@ footer{display:flex;flex-wrap:wrap;gap:.4rem 1.2rem;font-size:.8rem;color:var(--
       </div>
     </div>
     <div class="tabla"><table>
-      <thead><tr><th>Aplicación</th><th>Id</th><th>Creada</th><th>Estado</th><th></th></tr></thead>
-      <tbody id="apps-filas"><tr><td colspan="5" class="texto">Pulsa «Actualizar» para ver las aplicaciones.</td></tr></tbody>
+      <thead><tr><th>Aplicación</th><th>Id</th><th>Topes</th><th>Gasto</th><th>Estado</th><th></th></tr></thead>
+      <tbody id="apps-filas"><tr><td colspan="6" class="texto">Pulsa «Actualizar» para ver las aplicaciones.</td></tr></tbody>
     </table></div>
+
+    <div id="app-limites" hidden>
+      <h3 style="font-size:.95rem;margin:.6rem 0 0">Topes de <span id="lim-nombre"></span></h3>
+      <p>Sin periodo no hay presupuesto que aplicar. Deja un campo vacío para quitar ese tope.</p>
+      <div class="fila">
+        <label for="lim-periodo">Periodo
+          <select id="lim-periodo">
+            <option value="">sin presupuesto</option>
+            <option value="dia">por día</option>
+            <option value="mes">por mes</option>
+          </select>
+        </label>
+        <label for="lim-limite">Corta en ($)<input id="lim-limite" type="number" step="0.01" min="0"></label>
+        <label for="lim-aviso">Avisa en ($)<input id="lim-aviso" type="number" step="0.01" min="0"></label>
+        <label for="lim-cuota">Llamadas por minuto<input id="lim-cuota" type="number" step="1" min="1"></label>
+        <button class="primario" id="btn-limites">Guardar topes</button>
+      </div>
+    </div>
   </section>
 
   <section class="panel">
@@ -221,7 +240,7 @@ footer{display:flex;flex-wrap:wrap;gap:.4rem 1.2rem;font-size:.8rem;color:var(--
   </section>
 
   <footer>
-    <span>Build <code>OP-B1-20260913-013</code></span>
+    <span>Build <code>OP-B1-20260913-014</code></span>
     <span>Backend: <a id="url-backend" href="#">–</a></span>
     <a href="api.html">Documentación de la API</a>
     <a href="./">Mock de todas las etapas</a>
@@ -305,6 +324,7 @@ footer{display:flex;flex-wrap:wrap;gap:.4rem 1.2rem;font-size:.8rem;color:var(--
       // El panel de aplicaciones solo tiene sentido con la clave que manda.
       $('panel-apps').hidden = !quien.administracion;
       $('ficha-clave').hidden = false;
+      margenPropio();
       cargarCatalogo(false);
     }).catch(function(e){
       pinta('estado', e.message, 'mal');
@@ -410,7 +430,11 @@ footer{display:flex;flex-wrap:wrap;gap:.4rem 1.2rem;font-size:.8rem;color:var(--
   });
 
   // --- uso ----------------------------------------------------------------
-  function dinero6(v){ return v == null ? '–' : Number(v).toFixed(6) + ' $'; }
+  function dinero6(v){
+    if (v == null) return '–';
+    // Seis decimales para lo que cuesta una llamada, dos para un presupuesto.
+    return Math.abs(v) >= 0.01 ? Number(v).toFixed(2) + ' $' : Number(v).toFixed(6) + ' $';
+  }
   // Por debajo del segundo, los milisegundos dicen algo; "0.00 s" no dice nada.
   function duracion(ms){ return ms < 1000 ? Math.round(ms) + ' ms' : (ms / 1000).toFixed(2) + ' s'; }
 
@@ -483,6 +507,20 @@ footer{display:flex;flex-wrap:wrap;gap:.4rem 1.2rem;font-size:.8rem;color:var(--
     return tr;
   }
 
+  // --- presupuesto ----------------------------------------------------------
+  function tope(p){
+    if (!p || !p.periodo) return 'sin tope';
+    var texto = dinero6(p.consumido) + ' de ' + dinero6(p.limite) + ' por ' + p.periodo;
+    return texto + (p.en_aviso ? ' (en aviso)' : '');
+  }
+
+  function margenPropio(){
+    llama('/v1/presupuesto').then(function(res){
+      var p = res.datos;
+      texto('k-presupuesto', p.administracion ? 'sin límites (administración)' : tope(p));
+    }).catch(function(){ texto('k-presupuesto', '–'); });
+  }
+
   // --- aplicaciones ---------------------------------------------------------
   function cargarApps(){
     var boton = $('btn-apps');
@@ -497,18 +535,33 @@ footer{display:flex;flex-wrap:wrap;gap:.4rem 1.2rem;font-size:.8rem;color:var(--
         cuerpo.appendChild(vacia);
       }
       res.datos.data.forEach(function(a){
+        var topes = a.periodo
+          ? dinero6(a.limite) + ' por ' + a.periodo + (a.cuota_minuto ? ', ' + a.cuota_minuto + '/min' : '')
+          : (a.cuota_minuto ? a.cuota_minuto + '/min' : 'sin tope');
         var tr = fila([
           { v: a.nombre, clase: 'texto' },
           { v: a.id },
-          { v: (a.creada || '').slice(0, 10) },
+          { v: topes },
+          { v: '–' },
           { v: a.activa ? 'activa' : 'dada de baja', clase: a.activa ? '' : 'baja' },
           { v: '' }
         ]);
         if (a.activa){
-          var boton = document.createElement('button');
-          boton.textContent = 'Dar de baja';
-          boton.addEventListener('click', function(){ bajaApp(a); });
-          tr.lastChild.appendChild(boton);
+          var editar = document.createElement('button');
+          editar.textContent = 'Topes';
+          editar.addEventListener('click', function(){ editaLimites(a); });
+          tr.lastChild.appendChild(editar);
+
+          var baja = document.createElement('button');
+          baja.textContent = 'Dar de baja';
+          baja.addEventListener('click', function(){ bajaApp(a); });
+          tr.lastChild.appendChild(baja);
+
+          // El gasto del periodo se pide aparte: la lista no lo trae.
+          llama('/v1/presupuesto?app=' + encodeURIComponent(a.id)).then(function(res){
+            tr.children[3].textContent = res.datos.periodo ? dinero6(res.datos.consumido) : '–';
+            if (res.datos.en_aviso) tr.children[3].className = 'fallo';
+          }).catch(function(){});
         }
         cuerpo.appendChild(tr);
       });
@@ -549,6 +602,44 @@ footer{display:flex;flex-wrap:wrap;gap:.4rem 1.2rem;font-size:.8rem;color:var(--
     }).catch(function(e){ pinta('apps-estado', e.message, 'mal'); });
   }
 
+  var appEnEdicion = null;
+
+  function editaLimites(a){
+    appEnEdicion = a;
+    texto('lim-nombre', a.nombre);
+    $('lim-periodo').value = a.periodo || '';
+    $('lim-limite').value = a.limite == null ? '' : a.limite;
+    $('lim-aviso').value = a.aviso == null ? '' : a.aviso;
+    $('lim-cuota').value = a.cuota_minuto == null ? '' : a.cuota_minuto;
+    $('app-limites').hidden = false;
+  }
+
+  function guardaLimites(){
+    if (!appEnEdicion) return;
+    var cuerpo = {};
+    if ($('lim-periodo').value) cuerpo.periodo = $('lim-periodo').value;
+    if ($('lim-limite').value !== '') cuerpo.limite = Number($('lim-limite').value);
+    if ($('lim-aviso').value !== '') cuerpo.aviso = Number($('lim-aviso').value);
+    if ($('lim-cuota').value !== '') cuerpo.cuota_minuto = Number($('lim-cuota').value);
+
+    var boton = $('btn-limites');
+    boton.disabled = true;
+    pinta('apps-estado', 'guardando topes…', '');
+    llama('/v1/apps/' + encodeURIComponent(appEnEdicion.id) + '/presupuesto', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(cuerpo)
+    }).then(function(){
+      pinta('apps-estado', 'topes guardados', 'ok');
+      $('app-limites').hidden = true;
+      appEnEdicion = null;
+      cargarApps();
+    }).catch(function(e){
+      pinta('apps-estado', e.message, 'mal');
+    }).finally(function(){ boton.disabled = false; });
+  }
+
+  $('btn-limites').addEventListener('click', guardaLimites);
   $('btn-apps').addEventListener('click', cargarApps);
   $('btn-app-alta').addEventListener('click', altaApp);
 
@@ -664,6 +755,8 @@ footer{display:flex;flex-wrap:wrap;gap:.4rem 1.2rem;font-size:.8rem;color:var(--
       // El servicio mide mejor que nosotros: su registro trae el coste, y al
       // cabo de un par de segundos el que factura OpenRouter en vez del
       // estimado. La cabecera dice que registro mirar.
+      var presupuesto = res.respuesta.headers.get('X-Presupuesto');
+      if (presupuesto) pinta('estado', 'aviso de presupuesto: ' + presupuesto, 'avisa');
       var idUso = res.respuesta.headers.get('X-Uso-Id');
       if (idUso){
         texto('u-id', idUso);

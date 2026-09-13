@@ -2,17 +2,20 @@ use std::{sync::Arc, time::Duration, time::Instant};
 
 use axum::{
     extract::State,
-    http::{HeaderMap, HeaderValue, StatusCode},
+    http::{header::HeaderName, HeaderMap, HeaderValue, StatusCode},
     response::{IntoResponse, Response},
     Extension, Json,
 };
 use serde_json::Value;
 
-use crate::{apps::Identidad, error::ErrorApi, rutas::uso::CABECERA_USO, Servicio};
+use crate::{apps::Identidad, error::ErrorApi, guardia, rutas::uso::CABECERA_USO, Servicio};
 
 /// Cuánto se espera entre intentos de reconciliación. OpenRouter tarda un poco
 /// en dejar lista la contabilidad de una generación.
 const REINTENTOS: [u64; 3] = [400, 1200, 3000];
+
+/// Avisa de que el presupuesto se está acabando sin cortar la llamada.
+const CABECERA_AVISO: HeaderName = HeaderName::from_static("x-presupuesto");
 
 /// `POST /v1/chat/completions`: proxy fino con el contrato de OpenAI.
 ///
@@ -56,8 +59,14 @@ pub async fn chat(
         .unwrap_or_default()
         .to_string();
 
+    // La huella identifica una consulta repetida; se calcula sobre el cuerpo ya
+    // completado, para que dos peticiones sin modelo cuenten como la misma.
+    let huella = crate::apps::hash(&cuerpo.to_string());
+    let aviso = guardia::comprueba(&servicio, &quien, &huella)?;
+
     let mut registro = servicio.uso.abre(pedido.clone());
     registro.app_id = quien.app_id();
+    registro.huella = Some(huella);
     // El trabajo de negocio al que pertenece la llamada: varias consultas de un
     // mismo presupuesto se agrupan luego por aqui.
     registro.operacion = cabeceras
@@ -85,7 +94,7 @@ pub async fn chat(
                 reconcilia(servicio.clone(), id_uso.clone(), generacion);
             }
 
-            Ok(con_uso(&id_uso, (StatusCode::OK, Json(respuesta))))
+            Ok(con_uso(&id_uso, aviso.as_deref(), (StatusCode::OK, Json(respuesta))))
         }
         Err(fallo) => {
             // Un fallo también consumió tiempo, y a veces crédito: se anota.
@@ -97,11 +106,17 @@ pub async fn chat(
     }
 }
 
-fn con_uso(id: &str, respuesta: impl IntoResponse) -> Response {
-    match HeaderValue::from_str(id) {
-        Ok(valor) => ([(CABECERA_USO, valor)], respuesta).into_response(),
-        Err(_) => respuesta.into_response(),
+fn con_uso(id: &str, aviso: Option<&str>, respuesta: impl IntoResponse) -> Response {
+    let mut cabeceras = HeaderMap::new();
+    if let Ok(valor) = HeaderValue::from_str(id) {
+        cabeceras.insert(CABECERA_USO, valor);
     }
+    // El aviso de presupuesto viaja en cabecera: no cambia el cuerpo, que es de
+    // OpenRouter, y una aplicacion puede mirarlo sin parsear nada.
+    if let Some(valor) = aviso.and_then(|a| HeaderValue::from_str(a).ok()) {
+        cabeceras.insert(CABECERA_AVISO, valor);
+    }
+    (cabeceras, respuesta).into_response()
 }
 
 /// Pregunta a OpenRouter qué costó de verdad la generación y lo sustituye en el
