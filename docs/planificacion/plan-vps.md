@@ -39,14 +39,15 @@ como el resto del proyecto.
 
 ### Lo que se supone, y su plan B
 
-- **[SUPUESTO] El VPS es un Linux con systemd (Debian 12 o Ubuntu 22.04/24.04),
-  con acceso por SSH con clave y un usuario con `sudo`, y se puede instalar
-  Docker.** Plan B: sin Docker, se despliega el binario compilado con
-  `x86_64-unknown-linux-musl` desde el runner y se ejecuta con una unidad de
-  systemd endurecida (mismo `.env`, mismos scripts de copia). La API, los secretos y la verificación no
-  cambian; solo cambia cómo se arranca el proceso.
-- **El VPS ya tiene un Caddy sirviendo otros dominios** (lo dice el usuario;
-  la inspección de la fase 0 lo confirma). Eso cambia una cosa importante:
+- **Confirmado por la inspección (2026-09-13)**: Ubuntu 24.04.4 LTS, Docker
+  29.6 con Compose 5.3 ya instalados y en uso, 12 GB de RAM, 164 GB libres,
+  NTP activo, `ufw` activo con solo SSH, 80 y 443, y fail2ban activo. El
+  usuario de despliegue ya entra por clave y tiene `sudo` sin contraseña.
+  Desaparece el plan B del binario con systemd: Docker está y funciona.
+- **El VPS ya tiene un Caddy sirviendo otros dominios**: confirmado. Caddy
+  v2.11.4 como servicio de systemd en el host, escuchando en 80 y 443 con su
+  API de administración en `127.0.0.1:2019`, con 18 hosts cargados entre
+  `oracle402.com` y `agentsats.org` y sus certificados emitidos. Eso cambia una cosa importante:
   **no hace falta ningún puerto público nuevo**. Caddy ya escucha en 80 y
   443 para todos sus dominios y reparte por nombre de host; el subdominio
   `apisor.oracle402.com` es un bloque de sitio más en su configuración, con
@@ -55,17 +56,18 @@ como el resto del proyecto.
   porque el 8080 puede estar ocupado por otro servicio; `vps/inspeccionar.sh`
   lista los ocupados y propone el primer libre. El `compose` del proyecto
   **no lleva Caddy**: un segundo Caddy pelearía por 80/443 con el que ya está.
-  [SUPUESTO] ese Caddy corre en el host (paquete `caddy`, unidad de systemd,
-  `/etc/caddy/Caddyfile` con `import` de una carpeta). Plan B si corre en
-  Docker: se añade nuestro sitio a su `Caddyfile` montado y se conecta el
-  backend a su red de Docker por nombre de contenedor en vez de por
-  `127.0.0.1`. Plan C si no es Caddy sino nginx: mismo esquema con un
-  `server` y certbot, que la inspección también detecta.
-- **[SUPUESTO] El subdominio se resuelve por un registro A (y AAAA si el VPS
-  tiene IPv6) directo a la IP del VPS, sin proxy de Cloudflare delante.** Con
-  el proxy naranja de Cloudflare, Caddy no puede completar el reto HTTP-01
-  de Let's Encrypt de la forma habitual; plan B: modo «DNS only» en Cloudflare
-  o certificado de origen de Cloudflare instalado a mano en Caddy.
+  Corre en el host, no en Docker, así que el backend se alcanza por
+  `127.0.0.1`. [SUPUESTO] `/etc/caddy/Caddyfile` importa los sitios de una
+  carpeta: el fichero solo declara un bloque a la vista y hay 18 hosts
+  cargados. La segunda pasada de la inspección lista los `import`. Plan B si
+  no importa nada: `preparar.sh` añade un `import /etc/caddy/conf.d/*.caddy`
+  al final, que es la única línea que tocaría de una configuración ajena.
+  Todos los demás servicios del VPS siguen el mismo patrón que vamos a usar:
+  contenedor publicado solo en `127.0.0.1:<puerto>` y Caddy delante.
+- **`apisor.oracle402.com` ya resuelve a la IP pública del VPS**, sin proxy
+  delante: confirmado por la inspección desde la propia máquina. Los otros
+  dominios de ese Caddy obtienen certificado sin problema, así que el nuestro
+  también lo hará.
 - **[SUPUESTO] GestiónPresupuestos llamará al servicio desde su propio
   backend, nunca desde el navegador.** Es lo que permite que la clave de
   aplicación no salga de un servidor. Si llamara desde el navegador, la clave
@@ -161,18 +163,25 @@ Ordenado de fuera hacia dentro. Cada punto dice quién lo aplica.
   `PermitRootLogin prohibit-password` o `no` si el usuario con sudo es otro).
   Se aplica al final del script, tras comprobar que la clave del usuario
   funciona, para no dejar fuera a nadie.
-- **Cortafuegos**: `ufw` con política `deny` de entrada y solo 22, 80 y 443.
-  Si el usuario ya tiene el SSH en otro puerto, se respeta (`VPS_PUERTO`).
-- **fail2ban** con la cárcel `sshd` activa. Nada más: la API responde `401`
-  barato a lo no autenticado, y meter fail2ban en los logs de Caddy es más
-  fragilidad que protección para el tráfico previsto.
+- **Cortafuegos**: `ufw` ya está activo con solo SSH, 80 y 443, que es
+  justo la política del plan; `preparar.sh` solo lo comprueba y no añade
+  reglas (el backend no publica ningún puerto fuera de `127.0.0.1`).
+- **fail2ban** ya está activo. `preparar.sh` lo comprueba. Nada más: la API
+  responde `401` barato a lo no autenticado, y meter fail2ban en los logs de
+  Caddy es más fragilidad que protección para el tráfico previsto.
 - **Actualizaciones**: `unattended-upgrades` solo para parches de seguridad.
   Docker no se actualiza solo; se anota como tarea mensual en el runbook.
-- **Usuario de despliegue** `deploy`, sin sudo general. Lo único que puede
-  hacer con sudo, sin contraseña, es `/srv/openrouter/desplegar.sh` y
-  `/srv/openrouter/escribir-env.sh`, y ambos son de root y no editables por
-  él. Así la clave SSH que guarda GitHub no equivale a root en el VPS. **No**
-  se le mete en el grupo `docker`: pertenecer a él es ser root.
+- **Usuario de despliegue**. El plan original pedía un usuario sin sudo
+  general, con sudo solo para `desplegar.sh` y `escribir-env.sh`. La
+  inspección muestra que el usuario con el que entra el workflow ya tiene
+  sudo sin contraseña para todo: es el que el usuario usa para operar el
+  VPS. **Decisión pendiente del usuario**: (a) seguir con ese usuario, más
+  sencillo, aceptando que la clave guardada en GitHub equivale a root en el
+  VPS; o (b) que `preparar.sh` cree `openrouter-deploy` con sudoers limitado
+  a esos dos scripts y se cambie `VPS_USUARIO` y la clave autorizada. El plan
+  recomienda (b): cuesta diez líneas y acota lo que una fuga puede hacer.
+  En ninguno de los dos casos se le mete en el grupo `docker`: pertenecer a
+  él es ser root sin pasar por `sudo`.
 - **Clave SSH dedicada** al despliegue, generada para esto, distinta de la que
   usa el usuario desde su PC. Se revoca borrando una línea de
   `authorized_keys`.
@@ -252,14 +261,15 @@ Ordenado de fuera hacia dentro. Cada punto dice quién lo aplica.
 
 | Secreto / variable | Dónde | Quién lo lee |
 |---|---|---|
-| `VPS_HOST`, `VPS_PUERTO`, `VPS_USUARIO` | secretos de repositorio | `vps-preparar.yml`, `deploy-vps.yml` |
+| `VPS_HOST`, `VPS_USUARIO` | secretos de repositorio | `vps-inspeccionar.yml`, `vps-preparar.yml`, `deploy-vps.yml` |
+| `VPS_PUERTO` | **variable** de repositorio (como secreto enmascararía cada «22» del log) | idem |
 | `VPS_SSH_CLAVE` (privada, dedicada) | secreto de repositorio | idem |
 | `VPS_HOST_KEY` (salida de `ssh-keyscan`) | secreto de repositorio | idem |
 | `VPS_SUDO_USUARIO`, `VPS_SUDO_SSH_CLAVE` | secretos de repositorio, **solo para preparar** | `vps-preparar.yml`; se pueden borrar después |
 | `VPS_OPENROUTER_API_KEY` | secreto de repositorio | `deploy-vps.yml` → `.env` del VPS |
 | `VPS_SERVICIO_CLAVE` | secreto de repositorio | idem |
 | `API_DOMINIO` = `apisor.oracle402.com` | variable de repositorio | los workflows del VPS, `docs/` |
-| `VPS_PUERTO_INTERNO` (el que diga la inspección) | variable de repositorio | `deploy-vps.yml` → `.env` y `apisor.caddy` |
+| `VPS_PUERTO_INTERNO` = `8081` (el que dio la inspección) | variable de repositorio | `deploy-vps.yml` → `.env` y `apisor.caddy` |
 | `MODELO_DEFECTO` | variable de repositorio (ya existe) | idem |
 
 Los secretos del VPS llevan prefijo `VPS_` para no confundirlos con los de Fly,
@@ -333,18 +343,19 @@ las fases 1 y 2 no tocan el VPS y se pueden hacer sin la conexión.
 
 ### Fase 0 — Inspección y prerrequisitos (sin código del servicio)
 
-0. **Inspeccionar el VPS antes de decidir nada.** Crear los secretos
-   `VPS_HOST`, `VPS_USUARIO`, `VPS_SSH_CLAVE` (y `VPS_PUERTO` si no es 22)
-   y lanzar `vps-inspeccionar.yml`. Su informe dice: quién sirve 80/443 y su
+0. **Inspeccionar el VPS antes de decidir nada.** HECHO el 2026-09-13:
+   `tools/vps-clave.ps1` creó la clave dedicada, la autorizó y subió los
+   secretos, y `vps-inspeccionar.yml` corrió en verde (run
+   [34763158868](https://github.com/npiobject-labs/openrouter/actions/runs/34763158868)).
+   Resultado en la sección 0. Su informe dice: quién sirve 80/443 y su
    versión, qué dominios atiende ya Caddy y con qué certificados, si Docker
    está y qué contenedores corren, el primer puerto interno libre a partir
    de 8080, si `apisor.oracle402.com` ya resuelve y a qué IP, y el estado de
    `ufw`. El script es de solo lectura y no imprime el interior de ningún
    fichero de configuración. Con ese informe se fijan `VPS_PUERTO_INTERNO`
    y se confirma o se descarta cada supuesto de la sección 0.
-1. Crear el registro A de `apisor.oracle402.com` hacia el VPS (si la
-   inspección dice que aún no resuelve). Repetir la inspección: el veredicto
-   DNS tiene que decir «apunta a esta máquina».
+1. Registro A de `apisor.oracle402.com`: ya existe y apunta a la máquina.
+   Nada que hacer.
 2. Crear en OpenRouter una clave nueva con límite de crédito para el VPS.
 3. Generar `SERVICIO_CLAVE` nueva en el PC (`openssl rand -base64 32`).
 4. Generar la clave SSH de despliegue en el PC (`ssh-keygen -t ed25519 -f
@@ -586,9 +597,9 @@ base del VPS: son llamadas de otra clave y de otra época.
 
 ## 10. Orden de trabajo propuesto para las próximas sesiones
 
-0. Ahora: crear los tres secretos de SSH y lanzar `vps-inspeccionar.yml`
-   (fase 0, paso 0). Con el informe se cierran los supuestos y se elige el
-   puerto interno.
+0. HECHO: secretos creados e inspección en verde. Queda del paso 0 fijar la
+   variable `VPS_PUERTO_INTERNO=8081`, decidir el usuario de despliegue
+   (sección 2.1) y crear la clave de OpenRouter y `SERVICIO_CLAVE` del VPS.
 1. Sesión siguiente: fase 1 entera (backend + script de verificación) en un
    PR, verificado en Fly. No necesita el VPS.
 2. Misma sesión o la siguiente: fase 2 en un PR. Tampoco necesita el VPS,

@@ -65,6 +65,25 @@ for f in /etc/caddy/Caddyfile /etc/caddy/conf.d/*.caddy /etc/caddy/sites/*; do
   # los dominios que ya atiende, nada de lo que hay dentro.
   $SUDO grep -E '^[^[:space:]#].*\{[[:space:]]*$' "$f" 2> /dev/null | sed 's/[[:space:]]*{[[:space:]]*$//; s/^/    - sitio: /'
 done
+# De donde importa el Caddyfile sus sitios: la carpeta en la que ira el nuestro.
+if $SUDO test -r /etc/caddy/Caddyfile; then
+  importa="$($SUDO grep -E '^[[:space:]]*import[[:space:]]' /etc/caddy/Caddyfile 2> /dev/null | awk '{print $2}')"
+  if [ -n "$importa" ]; then
+    for patron in $importa; do
+      echo "- import $patron:"
+      # Las rutas relativas lo son respecto al propio Caddyfile.
+      case "$patron" in /*) ;; *) patron="/etc/caddy/$patron" ;; esac
+      for g in $patron; do
+        [ -e "$g" ] || { echo "    - (sin ficheros)"; continue; }
+        echo "    - $g"
+        $SUDO grep -E '^[^[:space:]#].*\{[[:space:]]*$' "$g" 2> /dev/null | sed 's/[[:space:]]*{[[:space:]]*$//; s/^/        - sitio: /'
+      done
+    done
+  else
+    echo "- el Caddyfile no importa ninguna carpeta"
+  fi
+  echo "- lineas del Caddyfile: $($SUDO wc -l < /etc/caddy/Caddyfile) · bloques que abren llave sin sangria: $($SUDO grep -cE '^[^[:space:]#].*\{[[:space:]]*$' /etc/caddy/Caddyfile)"
+fi
 # La API de administracion de Caddy, si escucha, da la lista real de hosts.
 if tiene curl && curl -fs --max-time 3 http://127.0.0.1:2019/config/ > /tmp/caddy-config.json 2> /dev/null; then
   echo "- API de administracion en 2019: si"

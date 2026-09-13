@@ -12,8 +12,8 @@
        clave personal). Es idempotente: no duplica la linea.
     4. Comprueba que la clave nueva entra sin contrasena.
     5. Obtiene la huella del servidor (ssh-keyscan).
-    6. Sube VPS_HOST, VPS_PUERTO, VPS_USUARIO, VPS_SSH_CLAVE y VPS_HOST_KEY
-       como secretos del repositorio, y API_DOMINIO como variable. Si tienes
+    6. Sube VPS_HOST, VPS_USUARIO, VPS_SSH_CLAVE y VPS_HOST_KEY como secretos
+       del repositorio, y API_DOMINIO y VPS_PUERTO como variables. Si tienes
        la CLI "gh" autenticada lo hace sola; si no, te va copiando cada valor
        al portapapeles y abre la pagina de GitHub para pegarlo.
 
@@ -149,7 +149,6 @@ Paso 6 "Secretos del repositorio $Repo"
 $Privada = Get-Content $Clave -Raw
 $secretos = [ordered]@{
     VPS_HOST      = $HostReal
-    VPS_PUERTO    = "$Puerto"
     VPS_USUARIO   = $Usuario
     VPS_SSH_CLAVE = $Privada
     VPS_HOST_KEY  = $huella
@@ -172,6 +171,10 @@ if ($ghOk) {
     }
     & gh variable set API_DOMINIO -R $Repo -b $Dominio | Out-Null
     Ok "variable API_DOMINIO = $Dominio"
+    # El puerto es variable y no secreto: como secreto, GitHub enmascararia
+    # cada "22" que apareciera en cualquier log.
+    & gh variable set VPS_PUERTO -R $Repo -b "$Puerto" | Out-Null
+    Ok "variable VPS_PUERTO = $Puerto"
 } else {
     Write-Host "   Sin CLI 'gh' autenticada: se hace por el navegador, un valor cada vez."
     Write-Host "   Para cada uno: el valor ya esta en el portapapeles; en la pagina que se abre,"
@@ -187,6 +190,10 @@ if ($ghOk) {
     Set-Clipboard -Value $Dominio
     Write-Host ""
     Write-Host "   >>> Variable (pestaña Variables, no Secrets): Name: API_DOMINIO   Value: $Dominio (copiado)" -ForegroundColor Yellow
+    Start-Process "https://github.com/$Repo/settings/variables/actions/new"
+    Read-Host "   Pulsa Enter cuando la hayas guardado"
+    Set-Clipboard -Value "$Puerto"
+    Write-Host "   >>> Variable: Name: VPS_PUERTO   Value: $Puerto (copiado)" -ForegroundColor Yellow
     Start-Process "https://github.com/$Repo/settings/variables/actions/new"
     Read-Host "   Pulsa Enter cuando la hayas guardado"
     Set-Clipboard -Value ""

@@ -28,7 +28,8 @@ jobs:
     timeout-minutes: 10
     env:
       VPS_HOST: ${{ secrets.VPS_HOST }}
-      VPS_PUERTO: ${{ secrets.VPS_PUERTO }}
+      # Variable, no secreto: como secreto GitHub enmascararia cada "22" del log.
+      VPS_PUERTO: ${{ vars.VPS_PUERTO || secrets.VPS_PUERTO }}
       VPS_USUARIO: ${{ secrets.VPS_USUARIO }}
       VPS_SSH_CLAVE: ${{ secrets.VPS_SSH_CLAVE }}
       VPS_HOST_KEY: ${{ secrets.VPS_HOST_KEY }}
