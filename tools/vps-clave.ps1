@@ -130,7 +130,16 @@ $lineas = @(& ssh-keyscan -p $Puerto $HostReal 2>$null | Where-Object { $_ -is [
 $huella = $lineas | Where-Object { $_ -match "ssh-ed25519" } | Select-Object -First 1
 if (-not $huella) { $huella = $lineas | Select-Object -First 1 }
 if (-not $huella) {
-    Write-Host "   ssh-keyscan no devolvio nada. Prueba a mano: ssh-keyscan -p $Puerto $HostReal"
+    # Plan B: el PC ya conoce el servidor (el paso 4 entro en BatchMode), asi
+    # que la huella esta en known_hosts. Las entradas hasheadas (|1|...) valen.
+    Write-Host "   ssh-keyscan no devolvio nada; se toma la huella de ~/.ssh/known_hosts."
+    $nombre = if ($Puerto -eq 22) { $HostReal } else { "[$HostReal]:$Puerto" }
+    $conocidas = @(& ssh-keygen -F $nombre 2>$null | Where-Object { $_ -is [string] -and $_ -notmatch "^#" -and $_.Trim() -ne "" })
+    $huella = $conocidas | Where-Object { $_ -match "ssh-ed25519" } | Select-Object -First 1
+    if (-not $huella) { $huella = $conocidas | Select-Object -First 1 }
+}
+if (-not $huella) {
+    Write-Host "   Prueba a mano: ssh-keyscan -p $Puerto $HostReal   y   ssh-keygen -F $HostReal"
     Fallo "sin huella de $HostReal."
 }
 Ok "huella obtenida"
