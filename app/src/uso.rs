@@ -166,6 +166,7 @@ pub enum Agrupacion {
     Dia,
     Modelo,
     App,
+    Operacion,
 }
 
 impl Agrupacion {
@@ -175,6 +176,7 @@ impl Agrupacion {
         match texto {
             Some("modelo") => Self::Modelo,
             Some("app") => Self::App,
+            Some("operacion") => Self::Operacion,
             _ => Self::Dia,
         }
     }
@@ -185,6 +187,9 @@ impl Agrupacion {
             Self::Dia => "substr(fecha, 1, 10)",
             Self::Modelo => "coalesce(modelo_servido, modelo_pedido)",
             Self::App => "coalesce(app_id, 'administracion')",
+            // Lo que vino en X-Operacion: el trabajo de negocio. Sin cabecera,
+            // un grupo propio para que no se mezcle con los que sí la traen.
+            Self::Operacion => "coalesce(operacion, '(sin operacion)')",
         }
     }
 }
@@ -296,13 +301,13 @@ impl Uso {
     }
 
     /// Los últimos `n`, del más reciente al más antiguo. Con `app`, solo los de
-    /// esa aplicación.
-    pub fn ultimos(&self, n: usize, app: Option<&str>) -> Vec<Registro> {
+    /// esa aplicación; con `operacion`, solo los de ese trabajo de negocio.
+    pub fn ultimos(&self, n: usize, app: Option<&str>, operacion: Option<&str>) -> Vec<Registro> {
         self.consulta(
             "SELECT * FROM uso
-             WHERE (?2 IS NULL OR app_id = ?2)
+             WHERE (?2 IS NULL OR app_id = ?2) AND (?3 IS NULL OR operacion = ?3)
              ORDER BY fecha DESC, rowid DESC LIMIT ?1",
-            params![n as i64, app],
+            params![n as i64, app, operacion],
         )
     }
 
@@ -398,13 +403,14 @@ impl Uso {
         desde: Option<&str>,
         hasta: Option<&str>,
         app: Option<&str>,
+        operacion: Option<&str>,
     ) -> Vec<Registro> {
         self.consulta(
             "SELECT * FROM uso
              WHERE (?1 IS NULL OR fecha >= ?1) AND (?2 IS NULL OR fecha <= ?2)
-               AND (?3 IS NULL OR app_id = ?3)
+               AND (?3 IS NULL OR app_id = ?3) AND (?4 IS NULL OR operacion = ?4)
              ORDER BY fecha ASC, rowid ASC",
-            params![desde, hasta, app],
+            params![desde, hasta, app, operacion],
         )
     }
 
@@ -415,6 +421,7 @@ impl Uso {
         hasta: Option<&str>,
         agrupar: &Agrupacion,
         app: Option<&str>,
+        operacion: Option<&str>,
     ) -> Vec<Value> {
         let consulta = format!(
             "SELECT {columna} AS grupo,
@@ -426,7 +433,7 @@ impl Uso {
                     avg(latencia_ms)        AS latencia_media_ms
              FROM uso
              WHERE (?1 IS NULL OR fecha >= ?1) AND (?2 IS NULL OR fecha <= ?2)
-               AND (?3 IS NULL OR app_id = ?3)
+               AND (?3 IS NULL OR app_id = ?3) AND (?4 IS NULL OR operacion = ?4)
              GROUP BY grupo
              ORDER BY grupo DESC",
             columna = agrupar.columna()
@@ -436,7 +443,7 @@ impl Uso {
         let Ok(mut sentencia) = conexion.prepare(&consulta) else {
             return Vec::new();
         };
-        let filas = sentencia.query_map(params![desde, hasta, app], |f| {
+        let filas = sentencia.query_map(params![desde, hasta, app, operacion], |f| {
             Ok(serde_json::json!({
                 "grupo": f.get::<_, String>("grupo")?,
                 "llamadas": f.get::<_, i64>("llamadas")?,
@@ -623,7 +630,7 @@ mod pruebas {
             uso.anota(r);
         }
 
-        let por_modelo = uso.resumen(None, None, &Agrupacion::Modelo, None);
+        let por_modelo = uso.resumen(None, None, &Agrupacion::Modelo, None, None);
         assert_eq!(por_modelo.len(), 2);
         let a = por_modelo.iter().find(|f| f["grupo"] == "a").unwrap();
         assert_eq!(a["llamadas"], 2);
@@ -632,10 +639,36 @@ mod pruebas {
         assert_eq!(a["tokens_entrada"], 20);
 
         // Todas son de hoy, así que por día sale un solo grupo con las tres.
-        let por_dia = uso.resumen(None, None, &Agrupacion::Dia, None);
+        let por_dia = uso.resumen(None, None, &Agrupacion::Dia, None, None);
         assert_eq!(por_dia.len(), 1);
         assert_eq!(por_dia[0]["llamadas"], 3);
         assert_eq!(por_dia[0]["coste"], 7.0);
+    }
+
+    #[test]
+    fn la_operacion_filtra_y_agrupa() {
+        let uso = en_memoria();
+        for (operacion, coste) in [(Some("pres-1"), 1.0), (Some("pres-1"), 2.0), (Some("pres-2"), 4.0), (None, 8.0)] {
+            let mut r = uso.abre("m".into());
+            r.operacion = operacion.map(str::to_string);
+            r.coste = Some(coste);
+            r.estado = 200;
+            uso.anota(r);
+        }
+        assert_eq!(uso.ultimos(50, None, Some("pres-1")).len(), 2);
+        assert_eq!(uso.intervalo(None, None, None, Some("pres-2")).len(), 1);
+
+        let por_operacion = uso.resumen(None, None, &Agrupacion::Operacion, None, None);
+        assert_eq!(por_operacion.len(), 3, "dos operaciones y el grupo sin cabecera");
+        let una = por_operacion.iter().find(|f| f["grupo"] == "pres-1").unwrap();
+        assert_eq!(una["coste"], 3.0);
+        let sin = por_operacion.iter().find(|f| f["grupo"] == "(sin operacion)").unwrap();
+        assert_eq!(sin["coste"], 8.0);
+
+        // El filtro y la agrupación se combinan: solo un grupo.
+        let solo = uso.resumen(None, None, &Agrupacion::Operacion, None, Some("pres-2"));
+        assert_eq!(solo.len(), 1);
+        assert_eq!(solo[0]["coste"], 4.0);
     }
 
     #[test]
@@ -645,9 +678,9 @@ mod pruebas {
         r.fecha = "2026-09-12T14:48:00Z".into();
         uso.anota(r);
         // Lo que manda la ruta tras normalizar un "hasta" de solo fecha.
-        assert_eq!(uso.intervalo(None, Some("2026-09-12T23:59:59Z"), None).len(), 1);
+        assert_eq!(uso.intervalo(None, Some("2026-09-12T23:59:59Z"), None, None).len(), 1);
         // Sin normalizar, la fecha suelta dejaria el dia fuera.
-        assert_eq!(uso.intervalo(None, Some("2026-09-12"), None).len(), 0);
+        assert_eq!(uso.intervalo(None, Some("2026-09-12"), None, None).len(), 0);
     }
 
     /// El esquema tal como quedaba en la etapa 4, sin aplicaciones.
@@ -686,7 +719,7 @@ mod pruebas {
         let mut r = uso.abre("m".into());
         r.app_id = Some("app_uno".into());
         uso.anota(r);
-        assert_eq!(uso.ultimos(50, Some("app_uno")).len(), 1);
+        assert_eq!(uso.ultimos(50, Some("app_uno"), None).len(), 1);
         let _ = std::fs::remove_file(ruta);
     }
 
@@ -701,15 +734,15 @@ mod pruebas {
             uso.anota(r);
         }
 
-        assert_eq!(uso.ultimos(50, Some("app_uno")).len(), 2);
-        assert_eq!(uso.ultimos(50, Some("app_dos")).len(), 1);
-        assert_eq!(uso.ultimos(50, None).len(), 4, "sin filtro se ve todo");
+        assert_eq!(uso.ultimos(50, Some("app_uno"), None).len(), 2);
+        assert_eq!(uso.ultimos(50, Some("app_dos"), None).len(), 1);
+        assert_eq!(uso.ultimos(50, None, None).len(), 4, "sin filtro se ve todo");
 
-        let de_una = uso.resumen(None, None, &Agrupacion::Dia, Some("app_uno"));
+        let de_una = uso.resumen(None, None, &Agrupacion::Dia, Some("app_uno"), None);
         assert_eq!(de_una[0]["coste"], 3.0);
 
         // Agrupado por aplicacion, la de administracion sale con su etiqueta.
-        let por_app = uso.resumen(None, None, &Agrupacion::App, None);
+        let por_app = uso.resumen(None, None, &Agrupacion::App, None, None);
         assert_eq!(por_app.len(), 3);
         assert!(por_app.iter().any(|f| f["grupo"] == "administracion"));
     }
@@ -756,8 +789,8 @@ mod pruebas {
             r.fecha = fecha.into();
             uso.anota(r);
         }
-        assert_eq!(uso.intervalo(Some("2026-03-01"), None, None).len(), 1);
-        assert_eq!(uso.intervalo(None, Some("2026-03-01"), None).len(), 1);
-        assert_eq!(uso.intervalo(None, None, None).len(), 2);
+        assert_eq!(uso.intervalo(Some("2026-03-01"), None, None, None).len(), 1);
+        assert_eq!(uso.intervalo(None, Some("2026-03-01"), None, None).len(), 1);
+        assert_eq!(uso.intervalo(None, None, None, None).len(), 2);
     }
 }

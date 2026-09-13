@@ -20,6 +20,9 @@ pub struct Config {
     pub puerto: u16,
     /// Fichero SQLite del histórico. Por defecto, el volumen de Fly.
     pub bd: Option<String>,
+    /// Orígenes admitidos por el CORS. Vacío es "cualquiera", que es lo que la
+    /// consola de Pages necesitaba hasta ahora; en el VPS se acota.
+    pub cors_origenes: Vec<String>,
 }
 
 impl Config {
@@ -39,8 +42,22 @@ impl Config {
                 .and_then(|p| p.parse().ok())
                 .unwrap_or(8080),
             bd: variable("BD_RUTA"),
+            cors_origenes: origenes(variable("CORS_ORIGENES")),
         }
     }
+}
+
+/// `CORS_ORIGENES` es una lista separada por comas. Se descartan los vacíos y
+/// la barra final, que el navegador nunca manda en `Origin`.
+fn origenes(texto: Option<String>) -> Vec<String> {
+    texto
+        .map(|t| {
+            t.split(',')
+                .map(|o| o.trim().trim_end_matches('/').to_string())
+                .filter(|o| !o.is_empty())
+                .collect()
+        })
+        .unwrap_or_default()
 }
 
 /// Una variable vacía cuenta como no definida: `flyctl secrets` y los formularios
@@ -50,4 +67,19 @@ fn variable(nombre: &str) -> Option<String> {
         .ok()
         .map(|v| v.trim().to_string())
         .filter(|v| !v.is_empty())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::origenes;
+
+    #[test]
+    fn la_lista_de_origenes_se_limpia() {
+        assert!(origenes(None).is_empty());
+        assert!(origenes(Some("  ".into())).is_empty());
+        assert_eq!(
+            origenes(Some("https://a.example/, https://b.example ,,".into())),
+            vec!["https://a.example", "https://b.example"]
+        );
+    }
 }

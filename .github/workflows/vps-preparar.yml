@@ -1,0 +1,58 @@
+name: Preparar el VPS
+
+# Una vez, y cada vez que cambie vps/preparar.sh. Idempotente. Copia vps/ a
+# /srv/openrouter/vps y ejecuta preparar.sh con sudo: carpetas, sqlite3, la
+# linea import en el Caddyfile y el timer de copias. No despliega nada.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: vps
+  cancel-in-progress: false
+
+jobs:
+  preparar:
+    name: Preparar la maquina
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      VPS_HOST: ${{ secrets.VPS_HOST }}
+      VPS_USUARIO: ${{ secrets.VPS_USUARIO }}
+      VPS_SSH_CLAVE: ${{ secrets.VPS_SSH_CLAVE }}
+      VPS_HOST_KEY: ${{ secrets.VPS_HOST_KEY }}
+      VPS_PUERTO: ${{ vars.VPS_PUERTO || '22' }}
+      API_DOMINIO: ${{ vars.API_DOMINIO || 'apisor.oracle402.com' }}
+    steps:
+      - name: Comprobar los secretos
+        run: |
+          faltan=""
+          for v in VPS_HOST VPS_USUARIO VPS_SSH_CLAVE VPS_HOST_KEY; do
+            [ -n "${!v}" ] || faltan="${faltan} ${v}"
+          done
+          [ -z "${faltan}" ] || { echo "::error::Faltan secretos:${faltan}"; exit 1; }
+          echo "Secretos presentes. Dominio: ${API_DOMINIO}"
+
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Preparar la clave SSH
+        run: |
+          mkdir -p ~/.ssh && chmod 700 ~/.ssh
+          printf '%s\n' "${VPS_SSH_CLAVE}" > ~/.ssh/vps && chmod 600 ~/.ssh/vps
+          printf '%s\n' "${VPS_HOST_KEY}" > ~/.ssh/known_hosts && chmod 600 ~/.ssh/known_hosts
+          printf 'Host vps\n  HostName %s\n  Port %s\n  User %s\n  IdentityFile ~/.ssh/vps\n  IdentitiesOnly yes\n  BatchMode yes\n  ConnectTimeout 15\n  StrictHostKeyChecking yes\n' \
+            "${VPS_HOST}" "${VPS_PUERTO}" "${VPS_USUARIO}" > ~/.ssh/config
+          ssh vps 'echo "conectado a $(hostname) como $(whoami)"'
+
+      - name: Copiar vps/ y ejecutar preparar.sh
+        run: |
+          tar czf - vps | ssh vps 'sudo -n mkdir -p /srv/openrouter && sudo -n tar xzf - -C /srv/openrouter --no-same-owner'
+          {
+            echo "## Preparacion de ${API_DOMINIO}"
+            ssh vps "sudo -n env API_DOMINIO='${API_DOMINIO}' bash /srv/openrouter/vps/preparar.sh"
+          } | tee informe.md
+          cat informe.md >> "$GITHUB_STEP_SUMMARY"

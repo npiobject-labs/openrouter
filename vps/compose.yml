@@ -1,0 +1,38 @@
+# El backend en el VPS. Un solo servicio: el TLS lo pone el Caddy que ya corre
+# en el host (ver apisor.caddy). Se levanta con vps/desplegar.sh, que pasa
+# --env-file /srv/openrouter/.env: de ahi salen IMAGEN_TAG y PUERTO_INTERNO.
+services:
+  openrouter:
+    image: openrouter-backend:${IMAGEN_TAG:-release}
+    container_name: openrouter
+    restart: unless-stopped
+    # Lo mismo que hace el Dockerfile, repetido aqui para que quede a la vista.
+    user: "10001:10001"
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    mem_limit: 256m
+    pids_limit: 256
+    # Solo en la interfaz local: fuera solo se llega a traves de Caddy.
+    ports:
+      - "127.0.0.1:${PUERTO_INTERNO:-8081}:8080"
+    env_file:
+      - /srv/openrouter/.env
+    volumes:
+      - /srv/openrouter/datos:/datos
+    # El binario se pregunta a si mismo por /salud: la imagen no lleva curl.
+    healthcheck:
+      test: ["CMD", "/usr/local/bin/openrouter-backend", "--salud"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"

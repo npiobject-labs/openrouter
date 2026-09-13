@@ -1,0 +1,28 @@
+# Sitio de apisor.oracle402.com para el Caddy del VPS. vps/desplegar.sh
+# sustituye __PUERTO_INTERNO__, lo deja en /etc/caddy/sites.d/ y recarga.
+# La linea "import" que lo engancha al Caddyfile la pone vps/preparar.sh.
+apisor.oracle402.com {
+	encode gzip
+
+	# El mismo limite que aplica axum (2 MiB): lo que no cabe muere en el borde.
+	request_body {
+		max_size 2MB
+	}
+
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options nosniff
+		Referrer-Policy no-referrer
+		-Server
+	}
+
+	reverse_proxy 127.0.0.1:__PUERTO_INTERNO__ {
+		# Por encima de los 120 s que el backend concede a OpenRouter: el que
+		# corta tiene que ser el backend, que anota el registro de uso.
+		transport http {
+			response_header_timeout 130s
+		}
+		# Para el streaming de la etapa 7: que el SSE no se quede en el bufer.
+		flush_interval -1
+	}
+}

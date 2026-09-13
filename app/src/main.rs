@@ -19,7 +19,7 @@ use axum::{
     routing::{delete, get, post, put},
     Router,
 };
-use tower_http::cors::{Any, CorsLayer};
+use tower_http::cors::{AllowOrigin, CorsLayer};
 
 use crate::{catalogo::Catalogo, config::Config, openrouter::Cliente, uso::Uso};
 
@@ -35,6 +35,12 @@ pub struct Servicio {
 async fn main() {
     let config = Config::del_entorno();
     let puerto = config.puerto;
+
+    // `openrouter-backend --salud`: el healthcheck del contenedor. La imagen no
+    // lleva curl ni wget, y el binario ya tiene un cliente HTTP.
+    if std::env::args().nth(1).as_deref() == Some("--salud") {
+        std::process::exit(comprobar_salud(puerto).await);
+    }
 
     let servicio = Arc::new(Servicio {
         openrouter: Cliente::nuevo(&config),
@@ -64,8 +70,21 @@ async fn main() {
 
     // docs/ se sirve desde Pages, que es otro origen. El preflight tiene que
     // pasar antes de la comprobación de clave, así que el CORS envuelve todo.
+    // Sin CORS_ORIGENES, cualquiera (la consola de Pages es otro origen); con
+    // la lista, solo esos, y el preflight del resto falla antes de llegar aquí.
+    let origen = if servicio.config.cors_origenes.is_empty() {
+        AllowOrigin::any()
+    } else {
+        AllowOrigin::list(
+            servicio
+                .config
+                .cors_origenes
+                .iter()
+                .filter_map(|o| o.parse().ok()),
+        )
+    };
     let cors = CorsLayer::new()
-        .allow_origin(Any)
+        .allow_origin(origen)
         .allow_methods([
             Method::GET,
             Method::POST,
@@ -98,9 +117,58 @@ async fn main() {
     println!("openrouter backend escuchando en {direccion}");
 
     axum::serve(escucha, app)
-        .with_graceful_shutdown(async {
-            let _ = tokio::signal::ctrl_c().await;
-        })
+        .with_graceful_shutdown(apagado())
         .await
         .expect("fallo del servidor HTTP");
+}
+
+/// Ctrl+C en el PC y SIGTERM en Docker y en Fly: los dos deben cerrar bien.
+/// Sin SIGTERM, `docker stop` mata el proceso a los diez segundos con la
+/// conexión SQLite abierta y las reconciliaciones de coste a medias.
+async fn apagado() {
+    let ctrl_c = async {
+        let _ = tokio::signal::ctrl_c().await;
+    };
+    #[cfg(unix)]
+    let sigterm = async {
+        use tokio::signal::unix::{signal, SignalKind};
+        match signal(SignalKind::terminate()) {
+            Ok(mut s) => {
+                s.recv().await;
+            }
+            Err(_) => std::future::pending::<()>().await,
+        }
+    };
+    #[cfg(not(unix))]
+    let sigterm = std::future::pending::<()>();
+
+    tokio::select! {
+        _ = ctrl_c => {},
+        _ = sigterm => {},
+    }
+    println!("openrouter backend apagándose");
+}
+
+/// Pide `/salud` al propio proceso y devuelve el código de salida del
+/// healthcheck: 0 si responde `ok`, 1 si no.
+async fn comprobar_salud(puerto: u16) -> i32 {
+    let url = format!("http://127.0.0.1:{puerto}/salud");
+    let cliente = match reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(4))
+        .build()
+    {
+        Ok(c) => c,
+        Err(_) => return 1,
+    };
+    match cliente.get(&url).send().await {
+        Ok(r) if r.status().is_success() => {
+            let cuerpo = r.text().await.unwrap_or_default();
+            if cuerpo.contains("\"ok\":true") {
+                0
+            } else {
+                1
+            }
+        }
+        _ => 1,
+    }
 }

@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "openrouter · servicio",
-    "version": "0.6.0",
+    "version": "0.6.1",
     "summary": "Pasarela propia sobre OpenRouter, pensada para ser llamada por otras aplicaciones.",
     "description": "Esto no es una aplicación con interfaz: es un conjunto de servicios HTTP. La clave de OpenRouter vive solo en el backend y nunca sale de él. Cada aplicación consumidora tiene su propia clave, que se da de alta y se revoca sin tocar el despliegue.\n\nEl contrato sigue el de la API de OpenAI donde existe equivalente, así que cualquier cliente de OpenAI funciona cambiando la URL base. Lo propio del servicio va en rutas propias y en cabeceras `X-...`. Una ruta publicada no se rompe: lo incompatible iría a `/v2/`.\n\nLa versión de este documento acompaña a la etapa entregada: `0.6.0` es la etapa 6.",
     "license": {
@@ -11,8 +11,12 @@
   },
   "servers": [
     {
+      "url": "https://apisor.oracle402.com",
+      "description": "Producción (VPS)"
+    },
+    {
       "url": "https://openrouter-npiobject-labs.fly.dev",
-      "description": "Producción (Fly.io)"
+      "description": "Previsualización de main (Fly.io)"
     },
     {
       "url": "http://localhost:8080",
@@ -426,6 +430,15 @@
               "type": "string"
             },
             "example": "app_27b1d11e45"
+          },
+          {
+            "name": "operacion",
+            "in": "query",
+            "description": "Solo las llamadas que llevaron ese valor en la cabecera `X-Operacion`: el trabajo de negocio (un presupuesto, un análisis) al que pertenecen.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "presupuesto-2026-0417"
           }
         ],
         "responses": {
@@ -582,13 +595,14 @@
           {
             "name": "agrupar",
             "in": "query",
-            "description": "`dia` (por defecto), `modelo` o `app`.",
+            "description": "`dia` (por defecto), `modelo`, `app` u `operacion` (el valor de `X-Operacion`; las llamadas sin cabecera van al grupo `(sin operacion)`).",
             "schema": {
               "type": "string",
               "enum": [
                 "dia",
                 "modelo",
-                "app"
+                "app",
+                "operacion"
               ],
               "default": "dia"
             },
@@ -602,6 +616,15 @@
               "type": "string"
             },
             "example": "app_27b1d11e45"
+          },
+          {
+            "name": "operacion",
+            "in": "query",
+            "description": "Solo las llamadas que llevaron ese valor en la cabecera `X-Operacion`: el trabajo de negocio (un presupuesto, un análisis) al que pertenecen.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "presupuesto-2026-0417"
           }
         ],
         "responses": {
@@ -740,6 +763,15 @@
               "type": "string"
             },
             "example": "app_27b1d11e45"
+          },
+          {
+            "name": "operacion",
+            "in": "query",
+            "description": "Solo las llamadas que llevaron ese valor en la cabecera `X-Operacion`: el trabajo de negocio (un presupuesto, un análisis) al que pertenecen.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "presupuesto-2026-0417"
           }
         ],
         "responses": {
@@ -1202,7 +1234,7 @@
           },
           "clave": {
             "type": "object",
-            "description": "Etiqueta, uso y límite de la clave, tal como los devuelve OpenRouter.",
+            "description": "Etiqueta, uso y límite de la clave, tal como los devuelve OpenRouter. Con clave de aplicación solo llega `label`: el uso y el límite son de la cuenta y los ve la administración.",
             "additionalProperties": true
           },
           "almacen": {

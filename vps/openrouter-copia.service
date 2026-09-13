@@ -1,0 +1,7 @@
+[Unit]
+Description=Copia diaria del historico de openrouter
+After=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/srv/openrouter/vps/copia.sh

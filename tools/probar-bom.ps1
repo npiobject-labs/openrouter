@@ -15,7 +15,7 @@
 param(
   [Parameter(Mandatory = $true)][string]$Fichero,
   [string]$Clave = $env:SERVICIO_CLAVE,
-  [string]$Api = 'https://openrouter-npiobject-labs.fly.dev',
+  [string]$Api = 'https://apisor.oracle402.com',
   [string[]]$Modelo = @(),
   [int]$Filas = 6,
   [switch]$Comparar,
