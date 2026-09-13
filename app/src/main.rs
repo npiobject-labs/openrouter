@@ -3,6 +3,7 @@ mod auth;
 mod catalogo;
 mod config;
 mod error;
+mod guardia;
 mod openrouter;
 mod rutas;
 mod uso;
@@ -15,7 +16,7 @@ use axum::{
         HeaderName, Method,
     },
     middleware,
-    routing::{delete, get, post},
+    routing::{delete, get, post, put},
     Router,
 };
 use tower_http::cors::{Any, CorsLayer};
@@ -54,6 +55,8 @@ async fn main() {
         .route("/uso/{id}", get(rutas::uso::una))
         .route("/apps", post(rutas::apps::alta).get(rutas::apps::lista))
         .route("/apps/{id}", delete(rutas::apps::baja))
+        .route("/apps/{id}/presupuesto", put(rutas::apps::limites))
+        .route("/presupuesto", get(rutas::apps::presupuesto))
         .route_layer(middleware::from_fn_with_state(
             servicio.clone(),
             auth::exigir_clave,
@@ -63,12 +66,19 @@ async fn main() {
     // pasar antes de la comprobación de clave, así que el CORS envuelve todo.
     let cors = CorsLayer::new()
         .allow_origin(Any)
-        .allow_methods([Method::GET, Method::POST, Method::OPTIONS])
+        .allow_methods([
+            Method::GET,
+            Method::POST,
+            Method::PUT,
+            Method::DELETE,
+            Method::OPTIONS,
+        ])
         .allow_headers([AUTHORIZATION, CONTENT_TYPE])
         // Sin esto el navegador no puede leer estas dos aunque viajen.
         .expose_headers([
             HeaderName::from_static("x-cache"),
             HeaderName::from_static("x-uso-id"),
+            HeaderName::from_static("x-presupuesto"),
         ]);
 
     let app = Router::new()

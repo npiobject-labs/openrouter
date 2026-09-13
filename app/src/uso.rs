@@ -35,7 +35,8 @@ CREATE TABLE IF NOT EXISTS uso (
     estado         INTEGER NOT NULL DEFAULT 0,
     id_openrouter  TEXT,
     app_id         TEXT,
-    operacion      TEXT
+    operacion      TEXT,
+    huella         TEXT
 );
 CREATE INDEX IF NOT EXISTS uso_fecha ON uso(fecha);
 CREATE INDEX IF NOT EXISTS uso_modelo ON uso(modelo_servido);
@@ -71,6 +72,9 @@ pub struct Registro {
     pub id_openrouter: Option<String>,
     /// Qué aplicación llamó. `None` es la clave de administración.
     pub app_id: Option<String>,
+    /// Hash del cuerpo de la consulta. Sirve para cortar bucles: la misma
+    /// aplicación repitiendo la misma pregunta una y otra vez.
+    pub huella: Option<String>,
     /// Lo que venga en la cabecera `X-Operacion`: el trabajo de negocio al que
     /// pertenece la llamada, para agrupar varias de un mismo presupuesto.
     pub operacion: Option<String>,
@@ -142,6 +146,7 @@ impl Registro {
             id_openrouter: f.get("id_openrouter")?,
             app_id: f.get("app_id")?,
             operacion: f.get("operacion")?,
+            huella: f.get("huella")?,
         })
     }
 }
@@ -266,6 +271,7 @@ impl Uso {
             id_openrouter: None,
             app_id: None,
             operacion: None,
+            huella: None,
         }
     }
 
@@ -275,13 +281,13 @@ impl Uso {
             "INSERT OR REPLACE INTO uso (id, fecha, modelo_pedido, modelo_servido, proveedor,
                 tokens_entrada, tokens_salida, tokens_razonamiento, tokens_cache,
                 coste, coste_origen, latencia_ms, motivo_fin, estado, id_openrouter,
-                app_id, operacion)
-             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17)",
+                app_id, operacion, huella)
+             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18)",
             params![
                 r.id, r.fecha, r.modelo_pedido, r.modelo_servido, r.proveedor,
                 r.tokens_entrada, r.tokens_salida, r.tokens_razonamiento, r.tokens_cache,
                 r.coste, r.coste_origen, r.latencia_ms, r.motivo_fin, r.estado, r.id_openrouter,
-                r.app_id, r.operacion
+                r.app_id, r.operacion, r.huella
             ],
         );
         if let Err(e) = hecho {
@@ -298,6 +304,51 @@ impl Uso {
              ORDER BY fecha DESC, rowid DESC LIMIT ?1",
             params![n as i64, app],
         )
+    }
+
+    /// Lo gastado por una aplicación desde una fecha, en dólares. El histórico
+    /// guarda fechas ISO, así que un prefijo como `2026-09` delimita el mes.
+    pub fn gasto_desde(&self, app: Option<&str>, desde: &str) -> f64 {
+        let conexion = self.conexion.lock().unwrap();
+        conexion
+            .query_one(
+                "SELECT coalesce(sum(coste), 0) FROM uso
+                 WHERE fecha >= ?1 AND (?2 IS NULL OR app_id = ?2)
+                   AND (?2 IS NOT NULL OR app_id IS NULL)",
+                params![desde, app],
+                |f| f.get::<_, f64>(0),
+            )
+            .unwrap_or(0.0)
+    }
+
+    /// Cuántas llamadas ha hecho una aplicación desde un instante. Para la
+    /// cuota por minuto.
+    pub fn llamadas_desde(&self, app: Option<&str>, desde: &str) -> i64 {
+        let conexion = self.conexion.lock().unwrap();
+        conexion
+            .query_one(
+                "SELECT count(*) FROM uso
+                 WHERE fecha >= ?1 AND (?2 IS NULL OR app_id = ?2)
+                   AND (?2 IS NOT NULL OR app_id IS NULL)",
+                params![desde, app],
+                |f| f.get::<_, i64>(0),
+            )
+            .unwrap_or(0)
+    }
+
+    /// Cuántas veces se ha repetido exactamente la misma consulta. Es lo que
+    /// distingue un bucle de un uso intenso pero legítimo.
+    pub fn repeticiones(&self, app: Option<&str>, huella: &str, desde: &str) -> i64 {
+        let conexion = self.conexion.lock().unwrap();
+        conexion
+            .query_one(
+                "SELECT count(*) FROM uso
+                 WHERE fecha >= ?1 AND huella = ?2 AND (?3 IS NULL OR app_id = ?3)
+                   AND (?3 IS NOT NULL OR app_id IS NULL)",
+                params![desde, huella, app],
+                |f| f.get::<_, i64>(0),
+            )
+            .unwrap_or(0)
     }
 
     /// Presta la conexión. La base es una sola y este módulo es su dueño; las
@@ -419,11 +470,19 @@ impl Uso {
 /// La fecha de ahora en ISO, que usan tanto el registro como el alta de
 /// aplicaciones.
 pub fn ahora_iso() -> String {
-    let segundos = SystemTime::now()
+    iso(ahora_unix())
+}
+
+/// La fecha de hace `segundos`, para las ventanas de la cuota y del bucle.
+pub fn hace_iso(segundos: u64) -> String {
+    iso(ahora_unix().saturating_sub(segundos))
+}
+
+fn ahora_unix() -> u64 {
+    SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map(|d| d.as_secs())
-        .unwrap_or(0);
-    iso(segundos)
+        .unwrap_or(0)
 }
 
 /// Deja la base lista: tablas, columnas que falten y, solo entonces, índices.
@@ -432,23 +491,31 @@ pub fn ahora_iso() -> String {
 fn prepara(conexion: &Connection) -> rusqlite::Result<()> {
     conexion.execute_batch(ESQUEMA)?;
     conexion.execute_batch(apps::ESQUEMA)?;
-    for (columna, tipo) in [("app_id", "TEXT"), ("operacion", "TEXT")] {
-        asegura_columna(conexion, columna, tipo)?;
+    for (columna, tipo) in [("app_id", "TEXT"), ("operacion", "TEXT"), ("huella", "TEXT")] {
+        asegura_columna(conexion, "uso", columna, tipo)?;
+    }
+    for (columna, tipo) in apps::COLUMNAS {
+        asegura_columna(conexion, "apps", columna, tipo)?;
     }
     conexion.execute_batch(INDICES)
 }
 
 /// Añade una columna si la base viene de una versión anterior. SQLite no tiene
 /// `ADD COLUMN IF NOT EXISTS`, así que se mira primero qué columnas hay.
-fn asegura_columna(conexion: &Connection, columna: &str, tipo: &str) -> rusqlite::Result<()> {
+fn asegura_columna(
+    conexion: &Connection,
+    tabla: &str,
+    columna: &str,
+    tipo: &str,
+) -> rusqlite::Result<()> {
     let existe = conexion
-        .prepare("SELECT 1 FROM pragma_table_info('uso') WHERE name = ?1")?
-        .query_one(params![columna], |_| Ok(()))
+        .prepare("SELECT 1 FROM pragma_table_info(?1) WHERE name = ?2")?
+        .query_one(params![tabla, columna], |_| Ok(()))
         .optional()?
         .is_some();
 
     if !existe {
-        conexion.execute(&format!("ALTER TABLE uso ADD COLUMN {columna} {tipo}"), [])?;
+        conexion.execute(&format!("ALTER TABLE {tabla} ADD COLUMN {columna} {tipo}"), [])?;
     }
     Ok(())
 }
@@ -645,6 +712,40 @@ mod pruebas {
         let por_app = uso.resumen(None, None, &Agrupacion::App, None);
         assert_eq!(por_app.len(), 3);
         assert!(por_app.iter().any(|f| f["grupo"] == "administracion"));
+    }
+
+    #[test]
+    fn el_gasto_y_las_repeticiones_se_cuentan_por_aplicacion() {
+        let uso = en_memoria();
+        let hoy = &ahora_iso()[..10];
+
+        for (app, huella, coste) in [
+            (Some("app_uno"), "aaa", 1.0),
+            (Some("app_uno"), "aaa", 2.0),
+            (Some("app_uno"), "bbb", 4.0),
+            (Some("app_dos"), "aaa", 8.0),
+            (None, "aaa", 16.0),
+        ] {
+            let mut r = uso.abre("m".into());
+            r.app_id = app.map(str::to_string);
+            r.huella = Some(huella.to_string());
+            r.coste = Some(coste);
+            uso.anota(r);
+        }
+
+        assert_eq!(uso.gasto_desde(Some("app_uno"), hoy), 7.0);
+        assert_eq!(uso.gasto_desde(Some("app_dos"), hoy), 8.0);
+        // Sin aplicacion se cuenta lo de la administracion, no el total.
+        assert_eq!(uso.gasto_desde(None, hoy), 16.0);
+
+        assert_eq!(uso.llamadas_desde(Some("app_uno"), hoy), 3);
+        // La repeticion es por consulta identica, no por aplicacion ocupada.
+        assert_eq!(uso.repeticiones(Some("app_uno"), "aaa", hoy), 2);
+        assert_eq!(uso.repeticiones(Some("app_uno"), "bbb", hoy), 1);
+        assert_eq!(uso.repeticiones(Some("app_dos"), "aaa", hoy), 1);
+
+        // Una ventana futura no cuenta nada, que es lo que pasa al pasar el minuto.
+        assert_eq!(uso.llamadas_desde(Some("app_uno"), "2099-01-01"), 0);
     }
 
     #[test]

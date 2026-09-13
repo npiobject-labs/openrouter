@@ -11,9 +11,21 @@ CREATE TABLE IF NOT EXISTS apps (
     nombre TEXT    NOT NULL,
     hash   TEXT    NOT NULL UNIQUE,
     activa INTEGER NOT NULL DEFAULT 1,
-    creada TEXT    NOT NULL
+    creada TEXT    NOT NULL,
+    periodo       TEXT,
+    limite        REAL,
+    aviso         REAL,
+    cuota_minuto  INTEGER
 );
 ";
+
+/// Columnas que pueden faltar en una base anterior a la etapa 6.
+pub const COLUMNAS: [(&str, &str); 4] = [
+    ("periodo", "TEXT"),
+    ("limite", "REAL"),
+    ("aviso", "REAL"),
+    ("cuota_minuto", "INTEGER"),
+];
 
 /// Una aplicación tal como se enseña. Nunca lleva la clave: esa se ve una sola
 /// vez, al crearla.
@@ -23,6 +35,35 @@ pub struct App {
     pub nombre: String,
     pub activa: bool,
     pub creada: String,
+    /// Los topes de gasto y ritmo. Sin ellos, la aplicación no tiene límite.
+    #[serde(flatten)]
+    pub limites: Limites,
+}
+
+/// Cuánto puede gastar una aplicación y a qué ritmo. Todo opcional: lo que no
+/// se fija, no se limita.
+#[derive(Clone, Default, Serialize)]
+pub struct Limites {
+    /// `dia` o `mes`. Sin periodo, el presupuesto no se aplica.
+    pub periodo: Option<String>,
+    /// Dólares del periodo a partir de los cuales se corta.
+    pub limite: Option<f64>,
+    /// Dólares a partir de los cuales se avisa, sin cortar.
+    pub aviso: Option<f64>,
+    /// Peticiones por minuto.
+    pub cuota_minuto: Option<i64>,
+}
+
+impl Limites {
+    /// El prefijo de fecha que delimita el periodo en curso: el día o el mes de
+    /// hoy. Las fechas del histórico son ISO, así que comparar por prefijo basta.
+    pub fn desde(&self, ahora: &str) -> Option<String> {
+        match self.periodo.as_deref() {
+            Some("dia") => Some(ahora[..10].to_string()),
+            Some("mes") => Some(ahora[..7].to_string()),
+            _ => None,
+        }
+    }
 }
 
 /// Quién está llamando. La clave de administración es la del despliegue
@@ -64,7 +105,29 @@ fn desde_fila(f: &rusqlite::Row) -> rusqlite::Result<App> {
         nombre: f.get("nombre")?,
         activa: f.get::<_, i64>("activa")? != 0,
         creada: f.get("creada")?,
+        limites: Limites {
+            periodo: f.get("periodo")?,
+            limite: f.get("limite")?,
+            aviso: f.get("aviso")?,
+            cuota_minuto: f.get("cuota_minuto")?,
+        },
     })
+}
+
+/// Fija los límites de una aplicación. Un valor a `None` lo quita.
+pub fn limita(conexion: &Connection, id: &str, l: &Limites) -> rusqlite::Result<bool> {
+    let filas = conexion.execute(
+        "UPDATE apps SET periodo = ?1, limite = ?2, aviso = ?3, cuota_minuto = ?4 WHERE id = ?5",
+        params![l.periodo, l.limite, l.aviso, l.cuota_minuto, id],
+    )?;
+    Ok(filas > 0)
+}
+
+pub fn una(conexion: &Connection, id: &str) -> Option<App> {
+    conexion
+        .query_one("SELECT * FROM apps WHERE id = ?1", params![id], desde_fila)
+        .optional()
+        .unwrap_or(None)
 }
 
 /// Da de alta una aplicación y devuelve su clave en claro. Es la única vez que
@@ -85,7 +148,13 @@ pub fn crea(conexion: &Connection, nombre: &str, fecha: &str) -> rusqlite::Resul
     )?;
 
     Ok((
-        App { id, nombre: nombre.to_string(), activa: true, creada: fecha.to_string() },
+        App {
+            id,
+            nombre: nombre.to_string(),
+            activa: true,
+            creada: fecha.to_string(),
+            limites: Limites::default(),
+        },
         clave,
     ))
 }
@@ -162,6 +231,31 @@ mod pruebas {
         assert_eq!(todas.len(), 1, "la aplicacion sigue ahi para el historico");
         assert!(!todas[0].activa);
         assert!(!desactiva(&c, "app_inventada").unwrap());
+    }
+
+    #[test]
+    fn los_limites_se_guardan_y_definen_el_periodo() {
+        let c = bd();
+        let (app, _) = crea(&c, "presupuestos", "2026-09-13T00:00:00Z").unwrap();
+        assert!(una(&c, &app.id).unwrap().limites.limite.is_none(), "nace sin topes");
+
+        let limites = Limites {
+            periodo: Some("mes".into()),
+            limite: Some(5.0),
+            aviso: Some(4.0),
+            cuota_minuto: Some(30),
+        };
+        assert!(limita(&c, &app.id, &limites).unwrap());
+
+        let guardada = una(&c, &app.id).unwrap();
+        assert_eq!(guardada.limites.limite, Some(5.0));
+        assert_eq!(guardada.limites.cuota_minuto, Some(30));
+        // El periodo decide desde cuándo se cuenta el gasto.
+        assert_eq!(guardada.limites.desde("2026-09-13T11:22:33Z").as_deref(), Some("2026-09"));
+
+        let por_dia = Limites { periodo: Some("dia".into()), ..limites.clone() };
+        assert_eq!(por_dia.desde("2026-09-13T11:22:33Z").as_deref(), Some("2026-09-13"));
+        assert_eq!(Limites::default().desde("2026-09-13T11:22:33Z"), None);
     }
 
     #[test]

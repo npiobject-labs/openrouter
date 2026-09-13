@@ -2,9 +2,9 @@
   "openapi": "3.1.0",
   "info": {
     "title": "openrouter · servicio",
-    "version": "0.5.0",
+    "version": "0.6.0",
     "summary": "Pasarela propia sobre OpenRouter, pensada para ser llamada por otras aplicaciones.",
-    "description": "Esto no es una aplicación con interfaz: es un conjunto de servicios HTTP. La clave de OpenRouter vive solo en el backend y nunca sale de él. Cada aplicación consumidora tiene su propia clave, que se da de alta y se revoca sin tocar el despliegue.\n\nEl contrato sigue el de la API de OpenAI donde existe equivalente, así que cualquier cliente de OpenAI funciona cambiando la URL base. Lo propio del servicio va en rutas propias y en cabeceras `X-...`. Una ruta publicada no se rompe: lo incompatible iría a `/v2/`.\n\nLa versión de este documento acompaña a la etapa entregada: `0.5.0` es la etapa 5.",
+    "description": "Esto no es una aplicación con interfaz: es un conjunto de servicios HTTP. La clave de OpenRouter vive solo en el backend y nunca sale de él. Cada aplicación consumidora tiene su propia clave, que se da de alta y se revoca sin tocar el despliegue.\n\nEl contrato sigue el de la API de OpenAI donde existe equivalente, así que cualquier cliente de OpenAI funciona cambiando la URL base. Lo propio del servicio va en rutas propias y en cabeceras `X-...`. Una ruta publicada no se rompe: lo incompatible iría a `/v2/`.\n\nLa versión de este documento acompaña a la etapa entregada: `0.6.0` es la etapa 6.",
     "license": {
       "name": "Uso interno"
     }
@@ -44,6 +44,10 @@
     {
       "name": "Aplicaciones",
       "description": "Alta, baja y listado de las aplicaciones que pueden llamar al servicio. Solo con la clave de administración."
+    },
+    {
+      "name": "Presupuestos",
+      "description": "Topes de gasto y de ritmo por aplicación, y cuánto margen queda."
     }
   ],
   "paths": {
@@ -263,7 +267,7 @@
           "Consultas"
         ],
         "summary": "Consulta a un modelo",
-        "description": "Proxy fino sobre OpenRouter con el contrato de OpenAI. El cuerpo se reenvía tal cual salvo dos retoques: si no traes `model` se rellena con el modelo por defecto del servicio, y `stream: true` se rechaza con `400` porque el streaming llega en la etapa 7.\n\nLa respuesta es la de OpenRouter sin tocar, incluido el bloque `usage`, que es lo que permite saber qué costó la llamada.\n\nToda llamada que llega a salir queda anotada en el registro de uso, vaya bien o mal, y su identificador vuelve en la cabecera `X-Uso-Id`. Con él se consulta después lo que costó, en `/v1/uso/{id}`.",
+        "description": "Proxy fino sobre OpenRouter con el contrato de OpenAI. El cuerpo se reenvía tal cual salvo dos retoques: si no traes `model` se rellena con el modelo por defecto del servicio, y `stream: true` se rechaza con `400` porque el streaming llega en la etapa 7.\n\nLa respuesta es la de OpenRouter sin tocar, incluido el bloque `usage`, que es lo que permite saber qué costó la llamada.\n\nToda llamada que llega a salir queda anotada en el registro de uso, vaya bien o mal, y su identificador vuelve en la cabecera `X-Uso-Id`. Con él se consulta después lo que costó, en `/v1/uso/{id}`.\n\nCon clave de aplicación, la llamada pasa antes por tres controles: el cortacircuitos de bucles, la cuota por minuto y el presupuesto. La clave de administración no tiene ninguno.",
         "requestBody": {
           "required": true,
           "content": {
@@ -319,6 +323,12 @@
                 "schema": {
                   "type": "string"
                 }
+              },
+              "X-Presupuesto": {
+                "description": "Aparece cuando el gasto del periodo ha pasado el umbral de aviso. No corta la llamada: es para que la aplicación sepa que se acerca al tope.",
+                "schema": {
+                  "type": "string"
+                }
               }
             }
           },
@@ -329,13 +339,43 @@
             "$ref": "#/components/responses/NoAutorizado"
           },
           "402": {
-            "$ref": "#/components/responses/SinSaldo"
+            "description": "Presupuesto agotado, o crédito insuficiente en OpenRouter.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "ok": false,
+                  "error": {
+                    "message": "Esta aplicación lleva 5.10 $ gastados y su presupuesto por mes es de 5.00 $.",
+                    "code": "presupuesto_agotado",
+                    "type": "insufficient_quota"
+                  }
+                }
+              }
+            }
           },
           "404": {
             "$ref": "#/components/responses/NoEncontrado"
           },
           "429": {
-            "$ref": "#/components/responses/DemasiadasPeticiones"
+            "description": "Cuota por minuto superada, o la misma consulta repetida demasiadas veces seguidas.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "ok": false,
+                  "error": {
+                    "message": "La misma consulta se ha repetido 5 veces en 60 segundos. Parece un bucle, así que se corta para no gastar crédito.",
+                    "code": "bucle",
+                    "type": "rate_limit_error"
+                  }
+                }
+              }
+            }
           },
           "502": {
             "$ref": "#/components/responses/FalloDeProveedor"
@@ -953,6 +993,165 @@
           }
         }
       }
+    },
+    "/v1/presupuesto": {
+      "get": {
+        "tags": [
+          "Presupuestos"
+        ],
+        "summary": "Cuánto margen queda",
+        "description": "Lo gastado en el periodo en curso y lo que queda, para que una aplicación decida antes de gastar.\n\nCon clave de aplicación devuelve el suyo. Con la de administración hace falta `?app=`, porque la administración no tiene límites.",
+        "parameters": [
+          {
+            "name": "app",
+            "in": "query",
+            "description": "Solo con clave de administración: de qué aplicación.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "app_27b1d11e45"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "El margen de la aplicación, o el aviso de que la administración no tiene topes.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Margen"
+                },
+                "example": {
+                  "app_id": "app_27b1d11e45",
+                  "nombre": "presupuestos",
+                  "periodo": "mes",
+                  "desde": "2026-09",
+                  "limite": 5.0,
+                  "aviso": 4.0,
+                  "cuota_minuto": 60,
+                  "consumido": 0.42,
+                  "restante": 4.58,
+                  "en_aviso": false
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/NoAutorizado"
+          }
+        }
+      }
+    },
+    "/v1/apps/{id}/presupuesto": {
+      "put": {
+        "tags": [
+          "Presupuestos"
+        ],
+        "summary": "Fijar los topes de una aplicación",
+        "description": "Reemplaza los topes: lo que no venga en el cuerpo se borra, para que quitar un límite sea tan fácil como ponerlo.\n\nUn presupuesto sin periodo no se puede aplicar, así que `limite` exige `periodo`. El `aviso` no corta: añade la cabecera `X-Presupuesto` a las respuestas.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "app_27b1d11e45"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "periodo": {
+                    "type": "string",
+                    "enum": [
+                      "dia",
+                      "mes"
+                    ]
+                  },
+                  "limite": {
+                    "type": "number"
+                  },
+                  "aviso": {
+                    "type": "number"
+                  },
+                  "cuota_minuto": {
+                    "type": "integer"
+                  }
+                }
+              },
+              "example": {
+                "periodo": "mes",
+                "limite": 5,
+                "aviso": 4,
+                "cuota_minuto": 60
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Topes guardados, con el margen recalculado.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Margen"
+                },
+                "example": {
+                  "app_id": "app_27b1d11e45",
+                  "nombre": "presupuestos",
+                  "periodo": "mes",
+                  "desde": "2026-09",
+                  "limite": 5.0,
+                  "aviso": 4.0,
+                  "cuota_minuto": 60,
+                  "consumido": 0.42,
+                  "restante": 4.58,
+                  "en_aviso": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Periodo inválido, o presupuesto sin periodo.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "ok": false,
+                  "error": {
+                    "message": "Un presupuesto sin periodo no se puede aplicar: manda también \"periodo\".",
+                    "code": "periodo_invalido",
+                    "type": "invalid_request_error"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/NoAutorizado"
+          },
+          "403": {
+            "$ref": "#/components/responses/SinPermiso"
+          },
+          "404": {
+            "description": "No hay ninguna aplicación con ese id.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -1352,6 +1551,13 @@
               "null"
             ],
             "description": "Lo que viniera en la cabecera `X-Operacion`: el trabajo de negocio al que pertenece la llamada."
+          },
+          "huella": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Hash del cuerpo de la consulta, con el que se detectan los bucles."
           }
         },
         "required": [
@@ -1380,6 +1586,39 @@
           },
           "creada": {
             "type": "string"
+          },
+          "periodo": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "dia",
+              "mes",
+              null
+            ],
+            "description": "Periodo del presupuesto. Sin él, no hay presupuesto que aplicar."
+          },
+          "limite": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "description": "Dólares del periodo a partir de los cuales se corta."
+          },
+          "aviso": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "description": "Dólares a partir de los cuales se avisa por cabecera, sin cortar."
+          },
+          "cuota_minuto": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "Llamadas por minuto."
           }
         },
         "required": [
@@ -1388,6 +1627,62 @@
           "activa",
           "creada"
         ]
+      },
+      "Margen": {
+        "type": "object",
+        "properties": {
+          "app_id": {
+            "type": "string"
+          },
+          "nombre": {
+            "type": "string"
+          },
+          "periodo": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "desde": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Desde cuándo cuenta el periodo en curso."
+          },
+          "limite": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "aviso": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "cuota_minuto": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "consumido": {
+            "type": "number",
+            "description": "Dólares gastados en el periodo."
+          },
+          "restante": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "description": "Lo que queda. `null` si no hay presupuesto."
+          },
+          "en_aviso": {
+            "type": "boolean"
+          }
+        }
       }
     },
     "responses": {
@@ -1616,6 +1911,26 @@
       "code": "alta_fallida",
       "http": 500,
       "cuando": "No se pudo escribir la aplicación nueva en el histórico."
+    },
+    {
+      "code": "presupuesto_agotado",
+      "http": 402,
+      "cuando": "La aplicación ha gastado su presupuesto del periodo."
+    },
+    {
+      "code": "cuota_superada",
+      "http": 429,
+      "cuando": "La aplicación ha pasado su cuota de llamadas por minuto."
+    },
+    {
+      "code": "bucle",
+      "http": 429,
+      "cuando": "La misma consulta se ha repetido cinco veces en un minuto. Corta el gasto accidental."
+    },
+    {
+      "code": "periodo_invalido",
+      "http": 400,
+      "cuando": "Se fijó un presupuesto con un periodo que no es dia ni mes, o sin periodo."
     }
   ],
   "x-etapas": [
@@ -1702,7 +2017,7 @@
     {
       "numero": 6,
       "titulo": "Presupuestos, cuotas y cortacircuitos",
-      "estado": "siguiente",
+      "estado": "entregada",
       "rutas": [
         {
           "metodo": "GET",
@@ -1713,12 +2028,12 @@
           "ruta": "/v1/apps/{id}/presupuesto"
         }
       ],
-      "nota": "Una aplicación podrá preguntar cuánto margen le queda antes de gastar. Al pasarse, 402; al exceder el ritmo, 429."
+      "nota": "Cada aplicación puede tener presupuesto por día o por mes, con umbral de aviso y de corte, y cuota de llamadas por minuto. Un cortacircuitos corta la misma consulta repetida cinco veces en un minuto, que es lo que distingue un bucle de un uso intenso. La administración no tiene topes."
     },
     {
       "numero": 7,
       "titulo": "Streaming",
-      "estado": "planificada",
+      "estado": "siguiente",
       "rutas": [
         {
           "metodo": "POST",
