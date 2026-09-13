@@ -57,13 +57,18 @@ como el resto del proyecto.
   lista los ocupados y propone el primer libre. El `compose` del proyecto
   **no lleva Caddy**: un segundo Caddy pelearía por 80/443 con el que ya está.
   Corre en el host, no en Docker, así que el backend se alcanza por
-  `127.0.0.1`. [SUPUESTO] `/etc/caddy/Caddyfile` importa los sitios de una
-  carpeta: el fichero solo declara un bloque a la vista y hay 18 hosts
-  cargados. La segunda pasada de la inspección lista los `import`. Plan B si
-  no importa nada: `preparar.sh` añade un `import /etc/caddy/conf.d/*.caddy`
-  al final, que es la única línea que tocaría de una configuración ajena.
-  Todos los demás servicios del VPS siguen el mismo patrón que vamos a usar:
-  contenedor publicado solo en `127.0.0.1:<puerto>` y Caddy delante.
+  `127.0.0.1`. La segunda pasada de la inspección aclaró cómo está
+  organizado: `/etc/caddy/Caddyfile` tiene 14 líneas, un bloque en línea y
+  **un `import` por sitio, cada uno con su fichero en `/etc/caddy/sites.d/`**
+  (`import /etc/caddy/sites.d/gestionbom.caddy`, etc.), no un `import` con
+  comodín. Seguimos esa convención: nuestro sitio es
+  `/etc/caddy/sites.d/apisor.oracle402.com.caddy` y `preparar.sh` añade,
+  una sola vez y solo si no está, la línea
+  `import /etc/caddy/sites.d/apisor.oracle402.com.caddy` al final del
+  `Caddyfile`. Es la única línea que tocamos de una configuración ajena, y
+  `caddy validate` corre antes de cualquier `reload`. Todos los demás
+  servicios del VPS siguen el mismo patrón que vamos a usar: contenedor
+  publicado solo en `127.0.0.1:<puerto>` y Caddy delante.
 - **`apisor.oracle402.com` ya resuelve a la IP pública del VPS**, sin proxy
   delante: confirmado por la inspección desde la propia máquina. Los otros
   dominios de ese Caddy obtienen certificado sin problema, así que el nuestro
@@ -103,12 +108,12 @@ Internet ──443──▶ Caddy que YA existe en el VPS (TLS automático para 
   como `127.0.0.1:${PUERTO_INTERNO}:8080`: alcanzable desde el Caddy del host
   y desde nada más. `PUERTO_INTERNO` sale de la inspección y va en el `.env`.
 - **El sitio en Caddy** es un fichero propio, `vps/apisor.caddy`, que
-  `desplegar.sh` copia a la carpeta que el `Caddyfile` del VPS importe
-  (`/etc/caddy/conf.d/` o la que la inspección encuentre) y recarga con
-  `caddy reload` (sin corte: Caddy recarga en caliente). Si el `Caddyfile`
-  no importa ninguna carpeta, `preparar.sh` añade una línea `import
-  /etc/caddy/conf.d/*.caddy` al final, y es lo único que toca de una
-  configuración que no es nuestra.
+  `desplegar.sh` copia a `/etc/caddy/sites.d/apisor.oracle402.com.caddy`
+  (la convención del VPS: un fichero por sitio, importado por nombre desde el
+  `Caddyfile`), valida con `caddy validate` y recarga con `caddy reload`
+  (sin corte: Caddy recarga en caliente). La línea `import` la añade
+  `preparar.sh` una sola vez, y es lo único que toca de una configuración
+  que no es nuestra.
 - **Imagen del backend**: la construye el runner de GitHub con el `Dockerfile`
   de `app/` y la publica en GitHub Container Registry como
   `ghcr.io/npiobject-labs/openrouter:<sha>` y `:release`. El VPS solo hace
@@ -135,8 +140,8 @@ Internet ──443──▶ Caddy que YA existe en el VPS (TLS automático para 
 vps/
   inspeccionar.sh      # solo lectura: proxy en 80/443, dominios, puerto interno libre, DNS (HECHO)
   compose.yml          # un servicio, publicado solo en 127.0.0.1:<PUERTO_INTERNO>, límites, healthcheck
-  apisor.caddy         # el sitio del subdominio para el Caddy del host: cabeceras, límites, timeouts
-  preparar.sh          # idempotente: Docker, ufw, fail2ban, usuario, carpetas, sudoers, import en Caddy
+  apisor.caddy         # el sitio; va a /etc/caddy/sites.d/apisor.oracle402.com.caddy, importado por nombre
+  preparar.sh          # idempotente: comprueba Docker/ufw/fail2ban, usuario, carpetas, sudoers, la línea import en el Caddyfile
   desplegar.sh         # el único comando con sudo: pull, up, espera al healthcheck
   copia.sh             # copia diaria de la base con rotación; lo lanza un timer de systemd
   copia.service / copia.timer
