@@ -74,16 +74,15 @@ enseñó expandido; la primera preparación añadió un `import` duplicado que
   lista los ocupados y propone el primer libre. El `compose` del proyecto
   **no lleva Caddy**: un segundo Caddy pelearía por 80/443 con el que ya está.
   Corre en el host, no en Docker, así que el backend se alcanza por
-  `127.0.0.1`. La segunda pasada de la inspección aclaró cómo está
-  organizado: `/etc/caddy/Caddyfile` tiene 14 líneas, un bloque en línea y
-  **un `import` por sitio, cada uno con su fichero en `/etc/caddy/sites.d/`**
-  (`import /etc/caddy/sites.d/gestionbom.caddy`, etc.), no un `import` con
-  comodín. Seguimos esa convención: nuestro sitio es
-  `/etc/caddy/sites.d/apisor.oracle402.com.caddy` y `preparar.sh` añade,
-  una sola vez y solo si no está, la línea
-  `import /etc/caddy/sites.d/apisor.oracle402.com.caddy` al final del
-  `Caddyfile`. Es la única línea que tocamos de una configuración ajena, y
-  `caddy validate` corre antes de cualquier `reload`. Todos los demás
+  `127.0.0.1`. La segunda pasada de la inspección enseñó los `import`
+  expandidos (un fichero por sitio en `/etc/caddy/sites.d/`), y la primera
+  preparación descubrió lo que había detrás: **un solo
+  `import /etc/caddy/sites.d/*.caddy` con comodín**. Seguimos esa convención:
+  nuestro sitio es `/etc/caddy/sites.d/apisor.oracle402.com.caddy` y con eso
+  ya está cargado; `preparar.sh` lo comprueba en la configuración adaptada
+  (`caddy adapt`) y solo añadiría una línea `import` si el dominio no
+  apareciera. Nada del `Caddyfile` se toca, y `caddy validate` corre antes
+  de cualquier `reload`. Todos los demás
   servicios del VPS siguen el mismo patrón que vamos a usar: contenedor
   publicado solo en `127.0.0.1:<puerto>` y Caddy delante.
 - **`apisor.oracle402.com` ya resuelve a la IP pública del VPS**, sin proxy
@@ -126,11 +125,10 @@ Internet ──443──▶ Caddy que YA existe en el VPS (TLS automático para 
   y desde nada más. `PUERTO_INTERNO` sale de la inspección y va en el `.env`.
 - **El sitio en Caddy** es un fichero propio, `vps/apisor.caddy`, que
   `desplegar.sh` copia a `/etc/caddy/sites.d/apisor.oracle402.com.caddy`
-  (la convención del VPS: un fichero por sitio, importado por nombre desde el
-  `Caddyfile`), valida con `caddy validate` y recarga con `caddy reload`
-  (sin corte: Caddy recarga en caliente). La línea `import` la añade
-  `preparar.sh` una sola vez, y es lo único que toca de una configuración
-  que no es nuestra.
+  (la convención del VPS: un fichero por sitio en una carpeta que el
+  `Caddyfile` importa con comodín), valida con `caddy validate` y recarga con
+  `caddy reload` (sin corte: Caddy recarga en caliente). El `Caddyfile` no se
+  toca.
 - **Imagen del backend**: la construye el runner de GitHub con el `Dockerfile`
   de `app/` (caché de capas entre runs) y la **transfiere por SSH** con
   `docker save | gzip | ssh 'docker load'`, unos 30 MB. Sin registro de por
@@ -157,10 +155,10 @@ vps/
   inspeccionar.sh      # solo lectura: proxy en 80/443, dominios, puerto interno libre, DNS (HECHO)
   compose.yml          # un servicio, publicado solo en 127.0.0.1:<PUERTO_INTERNO>, límites, healthcheck
   apisor.caddy         # el sitio; va a /etc/caddy/sites.d/apisor.oracle402.com.caddy, importado por nombre
-  preparar.sh          # idempotente: comprueba Docker/ufw/fail2ban, usuario, carpetas, sudoers, la línea import en el Caddyfile
-  desplegar.sh         # el único comando con sudo: pull, up, espera al healthcheck
+  preparar.sh          # idempotente: comprueba Docker/ufw/fail2ban/80-443, carpetas, sqlite3, sitio en Caddy, timer de copias
+  desplegar.sh         # tag de la imagen, sitio de Caddy validado y recargado, compose up --wait
   copia.sh             # copia diaria de la base con rotación; lo lanza un timer de systemd
-  copia.service / copia.timer
+  openrouter-copia.service / openrouter-copia.timer
 tools/
   verificar-servicio.sh  # las comprobaciones de deploy.yml extraídas, con la URL base como argumento
 .github/workflows/
@@ -192,17 +190,14 @@ Ordenado de fuera hacia dentro. Cada punto dice quién lo aplica.
   Caddy es más fragilidad que protección para el tráfico previsto.
 - **Actualizaciones**: `unattended-upgrades` solo para parches de seguridad.
   Docker no se actualiza solo; se anota como tarea mensual en el runbook.
-- **Usuario de despliegue**. El plan original pedía un usuario sin sudo
-  general, con sudo solo para `desplegar.sh` y `escribir-env.sh`. La
-  inspección muestra que el usuario con el que entra el workflow ya tiene
-  sudo sin contraseña para todo: es el que el usuario usa para operar el
-  VPS. **Decisión pendiente del usuario**: (a) seguir con ese usuario, más
-  sencillo, aceptando que la clave guardada en GitHub equivale a root en el
-  VPS; o (b) que `preparar.sh` cree `openrouter-deploy` con sudoers limitado
-  a esos dos scripts y se cambie `VPS_USUARIO` y la clave autorizada. El plan
-  recomienda (b): cuesta diez líneas y acota lo que una fuga puede hacer.
-  En ninguno de los dos casos se le mete en el grupo `docker`: pertenecer a
-  él es ser root sin pasar por `sudo`.
+- **Usuario de despliegue**: el que el usuario ya usa para operar el VPS,
+  con sudo sin contraseña para todo. **Decidido por el usuario el
+  2026-09-13**: se sigue con él, aceptando que la clave SSH guardada en
+  GitHub equivale a root en ese VPS. El plan recomendaba un usuario con
+  sudo limitado a `desplegar.sh` y `escribir-env.sh`; queda como mejora
+  posible (diez líneas en `preparar.sh` y cambiar `VPS_USUARIO`). Lo que
+  acota el riesgo hoy: clave SSH dedicada y revocable, huella del servidor
+  fija, y que los workflows solo ejecutan lo que está en el repo.
 - **Clave SSH dedicada** al despliegue, generada para esto, distinta de la que
   usa el usuario desde su PC. Se revoca borrando una línea de
   `authorized_keys`.
@@ -286,7 +281,6 @@ Ordenado de fuera hacia dentro. Cada punto dice quién lo aplica.
 | `VPS_PUERTO` | **variable** de repositorio (como secreto enmascararía cada «22» del log) | idem |
 | `VPS_SSH_CLAVE` (privada, dedicada) | secreto de repositorio | idem |
 | `VPS_HOST_KEY` (salida de `ssh-keyscan`) | secreto de repositorio | idem |
-| `VPS_SUDO_USUARIO`, `VPS_SUDO_SSH_CLAVE` | secretos de repositorio, **solo para preparar** | `vps-preparar.yml`; se pueden borrar después |
 | `VPS_OPENROUTER_API_KEY` | secreto de repositorio | `deploy-vps.yml` → `.env` del VPS |
 | `VPS_SERVICIO_CLAVE` | secreto de repositorio | idem |
 | `API_DOMINIO` = `apisor.oracle402.com` | variable de repositorio | los workflows del VPS, `docs/` |
@@ -607,7 +601,7 @@ base del VPS: son llamadas de otra clave y de otra época.
 
 | Riesgo | Cómo se ve | Qué se hace |
 |---|---|---|
-| La clave SSH de despliegue se filtra | Acceso al VPS como `deploy` | Solo puede ejecutar dos scripts; se revoca borrando una línea; rotación en el runbook |
+| La clave SSH de despliegue se filtra | Acceso al VPS como el usuario de operación, con sudo | Se revoca borrando una línea de `authorized_keys`; rotación en el runbook; huella fija |
 | Un secreto de GitHub se filtra en un log | El log del run lo enseña | GitHub enmascara los secretos; `escribir-env.sh` lee de stdin; nunca `set -x` con secretos |
 | El VPS se queda sin disco | `/salud` responde pero `/v1/estado` dice `memoria` o SQLite falla al escribir | `preparar.sh` exige 5 GB; copias con rotación; tarea mensual del runbook |
 | Let's Encrypt no emite | Caddy en bucle de reintentos, `deploy-vps.yml` en rojo en `/salud` | La inspección comprueba DNS y 80/443 antes; el runbook cubre el caso Cloudflare |
@@ -618,15 +612,11 @@ base del VPS: son llamadas de otra clave y de otra época.
 
 ## 10. Orden de trabajo propuesto para las próximas sesiones
 
-0. HECHO: secretos creados e inspección en verde. Queda del paso 0 fijar la
-   variable `VPS_PUERTO_INTERNO=8081`, decidir el usuario de despliegue
-   (sección 2.1) y crear la clave de OpenRouter y `SERVICIO_CLAVE` del VPS.
-1. Sesión siguiente: fase 1 entera (backend + script de verificación) en un
-   PR, verificado en Fly. No necesita el VPS.
-2. Misma sesión o la siguiente: fase 2 en un PR. Tampoco necesita el VPS,
-   solo validación estática.
-3. Cuando el usuario haya creado los secretos (fase 0): `vps-preparar.yml` a
-   mano, leer el informe, y con su permiso, promoción a `release`.
-4. Fase 4 con la clave de GestiónPresupuestos y la prueba del BOM contra el
-   VPS.
-5. Fase 5 y la decisión sobre Fly.
+0. HECHO: fases 0 a 3 (ver el estado al principio del documento).
+1. Usuario: crear `VPS_OPENROUTER_API_KEY` y `VPS_SERVICIO_CLAVE` y relanzar
+   `deploy-vps.yml` a mano; el run tiene que llegar a «el servicio habla con
+   OpenRouter; histórico en sqlite».
+2. Usuario: alta de GestiónPresupuestos con `tools/apps.ps1 -Crear` y su
+   presupuesto; prueba con `tools/probar-bom.ps1` contra el VPS.
+3. Fase 5: probar una restauración, activar el monitor externo, y decidir
+   Fly (sección 7).
