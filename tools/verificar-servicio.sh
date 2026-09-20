@@ -46,6 +46,22 @@ cuerpo="$(cat "$tmp/cuerpo")"
 printf '%s' "${cabeceras}" | grep -qi '^access-control-allow-origin: ' || fallo "/holamundo sin cabecera CORS"
 ok "/holamundo responde 'holamundo' con CORS"
 
+# --- Cabeceras que los clientes leen y las verificaciones no miraban ---
+# Las dos las encontro el primer consumidor real: PowerShell 5.1 decodifica en
+# Latin-1 lo que no declara charset, y el navegador rechaza en el preflight
+# cualquier cabecera del contrato que el CORS no permita.
+cabeceras_salud="$(curl -fsS --max-time 20 -D - -o /dev/null "${base}/salud")"
+printf '%s' "${cabeceras_salud}" | grep -qi '^content-type: application/json; charset=utf-8' \
+  || fallo "/salud no declara charset=utf-8 en el Content-Type: los clientes en PowerShell 5.1 leeran los acentos rotos."
+ok "/salud declara application/json; charset=utf-8"
+
+preflight="$(curl -fsS --max-time 20 -D - -o /dev/null -X OPTIONS "${base}/v1/chat/completions" \
+  -H 'Origin: https://npiobject-labs.github.io' -H 'Access-Control-Request-Method: POST' \
+  -H 'Access-Control-Request-Headers: authorization,content-type,x-operacion' || true)"
+printf '%s' "${preflight}" | grep -i '^access-control-allow-headers:' | grep -qi 'x-operacion' \
+  || fallo "el preflight de CORS no permite X-Operacion: docs/conectar.html y cualquier cliente web que siga el contrato quedan bloqueados."
+ok "el preflight de CORS admite X-Operacion"
+
 # --- El sobre de error es contrato publicado: si cambia, el run falla ---
 comprueba_error() {
   ruta="$1"; esperado="$2"; codigo="$3"; tipo="$4"

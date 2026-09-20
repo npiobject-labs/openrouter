@@ -93,7 +93,13 @@ async fn main() {
             Method::DELETE,
             Method::OPTIONS,
         ])
-        .allow_headers([AUTHORIZATION, CONTENT_TYPE])
+        // X-Operacion es parte del contrato: sin ella aquí, el preflight del
+        // navegador rechaza a cualquier cliente web que la mande.
+        .allow_headers([
+            AUTHORIZATION,
+            CONTENT_TYPE,
+            HeaderName::from_static("x-operacion"),
+        ])
         // Sin esto el navegador no puede leer estas dos aunque viajen.
         .expose_headers([
             HeaderName::from_static("x-cache"),

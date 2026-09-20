@@ -3,6 +3,12 @@
 Guía para la primera aplicación consumidora. Vale igual para cualquier otra:
 donde dice GestiónPresupuestos, léase «tu aplicación».
 
+> **Hay una versión que hace los pasos por ti**:
+> https://npiobject-labs.github.io/openrouter/conectar.html crea la aplicación,
+> le pone los topes, prueba su clave y entrega el código en el lenguaje que
+> elijas. Este documento es la misma guía en texto, para leerla entera o
+> enlazarla desde otro repositorio.
+
 ## Lo mínimo
 
 | Qué | Valor |
