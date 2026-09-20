@@ -13,9 +13,10 @@ use std::sync::Arc;
 use axum::{
     http::{
         header::{AUTHORIZATION, CONTENT_TYPE},
-        HeaderName, Method,
+        HeaderName, HeaderValue, Method,
     },
     middleware,
+    response::Response,
     routing::{delete, get, post, put},
     Router,
 };
@@ -106,6 +107,7 @@ async fn main() {
         .route("/holamundo", get(rutas::basicas::holamundo))
         .nest("/v1", v1)
         .fallback(rutas::basicas::desconocida)
+        .layer(middleware::map_response(json_en_utf8))
         .layer(cors)
         .with_state(servicio);
 
@@ -120,6 +122,25 @@ async fn main() {
         .with_graceful_shutdown(apagado())
         .await
         .expect("fallo del servidor HTTP");
+}
+
+/// JSON siempre es UTF-8 (RFC 8259), pero quien no lo dice se lo encuentra
+/// roto: PowerShell 5.1 decodifica como Latin-1 toda respuesta cuyo
+/// `Content-Type` no traiga charset, asi que `Invoke-RestMethod` devuelve
+/// «Â¡Hola!» y cada cliente acaba leyendo los bytes a mano. El CSV de
+/// `/v1/uso/exportar` ya lo declaraba; esto pone al JSON al mismo nivel.
+async fn json_en_utf8(mut respuesta: Response) -> Response {
+    let cabeceras = respuesta.headers_mut();
+    let json_pelado = cabeceras
+        .get(CONTENT_TYPE)
+        .is_some_and(|v| v.as_bytes() == b"application/json");
+    if json_pelado {
+        cabeceras.insert(
+            CONTENT_TYPE,
+            HeaderValue::from_static("application/json; charset=utf-8"),
+        );
+    }
+    respuesta
 }
 
 /// Ctrl+C en el PC y SIGTERM en Docker y en Fly: los dos deben cerrar bien.
