@@ -1,0 +1,703 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="build" content="OP-B1-20260920-016">
+<!-- App de Fly: <repo>-<owner>, el mismo nombre que deriva deploy.yml.
+     Con otro nombre, cambia este content o abre la pagina con ?app=<nombre>. -->
+<meta name="fly-app" content="openrouter-npiobject-labs">
+<meta name="api-vps" content="https://apisor.oracle402.com">
+<title>openrouter · conectar una aplicación</title>
+<style>
+:root{
+  --fondo:#f3f5f7; --superficie:#fff; --hundido:#e9edf0; --tinta:#17202a; --suave:#5b6673; --borde:#d6dce2;
+  --acento:#0b6e7a; --acento-tinta:#fff; --ok:#2e7d4f; --ok-suave:#e2f1e8; --aviso:#a86b12; --aviso-suave:#fbefd9;
+  --corte:#b93c3c; --corte-suave:#f9e3e3;
+  --sans:system-ui,-apple-system,"Segoe UI",sans-serif; --mono:ui-monospace,SFMono-Regular,Menlo,monospace;
+}
+@media (prefers-color-scheme:dark){:root{
+  --fondo:#0f1418; --superficie:#171d23; --hundido:#1f272e; --tinta:#e4e9ee; --suave:#98a4b0; --borde:#2b353e;
+  --acento:#4fb3bf; --acento-tinta:#0b1518; --ok:#6dc48f; --ok-suave:#173124; --aviso:#e0a64a; --aviso-suave:#352a14;
+  --corte:#e57373; --corte-suave:#3a1d1d;
+}}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html{color-scheme:light dark;scroll-behavior:smooth}
+body{margin:0;background:var(--fondo);color:var(--tinta);font:14px/1.5 var(--sans);padding-inline:16px;padding-block:1.5rem 3rem}
+main{max-width:58rem;margin:0 auto;display:flex;flex-direction:column;gap:1rem}
+h1{font-size:1.2rem;margin:0}
+h1 span{color:var(--suave);font-weight:400}
+h2{font-size:1rem;margin:0;display:flex;align-items:center;gap:.5rem;flex-wrap:wrap}
+h2 .num{display:inline-grid;place-items:center;width:1.5rem;height:1.5rem;border-radius:50%;background:var(--hundido);color:var(--suave);font-size:.8rem;font-weight:600}
+.panel.hecho h2 .num{background:var(--ok-suave);color:var(--ok)}
+h3{font-size:.9rem;margin:.4rem 0 0}
+p{margin:0;color:var(--suave)}
+p.tinta,li{color:var(--tinta)}
+ul,ol{margin:0;padding-left:1.3rem;display:flex;flex-direction:column;gap:.3rem}
+a{color:var(--acento);text-underline-offset:2px}
+code{font-family:var(--mono);font-size:.85em;background:var(--hundido);padding:.05em .3em;border-radius:3px}
+pre code{background:none;padding:0}
+.panel{background:var(--superficie);border:1px solid var(--borde);border-radius:8px;padding:1rem;display:flex;flex-direction:column;gap:.8rem}
+.panel.bloqueado{opacity:.55}
+.panel.bloqueado input,.panel.bloqueado select,.panel.bloqueado button{pointer-events:none}
+.fila{display:flex;flex-wrap:wrap;gap:.6rem;align-items:flex-end}
+.fila>label{flex:1 1 9rem}
+.fila>label.corta{flex:0 1 8rem}
+label{display:flex;flex-direction:column;gap:.25rem;font-size:.8rem;color:var(--suave);font-weight:500}
+input,select{font:inherit;color:inherit;border:1px solid var(--borde);background:var(--superficie);border-radius:6px;padding:.45rem .6rem;width:100%;min-width:0}
+button{font:inherit;cursor:pointer;border:1px solid var(--borde);background:var(--superficie);color:inherit;border-radius:6px;padding:.45rem .9rem;white-space:nowrap}
+button.primario{background:var(--acento);color:var(--acento-tinta);border-color:var(--acento);font-weight:500}
+button.chico{padding:.25rem .6rem;font-size:.8rem}
+button[disabled]{opacity:.55;cursor:progress}
+button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid var(--acento);outline-offset:2px}
+.interruptor{flex-direction:row;align-items:center;gap:.4rem;color:var(--tinta);font-weight:400;flex:0 0 auto;padding-bottom:.45rem}
+.interruptor input{width:auto}
+.ficha{display:grid;grid-template-columns:repeat(auto-fit,minmax(8rem,1fr));gap:.6rem .9rem;margin:0}
+.ficha div{display:flex;flex-direction:column;min-width:0}
+.ficha dt{font-size:.7rem;text-transform:uppercase;letter-spacing:.06em;color:var(--suave)}
+.ficha dd{margin:0;font-family:var(--mono);font-size:.85rem;font-variant-numeric:tabular-nums;word-break:break-word}
+.estado{display:inline-flex;align-items:center;gap:.4rem;font-size:.8rem;font-family:var(--mono);padding:.15rem .5rem;border-radius:4px;background:var(--hundido);color:var(--suave)}
+.estado.ok{background:var(--ok-suave);color:var(--ok)}
+.estado.mal{background:var(--corte-suave);color:var(--corte)}
+.estado.avisa{background:var(--aviso-suave);color:var(--aviso)}
+.respuesta{white-space:pre-wrap;line-height:1.6;margin:0;color:var(--tinta)}
+pre{background:var(--hundido);border-radius:6px;padding:.75rem .9rem;overflow-x:auto;font-family:var(--mono);font-size:.78rem;margin:0;white-space:pre-wrap;word-break:break-word}
+table{border-collapse:collapse;width:100%;font-size:.82rem}
+.tabla{overflow-x:auto}
+th,td{text-align:left;padding:.35rem .5rem;border-bottom:1px solid var(--borde);vertical-align:top}
+th{font-size:.7rem;text-transform:uppercase;letter-spacing:.06em;color:var(--suave);font-weight:600;white-space:nowrap}
+td code{white-space:nowrap}
+tr:last-child td{border-bottom:none}
+.aviso-clave{background:var(--aviso-suave);color:var(--aviso);border-radius:6px;padding:.6rem .8rem;font-size:.85rem;display:flex;flex-direction:column;gap:.5rem}
+.aviso-clave p,.nota p{color:inherit;margin:0}
+.aviso-clave pre{background:var(--superficie);color:var(--tinta);user-select:all}
+.nota{border-left:3px solid var(--acento);padding:.4rem .8rem;background:var(--hundido);border-radius:0 6px 6px 0;font-size:.85rem;color:var(--tinta)}
+.nota.peligro{border-color:var(--corte)}
+.pestanas{display:flex;flex-wrap:wrap;gap:.3rem}
+.pestanas button{padding:.3rem .7rem;font-size:.82rem}
+.pestanas button.activa{background:var(--acento);color:var(--acento-tinta);border-color:var(--acento)}
+.encabezado-codigo{display:flex;justify-content:space-between;align-items:center;gap:.5rem;flex-wrap:wrap}
+footer{display:flex;flex-wrap:wrap;gap:.4rem 1.2rem;font-size:.8rem;color:var(--suave);border-top:1px solid var(--borde);padding-top:1rem}
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>openrouter <span>· conectar una aplicación</span></h1>
+    <p>Asistente para dar de alta una aplicación en el servicio y llevarte el código que la conecta. Hace cada paso de verdad contra el servidor que elijas; nada se guarda en esta página salvo la clave de administración, en este navegador. La clave de la aplicación se enseña <strong>una sola vez</strong>.</p>
+  </header>
+
+  <!-- ============================ 0 ============================ -->
+  <section class="panel" id="p0">
+    <h2><span class="num">0</span>Antes de empezar</h2>
+    <ul>
+      <li><strong>Un nombre</strong> para la aplicación, corto y sin espacios raros: <code>presupuestos</code>, <code>notas</code>, <code>bom</code>. Si tendrá entorno de pruebas y real, son <em>dos</em> aplicaciones: <code>notas-pruebas</code> y <code>notas</code>.</li>
+      <li><strong>Qué servidor</strong>. El VPS es producción; Fly es la previsualización. <strong>Son dos servicios con dos bases de datos</strong>: una aplicación dada de alta en uno no existe en el otro, y las claves no sirven cruzadas. Si la aplicación va a usar los dos, se repite este asistente en cada uno.</li>
+      <li><strong>La clave de administración</strong> de ese servidor: el secreto de repositorio <code>VPS_SERVICIO_CLAVE</code> para el VPS o <code>SERVICIO_CLAVE</code> para Fly. GitHub no la enseña nunca; solo la tiene quien la creó. Si se perdió, se genera otra, se guarda en el secreto y se relanza el despliegue (<code>deploy-vps.yml</code> o <code>deploy.yml</code>); las claves de aplicación ya creadas siguen valiendo.</li>
+      <li><strong>Dónde guardar la clave</strong> que saldrá en el paso 2: gestor de contraseñas o secreto del repositorio de la aplicación. Nunca en el código, en el navegador ni en un chat.</li>
+    </ul>
+  </section>
+
+  <!-- ============================ 1 ============================ -->
+  <section class="panel" id="p1">
+    <h2><span class="num">1</span>Servidor y clave de administración <span class="estado" id="e1">sin comprobar</span></h2>
+    <div class="fila">
+      <label for="servidor">Servidor
+        <select id="servidor"></select>
+      </label>
+      <label for="clave">Clave de administración
+        <input id="clave" type="password" autocomplete="off" placeholder="la del secreto SERVICIO_CLAVE o VPS_SERVICIO_CLAVE">
+      </label>
+      <button class="primario" id="btn-estado">Comprobar</button>
+    </div>
+    <dl class="ficha" id="f1" hidden>
+      <div><dt>Servicio</dt><dd id="k-url">–</dd></div>
+      <div><dt>Build</dt><dd id="k-build">–</dd></div>
+      <div><dt>Hablas como</dt><dd id="k-quien">–</dd></div>
+      <div><dt>Modelo por defecto</dt><dd id="k-modelo">–</dd></div>
+    </dl>
+    <p>Tiene que decir «administracion». Con una clave de aplicación el servicio responde, pero no deja crear otras aplicaciones.</p>
+  </section>
+
+  <!-- ============================ 2 ============================ -->
+  <section class="panel bloqueado" id="p2">
+    <h2><span class="num">2</span>Dar de alta la aplicación <span class="estado" id="e2">esperando al paso 1</span></h2>
+    <div class="fila">
+      <label for="app-nombre">Nombre de la aplicación
+        <input id="app-nombre" type="text" maxlength="60" placeholder="notas" autocomplete="off">
+      </label>
+      <button class="primario" id="btn-alta">Crear</button>
+    </div>
+    <div class="aviso-clave" id="app-nueva" hidden>
+      <p><strong>Esta es la clave de la aplicación. Se enseña solo ahora.</strong> El servicio guarda únicamente su hash: si se pierde, se crea otra aplicación y se da de baja esta.</p>
+      <pre id="app-clave"></pre>
+      <div class="fila">
+        <button class="chico" id="btn-copiar-clave">Copiar la clave</button>
+        <label class="interruptor"><input type="checkbox" id="clave-guardada"> La he guardado en un sitio seguro</label>
+      </div>
+    </div>
+    <dl class="ficha" id="f2" hidden>
+      <div><dt>Aplicación</dt><dd id="k-app-nombre">–</dd></div>
+      <div><dt>Id</dt><dd id="k-app-id">–</dd></div>
+    </dl>
+    <details>
+      <summary>¿La aplicación ya existe en este servidor?</summary>
+      <div class="fila" style="margin-top:.5rem">
+        <label for="app-existente">Elegir de las que hay
+          <select id="app-existente"><option value="">cargando…</option></select>
+        </label>
+        <button id="btn-usar-existente">Usar esta</button>
+      </div>
+      <p>Sirve para volver a ponerle topes o sacar el código. Su clave no se puede recuperar: para probarla en el paso 4 tendrás que pegarla tú.</p>
+    </details>
+  </section>
+
+  <!-- ============================ 3 ============================ -->
+  <section class="panel bloqueado" id="p3">
+    <h2><span class="num">3</span>Ponerle topes <span class="estado" id="e3">esperando al paso 2</span></h2>
+    <p>Un tope de gasto y una cuota por minuto, antes de la primera llamada real. Pasado el aviso, las respuestas llevan la cabecera <code>X-Presupuesto</code>; pasado el corte, <code>402 presupuesto_agotado</code>. Se cambian cuando haga falta desde la <a href="consola.html">consola</a>.</p>
+    <div class="fila">
+      <label class="corta" for="lim-periodo">Periodo
+        <select id="lim-periodo">
+          <option value="dia" selected>por día</option>
+          <option value="mes">por mes</option>
+        </select>
+      </label>
+      <label class="corta" for="lim-limite">Corta en ($)<input id="lim-limite" type="number" step="0.01" min="0" value="2"></label>
+      <label class="corta" for="lim-aviso">Avisa en ($)<input id="lim-aviso" type="number" step="0.01" min="0" value="1.5"></label>
+      <label class="corta" for="lim-cuota">Llamadas por minuto<input id="lim-cuota" type="number" step="1" min="1" value="25"></label>
+      <button class="primario" id="btn-topes">Guardar topes</button>
+    </div>
+    <dl class="ficha" id="f3" hidden>
+      <div><dt>Tope</dt><dd id="k-tope">–</dd></div>
+      <div><dt>Aviso</dt><dd id="k-aviso">–</dd></div>
+      <div><dt>Cuota</dt><dd id="k-cuota">–</dd></div>
+    </dl>
+    <p>Orientación: una aplicación personal, 2 $ por día y 25 por minuto. Una que procese lotes, por mes y con la cuota que aguante su bucle. El cortacircuitos de bucles va aparte y no se configura: cinco peticiones idénticas en un minuto se cortan con <code>429 bucle</code>.</p>
+  </section>
+
+  <!-- ============================ 4 ============================ -->
+  <section class="panel bloqueado" id="p4">
+    <h2><span class="num">4</span>Probar la clave de la aplicación <span class="estado" id="e4">esperando al paso 3</span></h2>
+    <p>Lo que hará tu aplicación, hecho desde aquí con <em>su</em> clave, no con la de administración. La consulta gasta una fracción de céntimo y queda anotada en el histórico, como cualquier otra.</p>
+    <div class="fila" id="fila-clave-app" hidden>
+      <label for="clave-app">Clave de la aplicación
+        <input id="clave-app" type="password" autocomplete="off" placeholder="svc_…">
+      </label>
+    </div>
+    <div class="fila">
+      <button id="btn-identidad">Comprobar identidad</button>
+      <button class="primario" id="btn-hola">Enviar «Di hola»</button>
+    </div>
+    <dl class="ficha" id="f4" hidden>
+      <div><dt>Hablas como</dt><dd id="k4-quien">–</dd></div>
+      <div><dt>Presupuesto</dt><dd id="k4-margen">–</dd></div>
+    </dl>
+    <p class="respuesta" id="r4" hidden></p>
+    <dl class="ficha" id="f4b" hidden>
+      <div><dt>Coste</dt><dd id="k4-coste">–</dd></div>
+      <div><dt>Tokens</dt><dd id="k4-tokens">–</dd></div>
+      <div><dt>Modelo servido</dt><dd id="k4-modelo">–</dd></div>
+      <div><dt>Registro de uso</dt><dd id="k4-uso">–</dd></div>
+    </dl>
+  </section>
+
+  <!-- ============================ 5 ============================ -->
+  <section class="panel" id="p5">
+    <h2><span class="num">5</span>El código para tu aplicación</h2>
+    <p>Solo cambian dos cosas respecto a la API de OpenAI: la dirección y la clave. Los fragmentos llevan ya la dirección del servidor elegido; la clave va donde pone <code>CLAVE_DE_APLICACION</code>, leída de una variable de entorno o de un secreto, nunca escrita en el fichero.</p>
+    <div class="pestanas" id="pestanas"></div>
+    <div class="encabezado-codigo">
+      <p id="codigo-nota"></p>
+      <button class="chico" id="btn-copiar-codigo">Copiar</button>
+    </div>
+    <pre><code id="codigo"></code></pre>
+  </section>
+
+  <!-- ============================ 6 ============================ -->
+  <section class="panel" id="p6">
+    <h2><span class="num">6</span>En el repositorio de tu aplicación</h2>
+    <p>Lo que hay que dejar hecho para que la conexión sobreviva al primer despliegue y al primer fallo. Es lo que se aprendió conectando la primera aplicación real.</p>
+    <h3>Secretos y variables</h3>
+    <ul>
+      <li>Secreto de repositorio <code>LLM_API_KEY</code> con la clave del paso 2. El workflow de despliegue lo vuelca al servidor (<code>flyctl secrets set</code> o el <code>.env</code> del VPS) <strong>y lo quita si el secreto desaparece</strong>, para que retirar la clave sea quitar el secreto y redesplegar.</li>
+      <li>Variable opcional <code>LLM_BASE</code> con la dirección del servicio; sin ella, la que lleve el código por defecto. Así se cambia de Fly al VPS sin tocar código.</li>
+      <li>Variable opcional <code>LLM_MODELO</code>. Sin ella, el modelo por defecto del servicio, que es el barato y suficiente para casi todo.</li>
+    </ul>
+    <h3>Reglas en el código</h3>
+    <ul>
+      <li><strong>La clave vive en el servidor de la aplicación.</strong> Si la interfaz corre en el navegador, el navegador llama a tu backend y tu backend llama aquí. Una clave en el navegador la tiene cualquiera.</li>
+      <li><strong>Aísla al proveedor en un módulo</strong> (<code>llm.rs</code>, <code>llm.py</code>…) con una función de negocio, no una de HTTP: <code>titular(texto)</code>, <code>mapear_columnas(filas)</code>. Si el servicio cambia, se toca ese fichero y nada más.</li>
+      <li><strong>La aplicación funciona sin la clave.</strong> Sin <code>LLM_API_KEY</code> arranca igual, lo avisa por el log y <code>/salud</code> lo declara. Guarda primero, pide a la IA después, y si la IA falla, tarda o no está, lo guardado se queda como está y se reintenta luego. La IA nunca hace perder datos.</li>
+      <li><strong>Un tiempo de espera corto en la aplicación</strong> (8 s para algo interactivo) y <strong>largo en el cliente de lotes</strong> (más de 120 s): el servicio concede 120 s a OpenRouter, y el que corta tiene que ser el servicio, que anota la llamada.</li>
+      <li><strong><code>X-Operacion</code> en cada llamada</strong> con el trabajo de negocio al que pertenece. Después, <code>GET /v1/uso/resumen?agrupar=operacion</code> dice cuánto costó cada uno.</li>
+      <li><strong>Guarda <code>X-Uso-Id</code></strong> de cada respuesta junto al resultado: es el registro con tokens, coste y latencia, consultable en <code>GET /v1/uso/{id}</code>. Y si llega <code>X-Presupuesto</code>, enséñala.</li>
+      <li><strong>Salida estructurada</strong> con <code>response_format</code> y esquema, <code>max_tokens</code>, y <code>temperature</code> baja si la tarea no es creativa. Lo que devuelva el modelo se normaliza antes de guardarlo: comillas, puntos finales, repetidos, valores que no distinguen nada.</li>
+      <li><strong>Reintentos: dos como mucho</strong>, con espera creciente (2 s, 8 s). Cinco peticiones idénticas en un minuto disparan <code>429 bucle</code>, aunque cada intento fuera legítimo.</li>
+      <li><strong>Sin <code>stream: true</code></strong> hasta que exista: responde <code>400 streaming_no_disponible</code>.</li>
+    </ul>
+    <h3>Verificación en el despliegue</h3>
+    <ul>
+      <li>Con clave: una llamada real tiene que volver bien. Cuesta una fracción de céntimo y es la única forma de saber que la cadena entera funciona.</li>
+      <li>Sin clave: <code>/salud</code> tiene que declararlo y la aplicación tiene que seguir funcionando.</li>
+      <li>Lo que la verificación cree, lo borra pase lo que pase.</li>
+    </ul>
+    <div class="nota peligro">
+      <p><strong>Protege la API de tu propia aplicación.</strong> Si tu backend acepta peticiones sin autenticar, en cuanto llame a un modelo cada petición ajena gasta dinero real. Los topes del paso 3 acotan el daño, pero el token de acceso de tu aplicación deja de ser opcional el mismo día que conectas la IA.</p>
+    </div>
+  </section>
+
+  <!-- ============================ 7 ============================ -->
+  <section class="panel" id="p7">
+    <h2><span class="num">7</span>Si algo falla</h2>
+    <p class="tinta">Primero, saber de quién es el fallo. Un servicio caído y una aplicación que no llama se parecen mucho desde fuera.</p>
+    <ol>
+      <li><a id="enlace-salud" href="#" target="_blank" rel="noopener">/salud del servidor elegido</a>: si responde con el build, el servicio está vivo.</li>
+      <li>La <a href="consola.html">consola</a> con la clave de la aplicación: si «Hablas como» dice su nombre y «Di hola» contesta, la clave y el servicio funcionan y el fallo está en tu código.</li>
+      <li>Si la consola falla, el código de error de abajo dice qué es.</li>
+    </ol>
+    <div class="tabla"><table>
+      <thead><tr><th>HTTP</th><th>code</th><th>Qué hacer</th></tr></thead>
+      <tbody>
+        <tr><td>401</td><td><code>sin_clave</code>, <code>clave_invalida</code></td><td>Configuración: la clave falta, es la de otro servidor o la aplicación está dada de baja. No reintentar.</td></tr>
+        <tr><td>402</td><td><code>presupuesto_agotado</code></td><td>Parar y avisar. No reintentar hasta el siguiente periodo o hasta que administración suba el tope.</td></tr>
+        <tr><td>429</td><td><code>cuota_superada</code></td><td>Esperar un minuto y reintentar.</td></tr>
+        <tr><td>429</td><td><code>bucle</code></td><td>Algo repite la misma petición. Parar: es un bug, no una carga.</td></tr>
+        <tr><td>400</td><td><code>cuerpo_invalido</code>, <code>streaming_no_disponible</code></td><td>Petición mal formada o <code>stream: true</code>. Corregir.</td></tr>
+        <tr><td>403</td><td><code>solo_administracion</code></td><td>Ruta de administración con clave de aplicación. Es normal: la aplicación no debe tocarla.</td></tr>
+        <tr><td>502</td><td><code>openrouter_rechaza</code>, <code>openrouter_inalcanzable</code>, <code>openrouter_tardo_demasiado</code></td><td>Fallo del proveedor; con <code>openrouter_rechaza</code>, <code>error.upstream</code> trae su cuerpo. Reintentar una o dos veces con espera creciente.</td></tr>
+        <tr><td>503</td><td><code>sin_configurar</code></td><td>El servicio no tiene sus claves. Avisar a administración.</td></tr>
+      </tbody>
+    </table></div>
+    <p>Dos trampas vistas en la práctica. En PowerShell 5.1, <code>curl</code> es un alias de <code>Invoke-WebRequest</code> y no entiende <code>-X</code> ni <code>-H</code>: usa el fragmento de PowerShell del paso 5. Y si los acentos llegan como <code>Â¡Hola!</code>, es el cliente decodificando en Latin-1: el fragmento ya lo evita leyendo los bytes en UTF-8.</p>
+  </section>
+
+  <!-- ============================ 8 ============================ -->
+  <section class="panel" id="p8">
+    <h2><span class="num">8</span>Después</h2>
+    <ul>
+      <li><strong>Ver el gasto</strong>: en la <a href="consola.html">consola</a> con la clave de administración, panel Aplicaciones; o desde el PC, <code>tools/apps.ps1 -Gasto</code>. Con la clave de la aplicación, <code>GET /v1/uso</code> y <code>/v1/uso/resumen</code> devuelven solo lo suyo.</li>
+      <li><strong>Revocar</strong>: «Dar de baja» en la consola o <code>tools/apps.ps1 -Baja &lt;id&gt;</code>. Desactiva, no borra: el histórico sigue diciendo quién gastó.</li>
+      <li><strong>Rotar la clave</strong>: crear una aplicación nueva con el mismo nombre y sufijo, cambiar el secreto en el repositorio de la aplicación, redesplegar, y dar de baja la vieja cuando el despliegue esté verde.</li>
+      <li><strong>Subir el tope</strong>: consola, botón «Topes» en la fila de la aplicación. No hace falta redesplegar nada.</li>
+    </ul>
+  </section>
+
+  <footer>
+    <a href="consola.html">consola</a>
+    <a href="api.html">contrato de la API</a>
+    <a href="https://github.com/npiobject-labs/openrouter/blob/main/docs/planificacion/integracion-gestionpresupuestos.md">guía de integración (texto)</a>
+    <a href="https://github.com/npiobject-labs/openrouter">repositorio</a>
+    <span id="pie-servidor"></span>
+  </footer>
+</main>
+
+<script>
+(function(){
+  var $ = function(id){ return document.getElementById(id); };
+  var parametros = new URLSearchParams(location.search);
+  var app = parametros.get('app') || document.querySelector('meta[name="fly-app"]').content;
+  var enLocal = ['localhost','127.0.0.1'].includes(location.hostname);
+  var api = parametros.get('api') || '';
+
+  // Los mismos servidores y las mismas claves guardadas que la consola, para
+  // que quien ya se conectó allí no tenga que volver a pegar nada.
+  var servidores = [];
+  if (enLocal) {
+    servidores.push({ id: 'local', nombre: 'Local', url: location.protocol + '//' + location.hostname + ':' + (/^\d+$/.test(api) ? api : '8080') });
+  } else {
+    servidores.push({ id: 'vps', nombre: 'VPS · producción', url: document.querySelector('meta[name="api-vps"]').content });
+    servidores.push({ id: 'fly', nombre: 'Fly.io · previsualización', url: 'https://' + app + '.fly.dev' });
+    if (/^https?:\/\//.test(api)) servidores.push({ id: 'otro', nombre: 'Otro · ' + api, url: api.replace(/\/$/, '') });
+  }
+  var selector = $('servidor');
+  servidores.forEach(function(s){
+    var o = document.createElement('option'); o.value = s.id; o.textContent = s.nombre; selector.appendChild(o);
+  });
+  var elegido = /^https?:\/\//.test(api) ? 'otro' : null;
+  if (!elegido) { try { elegido = localStorage.getItem('openrouter.servidor'); } catch (e) {} }
+  if (!servidores.some(function(s){ return s.id === elegido; })) elegido = servidores[0].id;
+  selector.value = elegido;
+
+  var base = '';
+  var clave = $('clave');
+  // Estado del asistente. La clave de la aplicación vive solo en memoria.
+  var aplicacion = null;   // { id, nombre }
+  var claveApp = '';
+
+  function claveGuardada(){ try { return localStorage.getItem('openrouter.clave.' + base) || ''; } catch (e) { return ''; } }
+  function eligeServidor(){
+    var s = servidores.filter(function(x){ return x.id === selector.value; })[0] || servidores[0];
+    base = s.url;
+    clave.value = claveGuardada();
+    $('enlace-salud').href = base + '/salud';
+    $('pie-servidor').textContent = 'servidor: ' + base;
+    try { localStorage.setItem('openrouter.servidor', s.id); } catch (e) {}
+    // Los fragmentos de código se definen más abajo; en la primera llamada,
+    // durante la carga, todavía no existen y los pinta el arranque final.
+    if (typeof fragmentos !== 'undefined') pintaCodigo();
+  }
+  eligeServidor();
+  selector.addEventListener('change', function(){
+    eligeServidor();
+    reiniciaDesde(1);
+  });
+  clave.addEventListener('change', function(){
+    try { localStorage.setItem('openrouter.clave.' + base, clave.value.trim()); } catch (e) {}
+  });
+
+  function pinta(id, texto, clase){
+    var el = $(id);
+    if (clase !== undefined) el.className = 'estado' + (clase ? ' ' + clase : '');
+    el.textContent = texto;
+  }
+  function texto(id, valor){ $(id).textContent = valor; }
+  function bloquea(n, si){
+    var p = $('p' + n);
+    p.classList.toggle('bloqueado', si);
+    if (si) p.classList.remove('hecho');
+  }
+  function hecho(n){ $('p' + n).classList.add('hecho'); $('p' + n).classList.remove('bloqueado'); }
+  function desbloquea(n){ $('p' + n).classList.remove('bloqueado'); }
+
+  // Cambiar de servidor o de clave invalida todo lo que venía después.
+  function reiniciaDesde(n){
+    if (n <= 1) { pinta('e1', 'sin comprobar', ''); $('f1').hidden = true; $('p1').classList.remove('hecho'); }
+    if (n <= 2) { aplicacion = null; claveApp = ''; bloquea(2, true); pinta('e2', 'esperando al paso 1', ''); $('app-nueva').hidden = true; $('f2').hidden = true; $('clave-guardada').checked = false; }
+    if (n <= 3) { bloquea(3, true); pinta('e3', 'esperando al paso 2', ''); $('f3').hidden = true; }
+    if (n <= 4) { bloquea(4, true); pinta('e4', 'esperando al paso 3', ''); $('f4').hidden = true; $('f4b').hidden = true; $('r4').hidden = true; $('fila-clave-app').hidden = true; }
+  }
+
+  // Mismo sobre de error para todo: {"ok":false,"error":{"message","code"}}.
+  function llama(ruta, opciones, conClave){
+    var k = (conClave !== undefined ? conClave : clave.value).trim();
+    if (!k) return Promise.reject(new Error('falta la clave'));
+    opciones = opciones || {};
+    opciones.headers = Object.assign({ 'Authorization': 'Bearer ' + k }, opciones.headers || {});
+    opciones.signal = AbortSignal.timeout(opciones.espera || 60000);
+    return fetch(base + ruta, opciones).then(function(r){
+      return r.json().catch(function(){ return { error: { message: 'respuesta ilegible, HTTP ' + r.status } }; })
+        .then(function(j){
+          if (!r.ok) {
+            var e = j.error || {};
+            var fallo = new Error((e.code ? e.code + ': ' : '') + (e.message || 'HTTP ' + r.status));
+            fallo.codigo = r.status;
+            throw fallo;
+          }
+          return { datos: j, respuesta: r };
+        });
+    });
+  }
+
+  // --- 1: servidor y clave de administración ---------------------------------
+  $('btn-estado').addEventListener('click', function(){
+    var boton = this;
+    boton.disabled = true;
+    reiniciaDesde(2);
+    pinta('e1', 'comprobando…', '');
+    llama('/v1/estado', { espera: 40000 }).then(function(res){
+      var j = res.datos, quien = j.identidad || {};
+      texto('k-url', base);
+      texto('k-build', (j.build || '–').slice(0, 7));
+      texto('k-quien', quien.nombre || '–');
+      texto('k-modelo', j.modelo_defecto || '–');
+      $('f1').hidden = false;
+      if (!quien.administracion) {
+        pinta('e1', 'esa es una clave de aplicación', 'avisa');
+        return;
+      }
+      pinta('e1', 'administración', 'ok');
+      hecho(1);
+      desbloquea(2);
+      pinta('e2', 'lista', '');
+      cargaExistentes();
+    }).catch(function(e){
+      pinta('e1', e.message, 'mal');
+      $('f1').hidden = true;
+    }).finally(function(){ boton.disabled = false; });
+  });
+
+  // --- 2: alta -----------------------------------------------------------------
+  var existentes = [];
+  function cargaExistentes(){
+    var sel = $('app-existente');
+    sel.innerHTML = '<option value="">cargando…</option>';
+    llama('/v1/apps').then(function(res){
+      existentes = (res.datos.data || []).filter(function(a){ return a.activa; });
+      sel.innerHTML = existentes.length ? '' : '<option value="">no hay ninguna</option>';
+      existentes.forEach(function(a){
+        var o = document.createElement('option'); o.value = a.id; o.textContent = a.nombre + ' · ' + a.id; sel.appendChild(o);
+      });
+    }).catch(function(){ sel.innerHTML = '<option value="">no se pudo cargar</option>'; });
+  }
+
+  function fijaAplicacion(a){
+    aplicacion = { id: a.id, nombre: a.nombre };
+    texto('k-app-nombre', a.nombre);
+    texto('k-app-id', a.id);
+    $('f2').hidden = false;
+    pintaCodigo();
+  }
+
+  $('btn-alta').addEventListener('click', function(){
+    var nombre = $('app-nombre').value.trim();
+    if (!nombre) { pinta('e2', 'ponle un nombre', 'avisa'); return; }
+    var repetida = existentes.filter(function(a){ return a.nombre.toLowerCase() === nombre.toLowerCase(); })[0];
+    if (repetida) {
+      pinta('e2', 'ya existe «' + repetida.nombre + '» (' + repetida.id + '): usa otro nombre o elígela abajo', 'avisa');
+      return;
+    }
+    var boton = this;
+    boton.disabled = true;
+    pinta('e2', 'creando…', '');
+    llama('/v1/apps', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ nombre: nombre })
+    }).then(function(res){
+      claveApp = res.datos.clave;
+      texto('app-clave', claveApp);
+      $('app-nueva').hidden = false;
+      $('clave-guardada').checked = false;
+      fijaAplicacion(res.datos.app);
+      pinta('e2', 'creada ' + res.datos.app.id + ' · guarda la clave', 'avisa');
+      $('app-nombre').value = '';
+      existentes.push(res.datos.app);
+    }).catch(function(e){
+      pinta('e2', e.message, 'mal');
+    }).finally(function(){ boton.disabled = false; });
+  });
+
+  $('btn-copiar-clave').addEventListener('click', function(){
+    copia(claveApp, this);
+  });
+
+  // El paso 3 se abre cuando el usuario declara que la clave está a salvo. Es
+  // el único momento en que la va a ver.
+  $('clave-guardada').addEventListener('change', function(){
+    if (this.checked && aplicacion) {
+      pinta('e2', aplicacion.id, 'ok');
+      hecho(2);
+      abreTopes();
+    }
+  });
+
+  $('btn-usar-existente').addEventListener('click', function(){
+    var id = $('app-existente').value;
+    var a = existentes.filter(function(x){ return x.id === id; })[0];
+    if (!a) { pinta('e2', 'elige una aplicación', 'avisa'); return; }
+    claveApp = '';
+    $('app-nueva').hidden = true;
+    fijaAplicacion(a);
+    pinta('e2', a.id + ' (ya existía)', 'ok');
+    hecho(2);
+    abreTopes();
+  });
+
+  // --- 3: topes ----------------------------------------------------------------
+  function abreTopes(){
+    desbloquea(3);
+    pinta('e3', 'lista', '');
+    $('f3').hidden = true;
+    // Si ya tenía topes, se enseñan para no pisarlos sin querer.
+    llama('/v1/presupuesto?app=' + encodeURIComponent(aplicacion.id)).then(function(res){
+      var p = res.datos;
+      if (p.periodo) {
+        $('lim-periodo').value = p.periodo;
+        $('lim-limite').value = p.limite != null ? p.limite : '';
+        $('lim-aviso').value = p.aviso != null ? p.aviso : '';
+        $('lim-cuota').value = p.cuota_minuto != null ? p.cuota_minuto : '';
+        pinta('e3', 'ya tenía topes; guarda para confirmarlos o cámbialos', 'avisa');
+      }
+    }).catch(function(){});
+  }
+
+  $('btn-topes').addEventListener('click', function(){
+    var cuerpo = {};
+    if ($('lim-periodo').value) cuerpo.periodo = $('lim-periodo').value;
+    if ($('lim-limite').value !== '') cuerpo.limite = Number($('lim-limite').value);
+    if ($('lim-aviso').value !== '') cuerpo.aviso = Number($('lim-aviso').value);
+    if ($('lim-cuota').value !== '') cuerpo.cuota_minuto = Number($('lim-cuota').value);
+    if (cuerpo.limite != null && cuerpo.aviso != null && cuerpo.aviso > cuerpo.limite) {
+      pinta('e3', 'el aviso tiene que ser menor que el corte', 'avisa');
+      return;
+    }
+    var boton = this;
+    boton.disabled = true;
+    pinta('e3', 'guardando…', '');
+    llama('/v1/apps/' + encodeURIComponent(aplicacion.id) + '/presupuesto', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(cuerpo)
+    }).then(function(res){
+      var p = res.datos;
+      texto('k-tope', p.limite != null ? p.limite.toFixed(2) + ' $ por ' + p.periodo : 'sin presupuesto');
+      texto('k-aviso', p.aviso != null ? p.aviso.toFixed(2) + ' $' : '–');
+      texto('k-cuota', p.cuota_minuto != null ? p.cuota_minuto + '/min' : 'sin cuota');
+      $('f3').hidden = false;
+      pinta('e3', 'guardados', 'ok');
+      hecho(3);
+      desbloquea(4);
+      pinta('e4', claveApp ? 'lista, con la clave recién creada' : 'pega la clave de la aplicación', '');
+      $('fila-clave-app').hidden = !!claveApp;
+    }).catch(function(e){
+      pinta('e3', e.message, 'mal');
+    }).finally(function(){ boton.disabled = false; });
+  });
+
+  // --- 4: probar con la clave de la aplicación ---------------------------------
+  function claveDeApp(){
+    return claveApp || $('clave-app').value.trim();
+  }
+
+  $('btn-identidad').addEventListener('click', function(){
+    var k = claveDeApp();
+    if (!k) { pinta('e4', 'falta la clave de la aplicación', 'avisa'); return; }
+    var boton = this;
+    boton.disabled = true;
+    pinta('e4', 'comprobando…', '');
+    llama('/v1/estado', { espera: 40000 }, k).then(function(res){
+      var quien = res.datos.identidad || {};
+      texto('k4-quien', quien.nombre || '–');
+      return llama('/v1/presupuesto', {}, k).then(function(r2){
+        var p = r2.datos;
+        texto('k4-margen', p.periodo ? p.consumido.toFixed(4) + ' $ de ' + p.limite.toFixed(2) + ' $ por ' + p.periodo : 'sin topes');
+        $('f4').hidden = false;
+        if (aplicacion && quien.app_id && quien.app_id !== aplicacion.id) {
+          pinta('e4', 'esa clave es de «' + quien.nombre + '», no de «' + aplicacion.nombre + '»', 'avisa');
+        } else {
+          pinta('e4', 'identidad correcta', 'ok');
+        }
+      });
+    }).catch(function(e){
+      pinta('e4', e.message, 'mal');
+    }).finally(function(){ boton.disabled = false; });
+  });
+
+  $('btn-hola').addEventListener('click', function(){
+    var k = claveDeApp();
+    if (!k) { pinta('e4', 'falta la clave de la aplicación', 'avisa'); return; }
+    var boton = this;
+    boton.disabled = true;
+    pinta('e4', 'consultando…', '');
+    $('r4').hidden = true; $('f4b').hidden = true;
+    llama('/v1/chat/completions', {
+      method: 'POST',
+      espera: 130000,
+      headers: { 'Content-Type': 'application/json', 'X-Operacion': 'conectar-prueba' },
+      body: JSON.stringify({ messages: [{ role: 'user', content: 'Di hola' }], max_tokens: 50 })
+    }, k).then(function(res){
+      var j = res.datos, u = j.usage || {};
+      var contenido = (j.choices && j.choices[0] && j.choices[0].message && j.choices[0].message.content) || '(sin contenido)';
+      texto('r4', contenido); $('r4').hidden = false;
+      texto('k4-coste', u.cost != null ? Number(u.cost).toFixed(6) + ' $' : '–');
+      texto('k4-tokens', (u.prompt_tokens || 0) + ' + ' + (u.completion_tokens || 0));
+      texto('k4-modelo', j.model || '–');
+      texto('k4-uso', res.respuesta.headers.get('X-Uso-Id') || '–');
+      $('f4b').hidden = false;
+      pinta('e4', 'la aplicación ya habla con el servicio', 'ok');
+      hecho(4);
+      $('p5').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }).catch(function(e){
+      pinta('e4', e.message, 'mal');
+    }).finally(function(){ boton.disabled = false; });
+  });
+
+  // --- 5: código ---------------------------------------------------------------
+  // Los fragmentos llevan la dirección real y un marcador para la clave: la
+  // clave nunca se escribe en un fichero, así que tampoco se escribe aquí.
+  var fragmentos = [
+    { id: 'powershell', nombre: 'PowerShell', nota: 'Vale en PowerShell 5.1 y 7. Lee los bytes en UTF-8 porque 5.1 decodifica en Latin-1 lo que no declara charset.', codigo: function(b, op){ return [
+      '# La clave, en una variable de entorno o en un gestor de secretos; nunca en el fichero.',
+      '$clave = $env:LLM_API_KEY',
+      '$cuerpo = \'{"messages":[{"role":"user","content":"Di hola"}],"max_tokens":50}\'',
+      '$resp = Invoke-WebRequest -Method Post -Uri "' + b + '/v1/chat/completions" `',
+      '  -Headers @{ Authorization = "Bearer $clave"; "X-Operacion" = "' + op + '" } `',
+      '  -ContentType "application/json" -Body $cuerpo -UseBasicParsing -TimeoutSec 130',
+      '$r = [Text.Encoding]::UTF8.GetString($resp.RawContentStream.ToArray()) | ConvertFrom-Json',
+      '$r.choices[0].message.content',
+      '$resp.Headers[\'X-Uso-Id\']   # guárdalo junto al resultado'
+    ].join('\n'); } },
+    { id: 'python', nombre: 'Python', nota: 'Con el SDK de OpenAI (pip install openai): solo cambian base_url y api_key.', codigo: function(b, op){ return [
+      'import os',
+      'from openai import OpenAI',
+      '',
+      'cliente = OpenAI(base_url="' + b + '/v1", api_key=os.environ["LLM_API_KEY"], timeout=130)',
+      'r = cliente.chat.completions.with_raw_response.create(',
+      '    messages=[{"role": "user", "content": "Di hola"}],',
+      '    max_tokens=50,',
+      '    extra_headers={"X-Operacion": "' + op + '"},',
+      ')',
+      'print(r.parse().choices[0].message.content)',
+      'print(r.headers.get("X-Uso-Id"))  # guárdalo junto al resultado'
+    ].join('\n'); } },
+    { id: 'javascript', nombre: 'JavaScript', nota: 'Node 18 o más, o cualquier navegador… pero desde el navegador NO: la clave la vería cualquiera. Esto va en tu servidor.', codigo: function(b, op){ return [
+      'const r = await fetch("' + b + '/v1/chat/completions", {',
+      '  method: "POST",',
+      '  headers: {',
+      '    "Authorization": `Bearer ${process.env.LLM_API_KEY}`,',
+      '    "Content-Type": "application/json",',
+      '    "X-Operacion": "' + op + '",',
+      '  },',
+      '  body: JSON.stringify({ messages: [{ role: "user", content: "Di hola" }], max_tokens: 50 }),',
+      '  signal: AbortSignal.timeout(130000),',
+      '});',
+      'const j = await r.json();',
+      'if (!r.ok) throw new Error(`${j.error.code}: ${j.error.message}`);',
+      'console.log(j.choices[0].message.content, r.headers.get("X-Uso-Id"));'
+    ].join('\n'); } },
+    { id: 'rust', nombre: 'Rust', nota: 'reqwest con rustls (sin OpenSSL en la imagen). El módulo completo, con espera corta y guardado sin IA, está en npiobject-labs/prueba, app/src/llm.rs.', codigo: function(b, op){ return [
+      '// Cargo.toml: reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }',
+      'let clave = std::env::var("LLM_API_KEY")?;',
+      'let r: serde_json::Value = reqwest::Client::new()',
+      '    .post("' + b + '/v1/chat/completions")',
+      '    .bearer_auth(&clave)',
+      '    .header("X-Operacion", "' + op + '")',
+      '    .timeout(std::time::Duration::from_secs(8)) // corta en la app; el servicio ya anota la llamada',
+      '    .json(&serde_json::json!({ "messages": [{ "role": "user", "content": "Di hola" }], "max_tokens": 50 }))',
+      '    .send().await?',
+      '    .error_for_status()?',
+      '    .json().await?;',
+      'println!("{}", r["choices"][0]["message"]["content"]);'
+    ].join('\n'); } },
+    { id: 'curl', nombre: 'curl', nota: 'Bash, macOS o Linux. En PowerShell no: allí «curl» es otra cosa.', codigo: function(b, op){ return [
+      'curl -sS --max-time 130 "' + b + '/v1/chat/completions" \\',
+      '  -H "Authorization: Bearer $LLM_API_KEY" -H "Content-Type: application/json" \\',
+      '  -H "X-Operacion: ' + op + '" \\',
+      '  -d \'{"messages":[{"role":"user","content":"Di hola"}],"max_tokens":50}\' -D -'
+    ].join('\n'); } }
+  ];
+  var fragmentoActivo = 'powershell';
+  var pestanas = $('pestanas');
+  fragmentos.forEach(function(f){
+    var b = document.createElement('button');
+    b.textContent = f.nombre;
+    b.addEventListener('click', function(){ fragmentoActivo = f.id; pintaCodigo(); });
+    b.dataset.id = f.id;
+    pestanas.appendChild(b);
+  });
+  function pintaCodigo(){
+    var f = fragmentos.filter(function(x){ return x.id === fragmentoActivo; })[0];
+    Array.prototype.forEach.call(pestanas.children, function(b){ b.classList.toggle('activa', b.dataset.id === fragmentoActivo); });
+    var op = aplicacion ? aplicacion.nombre + '-prueba' : 'nombre-del-trabajo';
+    texto('codigo', f.codigo(base, op));
+    texto('codigo-nota', f.nota);
+  }
+  $('btn-copiar-codigo').addEventListener('click', function(){ copia($('codigo').textContent, this); });
+
+  function copia(textoACopiar, boton){
+    var etiqueta = boton.textContent;
+    var listo = function(){ boton.textContent = 'copiado'; setTimeout(function(){ boton.textContent = etiqueta; }, 1500); };
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(textoACopiar).then(listo, function(){ boton.textContent = 'selecciona y copia a mano'; });
+    } else {
+      boton.textContent = 'selecciona y copia a mano';
+    }
+  }
+
+  pintaCodigo();
+})();
+</script>
+</body>
+</html>
