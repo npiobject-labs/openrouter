@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="build" content="OP-B1-20260913-015">
+<meta name="build" content="OP-B1-20260920-017">
 <!-- App de Fly: <repo>-<owner>, el mismo nombre que deriva deploy.yml.
      Con otro nombre, cambia este content o abre la pagina con ?app=<nombre>. -->
 <meta name="fly-app" content="openrouter-npiobject-labs">
@@ -66,6 +66,8 @@ td.texto{font-family:var(--sans);font-size:.82rem}
 tr:last-child td{border-bottom:none}
 td.fallo{color:var(--corte)}
 td.baja{color:var(--suave)}
+.llamada{background:var(--hundido);border-left:3px solid var(--acento);border-radius:0 6px 6px 0;padding:.5rem .8rem;color:var(--tinta);font-size:.85rem;margin-top:.6rem}
+.llamada a{font-weight:500}
 .aviso-clave{background:var(--aviso-suave);color:var(--aviso);border-radius:6px;padding:.6rem .8rem;font-size:.85rem;display:flex;flex-direction:column;gap:.5rem}
 .aviso-clave p{color:inherit;margin:0}
 .aviso-clave pre{background:var(--superficie);color:var(--tinta);user-select:all}
@@ -77,6 +79,7 @@ footer{display:flex;flex-wrap:wrap;gap:.4rem 1.2rem;font-size:.8rem;color:var(--
   <header>
     <h1>openrouter <span>· consola</span></h1>
     <p>Cliente de referencia del servicio. Etapas 1 a 6: conexión, catálogo, consulta, medición, histórico, claves por aplicación y presupuestos.</p>
+    <p class="llamada">¿Vas a conectar una aplicación nueva? <a href="conectar.html">El asistente lo hace entero</a>: la da de alta, le pone topes, prueba su clave y te da el código.</p>
   </header>
 
   <section class="panel">
@@ -181,6 +184,7 @@ footer{display:flex;flex-wrap:wrap;gap:.4rem 1.2rem;font-size:.8rem;color:var(--
   <section class="panel" id="panel-apps" hidden>
     <h2>Aplicaciones <span class="estado" id="apps-estado">sin cargar</span></h2>
     <p>Cada aplicación que llame al servicio debería tener su propia clave. Así se sabe quién gasta, y se puede revocar una sin tocar a las demás ni al despliegue. Este panel solo aparece con la clave de administración.</p>
+    <p class="llamada">Para un alta nueva, mejor <a href="conectar.html">el asistente de conexión</a>: aquí solo se crea la clave, y allí además se ponen los topes, se prueba y sale el código para la aplicación.</p>
     <div class="fila">
       <label for="app-nombre">Nombre de la aplicación
         <input id="app-nombre" type="text" placeholder="presupuestos" maxlength="60">
@@ -244,8 +248,9 @@ footer{display:flex;flex-wrap:wrap;gap:.4rem 1.2rem;font-size:.8rem;color:var(--
   </section>
 
   <footer>
-    <span>Build <code>OP-B1-20260913-015</code></span>
+    <span>Build <code>OP-B1-20260920-017</code></span>
     <span>Backend: <a id="url-backend" href="#">–</a></span>
+    <a href="conectar.html">Conectar una aplicación</a>
     <a href="api.html">Documentación de la API</a>
     <a href="./">Mock de todas las etapas</a>
     <a href="holamundo.html">Comprobación del backend</a>
