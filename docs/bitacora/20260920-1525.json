@@ -1,0 +1,63 @@
+{
+  "fecha": "2026-09-20T15:25:00+02:00",
+  "titulo": "La guia que hace los pasos: docs/conectar.html, enlazada desde la consola, y el VPS al dia",
+  "objetivo": "Que conectar la siguiente aplicacion no vuelva a ser una sesion entera de idas y venidas: una guia que haga de verdad cada paso contra el servidor elegido, a la que se llegue desde donde se busca, y con las dos cabeceras del contrato comprobadas en cada despliegue.",
+  "prompts": [
+    {
+      "texto": "El proceso de conectar una app nueva a openrouter se va a repetir muchas veces. Lo que quiero es que generes una guia para no perdernos en las proximas conexiones entre Nueva app y Openrouter. Genera la mejor guia posible. Y a ver si puedes, si es necesario, utilizar scripts. Y parece muy interesante utilizar la consola. Lo mas practico que sera: una .html, un artifact u otra opcion que tu indiques?"
+    },
+    {
+      "texto": "fusiona los cambios y muestrame el resultado"
+    },
+    {
+      "texto": "la forma de acceder a la guia es la URL de conectar.html. Creo que la debes incluir en alguna parte bien visible de la consola, no crees?"
+    },
+    {
+      "texto": "fusiona tambien el PR 11 de prueba"
+    },
+    {
+      "texto": "como crear el secreto TOKEN_API en el repositorio prueba"
+    },
+    {
+      "texto": "paso a paso y solo uno cada vez"
+    },
+    {
+      "texto": "ok, funciona",
+      "nota": "Tras pegar el token en Ajustes; antes la app avisaba de que el backend lo pedia y el guardado estaba vacio."
+    },
+    {
+      "texto": "mueve release para actualizar el VPS"
+    },
+    {
+      "texto": "Quiero cerrar esta sesion y ir a la aplicacion prueba para hacer una modificacion"
+    }
+  ],
+  "cambios": [
+    "docs/conectar.html: asistente de conexion en ocho pasos que hace alta, topes y prueba contra el servidor elegido, enseña la clave una sola vez y no abre el paso siguiente hasta que el usuario declara haberla guardado, detecta nombres repetidos, y entrega fragmentos para PowerShell, Python, JavaScript, Rust y curl con la URL real y la clave como marcador",
+    "app/src/main.rs: el CORS admite X-Operacion en el preflight; sin eso el navegador bloqueaba a cualquier cliente web que siguiera el contrato, que manda esa cabecera desde la etapa 5",
+    "tools/verificar-servicio.sh: comprueba en cada despliegue el charset del JSON y que el preflight admita X-Operacion; probado contra el binario nuevo y el viejo, falla con el viejo exactamente en el preflight",
+    "tools/probar-clave.ps1: prueba una clave de aplicacion desde el PC sin escribirla en ningun sitio",
+    "Enlaces a la guia desde la consola (bajo la cabecera y dentro del panel de Aplicaciones) y desde el pie de consola.html, api.html e index.html; consola a build OP-B1-20260920-017",
+    "release avanzada por fast-forward de 87d8850 a 24df0bf: el VPS recibe las dos cabeceras",
+    "CLAUDE.md: la guia en URLs vivas, la regla de que las cabeceras son contrato, y que una pagina a la que solo se llega escribiendo la URL no existe"
+  ],
+  "sha": "24df0bf",
+  "sha_completo": "24df0bf8e0118692e32d7e0d2b6e36891a5e3b7d",
+  "run": "35512163450",
+  "mock": null,
+  "build": "OP-B1-20260920-016",
+  "pagina": "conectar.html",
+  "fly": "https://openrouter-npiobject-labs.fly.dev/salud",
+  "pendiente": [
+    "Confirmar el run del VPS 35513184311, que quedo en marcha al cerrar la sesion",
+    "Rotar la SERVICIO_CLAVE de Fly (pendiente de sesiones anteriores)",
+    "En npiobject-labs/prueba: instalar la app en el movil y guardar tres notas dictadas de verdad, la verificacion de F2 que ningun workflow puede hacer"
+  ],
+  "enlaces": [
+    { "texto": "Conectar una aplicacion (la guia)", "url": "https://npiobject-labs.github.io/openrouter/conectar.html" },
+    { "texto": "PR #29 · la guia, charset y X-Operacion", "url": "https://github.com/npiobject-labs/openrouter/pull/29" },
+    { "texto": "PR #30 · enlazarla desde la consola", "url": "https://github.com/npiobject-labs/openrouter/pull/30" },
+    { "texto": "Despliegue al VPS", "url": "https://github.com/npiobject-labs/openrouter/actions/runs/35513184311" }
+  ],
+  "notas": "Los prompts son transcripcion de lo que pidio el usuario; los pegados de consola y las capturas se resumen. Segunda entrada del dia: la primera (20260920-1415) cubre el alta de la aplicacion «prueba» y el charset. La guia se probo recorriendola con Chromium contra el backend local y un OpenRouter simulado, incluidas las ramas que nadie prueba a mano; de ahi salio el defecto del preflight. En npiobject-labs/prueba se entrego F2 y se cerro el acceso con TOKEN_API; eso se anota en la bitacora de aquel repo."
+}
