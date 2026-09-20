@@ -1,0 +1,77 @@
+{
+  "fecha": "2026-09-20T14:15:00+02:00",
+  "titulo": "La primera aplicacion consumidora: alta de «prueba» en los dos despliegues y charset utf-8 en el JSON",
+  "objetivo": "Conectar una aplicacion externa al servicio, paso a paso y sin que el usuario tuviera que pelearse con la linea de comandos: darla de alta con su clave y su tope de gasto en el VPS y en Fly, comprobar que llama de verdad, y arreglar lo que esa primera conexion real destapase.",
+  "prompts": [
+    {
+      "texto": "dame el resumen de los pasos a seguir para conectar openrouter a una nueva app"
+    },
+    {
+      "texto": "cual es la clave?"
+    },
+    {
+      "texto": "paso a paso",
+      "nota": "Acompanado del error de PowerShell al pegar un curl de estilo Unix: en PowerShell 5.1 «curl» es un alias de Invoke-WebRequest y no entiende -X ni -H."
+    },
+    {
+      "texto": "hazlo tu, quiero poder utilizar openrouter desde otra app que se llama prueba. YO NO SOY CAPAZ. Vete paso a paso y solamente un paso"
+    },
+    {
+      "texto": "hecho, el id es app_"
+    },
+    {
+      "texto": "ahora, que tengo que hacer en la app prueba para que pueda usar openrouter. Dame muy resumido"
+    },
+    {
+      "texto": "cual es la ventana de prueba?"
+    },
+    {
+      "texto": "quiero generar la conexion de la app «prueba» a las APIs de «openrouter» pero no con el VPS sino con Fly. Guiame paso a paso, un paso cada vez. Hago esto porque no me ha funcionado la conexion desde prueba a OpenRouter utilizando el VPS. Creo que es porque no esta desplegada la funcion OpenRouter en el VPS"
+    },
+    {
+      "texto": "No se como hacer ni donde tengo la parte de Fly. La parte de: «En Clave de servicio pega la clave de administracion de Fly, la del secreto SERVICIO_CLAVE». Ayudame a conseguir esta clave"
+    },
+    {
+      "texto": "Ya tengo la clave del servicio",
+      "nota": "Con captura de la consola conectada a Fly como administracion."
+    },
+    {
+      "texto": "Una pregunta. Desde aqui tienes acceso a ambas aplicaciones? a prueba y a Openrouter?"
+    },
+    {
+      "texto": "Ojo, tengo otro proyecto que se llama Prueba y lo tengo en otra carpeta que se llama Prueba. Yo creo que lo que hay que hacer es bajar de GitHub prueba en local la app y ahi es donde tenemos que trabajar. No es asi?"
+    },
+    {
+      "texto": "el proyecto que quieres conectar a openrouter, es npiobject-labs/prueba, el que tengo en esa carpeta"
+    },
+    {
+      "texto": "[varios pegados de la consola de PowerShell con la salida de las llamadas a /v1/chat/completions, y capturas de la consola web]",
+      "nota": "Resumidos: uno de ellos incluia el principio de una clave de aplicacion al teclearla mal en el cliente. No se copia aqui."
+    }
+  ],
+  "cambios": [
+    "Alta de la aplicacion «prueba» en el VPS (app_e922d8777a) y en Fly (app_50a320c942), cada una con su clave propia y tope de 2 $ por dia con 25 llamadas por minuto, hecho entero desde la consola de Pages",
+    "Primera llamada real de un consumidor externo a /v1/chat/completions en los dos despliegues, medida y anotada en el historico",
+    "app/src/main.rs: capa map_response que completa el Content-Type de las respuestas JSON con charset=utf-8; el texto plano y el CSV no se tocan porque ya lo declaraban",
+    "Diagnostico del fallo que el usuario atribuia al VPS: el VPS respondia correctamente; la aplicacion consumidora aun no tenia escrita ninguna llamada"
+  ],
+  "sha": "cc2a213",
+  "sha_completo": "cc2a213bc82257ff79351674908b24a3de505cba",
+  "run": null,
+  "mock": null,
+  "build": null,
+  "pagina": "consola.html",
+  "fly": "https://openrouter-npiobject-labs.fly.dev/salud",
+  "pendiente": [
+    "Fusionar el PR #29: hasta entonces el charset no esta en main ni en el VPS",
+    "El charset solo llega al VPS cuando la rama release avance, y eso se hace solo a peticion",
+    "Rotar la SERVICIO_CLAVE de Fly (pendiente de sesiones anteriores)",
+    "Fly sigue desplegado en af10828, por detras de main; solo le faltan cambios de documentacion y del VPS"
+  ],
+  "enlaces": [
+    { "texto": "PR #29 · charset utf-8 en el JSON", "url": "https://github.com/npiobject-labs/openrouter/pull/29" },
+    { "texto": "Consola del servicio", "url": "https://npiobject-labs.github.io/openrouter/consola.html" },
+    { "texto": "Guia de integracion para aplicaciones", "url": "https://github.com/npiobject-labs/openrouter/blob/main/docs/planificacion/integracion-gestionpresupuestos.md" }
+  ],
+  "notas": "Los prompts son transcripcion de lo que pidio el usuario; los pegados de consola se resumen. La sesion toco ademas el repositorio npiobject-labs/prueba, donde se implemento la fase F2 (titulo y etiquetas de las notas con este servicio); eso se anota en la bitacora de aquel repo. El primer consumidor real encontro en diez minutos un defecto que seis etapas de verificacion no habian visto, porque deploy.yml miraba el cuerpo de cada respuesta y nunca su Content-Type."
+}
