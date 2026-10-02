@@ -108,7 +108,11 @@ pub fn comprueba(
 pub fn margen_de(servicio: &Servicio, app: &App) -> Margen {
     let Some(desde) = app.limites.desde(&ahora_iso()) else {
         // Sin periodo no hay presupuesto que vigilar.
-        return Margen { consumido: 0.0, restante: None, aviso: false };
+        return Margen {
+            consumido: 0.0,
+            restante: None,
+            aviso: false,
+        };
     };
 
     let consumido = servicio.uso.gasto_desde(Some(&app.id), &desde);

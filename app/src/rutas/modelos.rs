@@ -41,7 +41,10 @@ pub async fn modelos(
 
     let filtros = Filtros {
         texto: parametros.get("texto").filter(|t| !t.is_empty()).cloned(),
-        proveedor: parametros.get("proveedor").filter(|p| !p.is_empty()).cloned(),
+        proveedor: parametros
+            .get("proveedor")
+            .filter(|p| !p.is_empty())
+            .cloned(),
         contexto_min: parametros.get("contexto_min").and_then(|c| c.parse().ok()),
         gratis: verdadero(parametros.get("gratis")),
     };

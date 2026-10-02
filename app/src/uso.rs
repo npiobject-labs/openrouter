@@ -289,10 +289,24 @@ impl Uso {
                 app_id, operacion, huella)
              VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18)",
             params![
-                r.id, r.fecha, r.modelo_pedido, r.modelo_servido, r.proveedor,
-                r.tokens_entrada, r.tokens_salida, r.tokens_razonamiento, r.tokens_cache,
-                r.coste, r.coste_origen, r.latencia_ms, r.motivo_fin, r.estado, r.id_openrouter,
-                r.app_id, r.operacion, r.huella
+                r.id,
+                r.fecha,
+                r.modelo_pedido,
+                r.modelo_servido,
+                r.proveedor,
+                r.tokens_entrada,
+                r.tokens_salida,
+                r.tokens_razonamiento,
+                r.tokens_cache,
+                r.coste,
+                r.coste_origen,
+                r.latencia_ms,
+                r.motivo_fin,
+                r.estado,
+                r.id_openrouter,
+                r.app_id,
+                r.operacion,
+                r.huella
             ],
         );
         if let Err(e) = hecho {
@@ -498,7 +512,11 @@ fn ahora_unix() -> u64 {
 fn prepara(conexion: &Connection) -> rusqlite::Result<()> {
     conexion.execute_batch(ESQUEMA)?;
     conexion.execute_batch(apps::ESQUEMA)?;
-    for (columna, tipo) in [("app_id", "TEXT"), ("operacion", "TEXT"), ("huella", "TEXT")] {
+    for (columna, tipo) in [
+        ("app_id", "TEXT"),
+        ("operacion", "TEXT"),
+        ("huella", "TEXT"),
+    ] {
         asegura_columna(conexion, "uso", columna, tipo)?;
     }
     for (columna, tipo) in apps::COLUMNAS {
@@ -522,7 +540,10 @@ fn asegura_columna(
         .is_some();
 
     if !existe {
-        conexion.execute(&format!("ALTER TABLE {tabla} ADD COLUMN {columna} {tipo}"), [])?;
+        conexion.execute(
+            &format!("ALTER TABLE {tabla} ADD COLUMN {columna} {tipo}"),
+            [],
+        )?;
     }
     Ok(())
 }
@@ -648,7 +669,12 @@ mod pruebas {
     #[test]
     fn la_operacion_filtra_y_agrupa() {
         let uso = en_memoria();
-        for (operacion, coste) in [(Some("pres-1"), 1.0), (Some("pres-1"), 2.0), (Some("pres-2"), 4.0), (None, 8.0)] {
+        for (operacion, coste) in [
+            (Some("pres-1"), 1.0),
+            (Some("pres-1"), 2.0),
+            (Some("pres-2"), 4.0),
+            (None, 8.0),
+        ] {
             let mut r = uso.abre("m".into());
             r.operacion = operacion.map(str::to_string);
             r.coste = Some(coste);
@@ -659,10 +685,20 @@ mod pruebas {
         assert_eq!(uso.intervalo(None, None, None, Some("pres-2")).len(), 1);
 
         let por_operacion = uso.resumen(None, None, &Agrupacion::Operacion, None, None);
-        assert_eq!(por_operacion.len(), 3, "dos operaciones y el grupo sin cabecera");
-        let una = por_operacion.iter().find(|f| f["grupo"] == "pres-1").unwrap();
+        assert_eq!(
+            por_operacion.len(),
+            3,
+            "dos operaciones y el grupo sin cabecera"
+        );
+        let una = por_operacion
+            .iter()
+            .find(|f| f["grupo"] == "pres-1")
+            .unwrap();
         assert_eq!(una["coste"], 3.0);
-        let sin = por_operacion.iter().find(|f| f["grupo"] == "(sin operacion)").unwrap();
+        let sin = por_operacion
+            .iter()
+            .find(|f| f["grupo"] == "(sin operacion)")
+            .unwrap();
         assert_eq!(sin["coste"], 8.0);
 
         // El filtro y la agrupación se combinan: solo un grupo.
@@ -678,7 +714,11 @@ mod pruebas {
         r.fecha = "2026-09-12T14:48:00Z".into();
         uso.anota(r);
         // Lo que manda la ruta tras normalizar un "hasta" de solo fecha.
-        assert_eq!(uso.intervalo(None, Some("2026-09-12T23:59:59Z"), None, None).len(), 1);
+        assert_eq!(
+            uso.intervalo(None, Some("2026-09-12T23:59:59Z"), None, None)
+                .len(),
+            1
+        );
         // Sin normalizar, la fecha suelta dejaria el dia fuera.
         assert_eq!(uso.intervalo(None, Some("2026-09-12"), None, None).len(), 0);
     }
@@ -713,7 +753,11 @@ mod pruebas {
 
         // Antes de la etapa 5 esto reventaba al crear el indice de app_id.
         let uso = Uso::nuevo(Some(ruta));
-        assert_eq!(uso.almacen(), "sqlite", "tiene que seguir en disco, no caer a memoria");
+        assert_eq!(
+            uso.almacen(),
+            "sqlite",
+            "tiene que seguir en disco, no caer a memoria"
+        );
         assert_eq!(uso.total(), 1, "el historico anterior se conserva");
 
         let mut r = uso.abre("m".into());
@@ -726,7 +770,12 @@ mod pruebas {
     #[test]
     fn cada_aplicacion_solo_ve_su_gasto() {
         let uso = en_memoria();
-        for (app, coste) in [(Some("app_uno"), 1.0), (Some("app_uno"), 2.0), (Some("app_dos"), 8.0), (None, 4.0)] {
+        for (app, coste) in [
+            (Some("app_uno"), 1.0),
+            (Some("app_uno"), 2.0),
+            (Some("app_dos"), 8.0),
+            (None, 4.0),
+        ] {
             let mut r = uso.abre("m".into());
             r.app_id = app.map(str::to_string);
             r.coste = Some(coste);
@@ -736,7 +785,11 @@ mod pruebas {
 
         assert_eq!(uso.ultimos(50, Some("app_uno"), None).len(), 2);
         assert_eq!(uso.ultimos(50, Some("app_dos"), None).len(), 1);
-        assert_eq!(uso.ultimos(50, None, None).len(), 4, "sin filtro se ve todo");
+        assert_eq!(
+            uso.ultimos(50, None, None).len(),
+            4,
+            "sin filtro se ve todo"
+        );
 
         let de_una = uso.resumen(None, None, &Agrupacion::Dia, Some("app_uno"), None);
         assert_eq!(de_una[0]["coste"], 3.0);

@@ -37,7 +37,11 @@ pub async fn chat(
         )
     })?;
 
-    if objeto.get("stream").and_then(Value::as_bool).unwrap_or(false) {
+    if objeto
+        .get("stream")
+        .and_then(Value::as_bool)
+        .unwrap_or(false)
+    {
         return Err(ErrorApi::nuevo(
             StatusCode::BAD_REQUEST,
             "streaming_no_disponible",
@@ -94,7 +98,11 @@ pub async fn chat(
                 reconcilia(servicio.clone(), id_uso.clone(), generacion);
             }
 
-            Ok(con_uso(&id_uso, aviso.as_deref(), (StatusCode::OK, Json(respuesta))))
+            Ok(con_uso(
+                &id_uso,
+                aviso.as_deref(),
+                (StatusCode::OK, Json(respuesta)),
+            ))
         }
         Err(fallo) => {
             // Un fallo también consumió tiempo, y a veces crédito: se anota.

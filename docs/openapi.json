@@ -2,9 +2,9 @@
   "openapi": "3.1.0",
   "info": {
     "title": "openrouter · servicio",
-    "version": "0.6.1",
+    "version": "0.6.2",
     "summary": "Pasarela propia sobre OpenRouter, pensada para ser llamada por otras aplicaciones.",
-    "description": "Esto no es una aplicación con interfaz: es un conjunto de servicios HTTP. La clave de OpenRouter vive solo en el backend y nunca sale de él. Cada aplicación consumidora tiene su propia clave, que se da de alta y se revoca sin tocar el despliegue.\n\nEl contrato sigue el de la API de OpenAI donde existe equivalente, así que cualquier cliente de OpenAI funciona cambiando la URL base. Lo propio del servicio va en rutas propias y en cabeceras `X-...`. Una ruta publicada no se rompe: lo incompatible iría a `/v2/`.\n\nLa versión de este documento acompaña a la etapa entregada: `0.6.0` es la etapa 6.",
+    "description": "Esto no es una aplicación con interfaz: es un conjunto de servicios HTTP. La clave de OpenRouter vive solo en el backend y nunca sale de él. Cada aplicación consumidora tiene su propia clave, que se da de alta y se revoca sin tocar el despliegue.\n\nEl contrato sigue el de la API de OpenAI donde existe equivalente, así que cualquier cliente de OpenAI funciona cambiando la URL base. Lo propio del servicio va en rutas propias y en cabeceras `X-...`. Una ruta publicada no se rompe: lo incompatible iría a `/v2/`.\n\nLa versión de este documento acompaña a la etapa entregada: `0.6.0` es la etapa 6; `0.6.2` amplía `/v1/models` con descripción, precios completos, modalidades de salida y parámetros, sin cambiar nada de lo publicado.",
     "license": {
       "name": "Uso interno"
     }
@@ -157,7 +157,7 @@
           "Modelos"
         ],
         "summary": "Catálogo de modelos",
-        "description": "El catálogo de OpenRouter con el formato de la API de OpenAI, más los campos que hacen falta para elegir: precio en dólares por millón de tokens, ventana de contexto, modalidades de entrada y si admite herramientas o salida estructurada.\n\nSe cachea una hora en memoria. Si OpenRouter no responde y hay copia caducada, se sirve la caducada antes que un error: para elegir modelo, una lista de ayer es mejor que nada. La cabecera `X-Cache` dice de dónde salió.",
+        "description": "El catálogo de OpenRouter con el formato de la API de OpenAI, más los campos que hacen falta para elegir: precio en dólares por millón de tokens, ventana de contexto, modalidades de entrada y de salida, si admite herramientas o salida estructurada y, desde 0.6.2, la descripción del proveedor, los precios completos (imagen, petición, caché, audio) y la lista de parámetros.\n\nSe cachea una hora en memoria. Si OpenRouter no responde y hay copia caducada, se sirve la caducada antes que un error: para elegir modelo, una lista de ayer es mejor que nada. La cabecera `X-Cache` dice de dónde salió.",
         "parameters": [
           {
             "name": "texto",
@@ -244,7 +244,28 @@
                       "modalidades": [
                         "text",
                         "image"
-                      ]
+                      ],
+                      "descripcion": "Gemini 2.5 Flash Lite es la variante más rápida y barata de la familia Flash.",
+                      "precios": {
+                        "imagen": 0,
+                        "peticion": 0,
+                        "cache_lectura": 0.025,
+                        "cache_escritura": 0,
+                        "audio": 0,
+                        "razonamiento": 0,
+                        "busqueda_web": 0
+                      },
+                      "modalidades_salida": [
+                        "text"
+                      ],
+                      "parametros": [
+                        "tools",
+                        "structured_outputs",
+                        "temperature",
+                        "max_tokens"
+                      ],
+                      "max_salida": 65535,
+                      "moderado": false
                     }
                   ],
                   "total": 445,
@@ -1279,7 +1300,7 @@
       },
       "Modelo": {
         "type": "object",
-        "description": "Los cuatro primeros campos son los de la API de OpenAI; el resto es lo que añade este servicio.",
+        "description": "Los cuatro primeros campos son los de la API de OpenAI; el resto es lo que añade este servicio. Desde 0.6.2 añade `descripcion`, `precios`, `modalidades_salida`, `parametros`, `max_salida` y `moderado`; lo anterior no cambia.",
         "properties": {
           "id": {
             "type": "string",
@@ -1331,6 +1352,38 @@
               "type": "string"
             },
             "description": "Modalidades de entrada, por ejemplo texto e imagen."
+          },
+          "descripcion": {
+            "type": "string",
+            "description": "Lo que escribe el proveedor sobre el modelo, tal cual lo da OpenRouter. Vacía si no la hay."
+          },
+          "precios": {
+            "$ref": "#/components/schemas/Precios"
+          },
+          "modalidades_salida": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Modalidades de salida, por ejemplo `text`, `image` o `audio`."
+          },
+          "parametros": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Todos los parámetros que admite (`tools`, `structured_outputs`, `reasoning`...), tal cual los lista OpenRouter."
+          },
+          "max_salida": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "Máximo de tokens de salida del proveedor principal, si lo informa."
+          },
+          "moderado": {
+            "type": "boolean",
+            "description": "Si el proveedor principal modera las peticiones."
           }
         },
         "required": [
@@ -1715,6 +1768,42 @@
             "type": "boolean"
           }
         }
+      },
+      "Precios": {
+        "type": "object",
+        "description": "Precios más allá de los tokens de entrada y salida. Los de tokens en dólares por millón; `imagen` por imagen, `peticion` por llamada y `busqueda_web` por búsqueda. Cero cuando no se cobra o no se informa.",
+        "properties": {
+          "imagen": {
+            "type": "number"
+          },
+          "peticion": {
+            "type": "number"
+          },
+          "cache_lectura": {
+            "type": "number"
+          },
+          "cache_escritura": {
+            "type": "number"
+          },
+          "audio": {
+            "type": "number"
+          },
+          "razonamiento": {
+            "type": "number"
+          },
+          "busqueda_web": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "imagen",
+          "peticion",
+          "cache_lectura",
+          "cache_escritura",
+          "audio",
+          "razonamiento",
+          "busqueda_web"
+        ]
       }
     },
     "responses": {

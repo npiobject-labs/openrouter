@@ -34,7 +34,13 @@ pub struct ErrorApi {
 
 impl ErrorApi {
     pub fn nuevo(estado: StatusCode, codigo: &'static str, mensaje: impl Into<String>) -> Self {
-        Self { estado, codigo, mensaje: mensaje.into(), upstream: None, uso: None }
+        Self {
+            estado,
+            codigo,
+            mensaje: mensaje.into(),
+            upstream: None,
+            uso: None,
+        }
     }
 
     pub fn sin_configurar(que: &str) -> Self {
@@ -53,8 +59,9 @@ impl ErrorApi {
         Self {
             estado,
             codigo: "openrouter_rechaza",
-            mensaje: mensaje_de(&cuerpo)
-                .unwrap_or_else(|| format!("OpenRouter respondió {estado} sin explicar el motivo.")),
+            mensaje: mensaje_de(&cuerpo).unwrap_or_else(|| {
+                format!("OpenRouter respondió {estado} sin explicar el motivo.")
+            }),
             upstream: Some(cuerpo),
             uso: None,
         }

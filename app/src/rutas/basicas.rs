@@ -1,6 +1,10 @@
 use std::sync::Arc;
 
-use axum::{extract::State, http::{StatusCode, Uri}, Json};
+use axum::{
+    extract::State,
+    http::{StatusCode, Uri},
+    Json,
+};
 use serde_json::{json, Value};
 
 use crate::{error::ErrorApi, Servicio};
