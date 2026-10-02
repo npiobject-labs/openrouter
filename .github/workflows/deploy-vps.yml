@@ -41,13 +41,20 @@ jobs:
       API_DOMINIO: ${{ vars.API_DOMINIO || 'apisor.oracle402.com' }}
       PUERTO_INTERNO: ${{ vars.VPS_PUERTO_INTERNO || '8081' }}
     steps:
+      # Las dos claves del servicio también son obligatorias: este workflow
+      # reescribe /srv/openrouter/.env entero, y sin ellas dejaría el VPS
+      # cerrado (503 sin_configurar) borrando las que hubiera escritas a mano.
+      # Pasó el 20/09/2026 y nadie lo vio hasta que una app nueva intentó entrar.
       - name: Comprobar los secretos
+        env:
+          VPS_SERVICIO_CLAVE: ${{ secrets.VPS_SERVICIO_CLAVE }}
+          VPS_OPENROUTER_API_KEY: ${{ secrets.VPS_OPENROUTER_API_KEY }}
         run: |
           faltan=""
-          for v in VPS_HOST VPS_USUARIO VPS_SSH_CLAVE VPS_HOST_KEY; do
+          for v in VPS_HOST VPS_USUARIO VPS_SSH_CLAVE VPS_HOST_KEY VPS_SERVICIO_CLAVE VPS_OPENROUTER_API_KEY; do
             [ -n "${!v}" ] || faltan="${faltan} ${v}"
           done
-          [ -z "${faltan}" ] || { echo "::error::Faltan secretos:${faltan}"; exit 1; }
+          [ -z "${faltan}" ] || { echo "::error::Faltan secretos:${faltan}. Sin las claves del servicio el despliegue dejaría /v1 cerrado; no se toca el VPS."; exit 1; }
           echo "Dominio ${API_DOMINIO}, puerto interno ${PUERTO_INTERNO}"
 
       - name: Determinar el SHA

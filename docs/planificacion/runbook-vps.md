@@ -125,3 +125,8 @@ Fly sigue desplegando `main` como previsualización. Su base y sus claves de
 aplicación son otras. Si se decide apagarlo: borrar `FLY_APP` de Fly, revocar
 su clave de OpenRouter, y dejar `deploy.yml` como está (sin `FLY_API_TOKEN`
 termina en verde sin hacer nada).
+
+
+## Lección del 20/09/2026: el despliegue borró las claves
+
+`deploy-vps.yml` reescribe `/srv/openrouter/.env` entero con los secretos de GitHub. Si `VPS_SERVICIO_CLAVE` o `VPS_OPENROUTER_API_KEY` están vacíos, el `.env` queda sin ellos y el servicio responde `503 sin_configurar` a todo `/v1`, aunque antes se hubieran escrito a mano en el VPS. Desde el 02/10/2026 el workflow falla antes de tocar el VPS si falta cualquiera de los dos. Las claves viven en GitHub, nunca solo en el VPS.
