@@ -1,0 +1,36 @@
+{
+  "fecha": "2026-10-02T20:30:00+02:00",
+  "titulo": "El VPS vuelve a tener claves y sirve /v1/models ampliado; primera app nueva: mercamodels",
+  "objetivo": "Conectar mercamodels a la pasarela de producción y, de paso, arreglar lo que se encontró por el camino.",
+  "prompts": [
+    { "texto": "Ok, merge." },
+    { "texto": "Lo que falta, dímelo paso a paso, un paso cada vez, y vamos comprobando si lo estoy haciendo bien." },
+    { "texto": "No sé la clave que guardé como VPS_SERVICIO_CLAVE; he encontrado una nota con SERVICIO_CLAVE en /srv/openrouter/.env.", "nota": "Resumido: el mensaje original incluía fragmentos de claves." },
+    { "texto": "Ya están los dos secretos creados." },
+    { "texto": "OK release." },
+    { "texto": "Cierra la sesión." }
+  ],
+  "cambios": [
+    "Diagnóstico: desde el despliegue del 20/09 el VPS respondía 503 sin_configurar a todo /v1. deploy-vps.yml escribió el .env con VPS_SERVICIO_CLAVE y VPS_OPENROUTER_API_KEY vacíos y borró las claves puestas a mano.",
+    "El usuario creó los dos secretos en GitHub; #33 hace que deploy-vps.yml falle antes de tocar el VPS si falta alguno, y el runbook lo anota.",
+    "release avanzado a 15401b9 (#31, #32, #33); run 3 de deploy-vps.yml verde con verificación autenticada y los campos nuevos de /v1/models.",
+    "Alta de la aplicación mercamodels (app_193d88459a): 5 $/mes, aviso 4 $, 60 llamadas/min; «Di hola» correcto."
+  ],
+  "sha": "15401b9",
+  "sha_completo": "15401b93eb3ab36e1f095d4331c0fa70203e4c54",
+  "run": "37033129298",
+  "mock": null,
+  "build": null,
+  "pagina": null,
+  "fly": "https://openrouter-npiobject-labs.fly.dev/salud",
+  "pendiente": [
+    "Comprobar si otras aplicaciones consumidoras sufrieron el corte del 20/09 al 02/10.",
+    "Etapa 8 (alias y enrutado): valorar alias:auto apoyado en mercamodels."
+  ],
+  "enlaces": [
+    { "texto": "PR #33", "url": "https://github.com/npiobject-labs/openrouter/pull/33" },
+    { "texto": "Despliegue del VPS (run 3)", "url": "https://github.com/npiobject-labs/openrouter/actions/runs/37033129298" },
+    { "texto": "mercamodels", "url": "https://peripateticos-mercamodels.fly.dev" }
+  ],
+  "notas": "Prompts aproximados de una sesión larga compartida con el repo mercamodels. Un prompt contenía fragmentos de claves y se resume."
+}
