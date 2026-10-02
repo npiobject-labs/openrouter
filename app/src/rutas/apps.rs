@@ -10,8 +10,7 @@ use serde_json::{json, Value};
 use crate::{
     apps::{self, Identidad, Limites},
     error::ErrorApi,
-    guardia,
-    Servicio,
+    guardia, Servicio,
 };
 
 /// Las rutas de aplicaciones son de administración: con una clave de aplicación
@@ -82,7 +81,9 @@ pub async fn lista(
 ) -> Result<Json<Value>, ErrorApi> {
     solo_administracion(&quien)?;
     let apps = servicio.uso.con(apps::lista);
-    Ok(Json(json!({ "object": "list", "data": apps, "total": apps.len() })))
+    Ok(Json(
+        json!({ "object": "list", "data": apps, "total": apps.len() }),
+    ))
 }
 
 /// `DELETE /v1/apps/{id}`: desactiva la aplicación. No la borra, porque el
@@ -146,7 +147,10 @@ pub async fn limites(
 ) -> Result<Json<Value>, ErrorApi> {
     solo_administracion(&quien)?;
 
-    let periodo = cuerpo.get("periodo").and_then(Value::as_str).map(str::to_string);
+    let periodo = cuerpo
+        .get("periodo")
+        .and_then(Value::as_str)
+        .map(str::to_string);
     if let Some(p) = &periodo {
         if p != "dia" && p != "mes" {
             return Err(ErrorApi::nuevo(

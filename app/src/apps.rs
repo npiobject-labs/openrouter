@@ -76,7 +76,10 @@ pub struct Identidad {
 
 impl Identidad {
     pub fn administracion() -> Self {
-        Self { app: None, admin: true }
+        Self {
+            app: None,
+            admin: true,
+        }
     }
 
     /// El identificador que se anota en el registro de uso.
@@ -137,7 +140,8 @@ pub fn crea(conexion: &Connection, nombre: &str, fecha: &str) -> rusqlite::Resul
     // sistema; asi no hace falta una dependencia mas solo para esto.
     // [SUPUESTO] entropia suficiente para una clave de servicio. Plan B si no:
     // getrandom y 32 bytes del sistema.
-    let sufijo: String = conexion.query_one("SELECT lower(hex(randomblob(24)))", [], |f| f.get(0))?;
+    let sufijo: String =
+        conexion.query_one("SELECT lower(hex(randomblob(24)))", [], |f| f.get(0))?;
     let id: String = conexion.query_one("SELECT lower(hex(randomblob(5)))", [], |f| f.get(0))?;
     let id = format!("app_{id}");
     let clave = format!("svc_{sufijo}");
@@ -205,7 +209,11 @@ mod pruebas {
         let (app, clave) = crea(&c, "presupuestos", "2026-09-13T00:00:00Z").unwrap();
 
         let guardado: String = c
-            .query_one("SELECT hash FROM apps WHERE id = ?1", params![app.id], |f| f.get(0))
+            .query_one(
+                "SELECT hash FROM apps WHERE id = ?1",
+                params![app.id],
+                |f| f.get(0),
+            )
             .unwrap();
         assert_ne!(guardado, clave);
         assert_eq!(guardado, hash(&clave));
@@ -226,7 +234,10 @@ mod pruebas {
         let (app, clave) = crea(&c, "presupuestos", "2026-09-13T00:00:00Z").unwrap();
         assert!(desactiva(&c, &app.id).unwrap());
 
-        assert!(por_clave(&c, &clave).is_none(), "la clave ya no debe servir");
+        assert!(
+            por_clave(&c, &clave).is_none(),
+            "la clave ya no debe servir"
+        );
         let todas = lista(&c);
         assert_eq!(todas.len(), 1, "la aplicacion sigue ahi para el historico");
         assert!(!todas[0].activa);
@@ -237,7 +248,10 @@ mod pruebas {
     fn los_limites_se_guardan_y_definen_el_periodo() {
         let c = bd();
         let (app, _) = crea(&c, "presupuestos", "2026-09-13T00:00:00Z").unwrap();
-        assert!(una(&c, &app.id).unwrap().limites.limite.is_none(), "nace sin topes");
+        assert!(
+            una(&c, &app.id).unwrap().limites.limite.is_none(),
+            "nace sin topes"
+        );
 
         let limites = Limites {
             periodo: Some("mes".into()),
@@ -251,10 +265,19 @@ mod pruebas {
         assert_eq!(guardada.limites.limite, Some(5.0));
         assert_eq!(guardada.limites.cuota_minuto, Some(30));
         // El periodo decide desde cuándo se cuenta el gasto.
-        assert_eq!(guardada.limites.desde("2026-09-13T11:22:33Z").as_deref(), Some("2026-09"));
+        assert_eq!(
+            guardada.limites.desde("2026-09-13T11:22:33Z").as_deref(),
+            Some("2026-09")
+        );
 
-        let por_dia = Limites { periodo: Some("dia".into()), ..limites.clone() };
-        assert_eq!(por_dia.desde("2026-09-13T11:22:33Z").as_deref(), Some("2026-09-13"));
+        let por_dia = Limites {
+            periodo: Some("dia".into()),
+            ..limites.clone()
+        };
+        assert_eq!(
+            por_dia.desde("2026-09-13T11:22:33Z").as_deref(),
+            Some("2026-09-13")
+        );
         assert_eq!(Limites::default().desde("2026-09-13T11:22:33Z"), None);
     }
 

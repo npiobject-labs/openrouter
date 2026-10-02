@@ -48,7 +48,10 @@ pub async fn exigir_clave(
         Identidad::administracion()
     } else {
         match servicio.uso.con(|c| apps::por_clave(c, recibida)) {
-            Some(app) => Identidad { app: Some(app), admin: false },
+            Some(app) => Identidad {
+                app: Some(app),
+                admin: false,
+            },
             None => {
                 return Err(ErrorApi::nuevo(
                     StatusCode::UNAUTHORIZED,

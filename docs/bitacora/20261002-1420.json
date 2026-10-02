@@ -1,0 +1,33 @@
+{
+  "fecha": "2026-10-02T14:20:00+02:00",
+  "titulo": "Ampliar /v1/models con descripción, precios completos, modalidades de salida y parámetros",
+  "objetivo": "Dar a mercamodels (y a cualquier aplicación que compare modelos) todo lo que necesita del catálogo sin ir a OpenRouter: la descripción del proveedor, los precios más allá de los tokens, qué devuelve cada modelo y qué parámetros admite.",
+  "prompts": [
+    { "texto": "Vamos a desarrollar una nueva aplicación sobre mercamodels y te he dado acceso a openrouter porque vas a necesitar información de esta aplicación: ir a todos los modelos que tiene OpenRouter activados y hacer análisis de las funcionalidades, especialidades y costes de cada modelo.", "nota": "Sesión compartida con el repo mercamodels; aquí solo la parte que toca a openrouter." },
+    { "texto": "Pasar por la app de openrouter propia con las APIs que tiene y todas las funcionalidades. OK ampliar openrouter /v1/models." },
+    { "texto": "Comienza el desarrollo, no te pares, no me pidas ayuda hasta el final; todas las fases." }
+  ],
+  "cambios": [
+    "catalogo.rs: struct Precios y campos nuevos en Modelo (descripcion, precios, modalidades_salida, parametros, max_salida, moderado); parser tolerante; 4 pruebas.",
+    "openapi.json: esquema Precios, Modelo ampliado, ejemplo, info.version 0.6.2.",
+    "verificar-servicio.sh: falla si el primer modelo no trae descripcion, precios, modalidades_salida y parametros."
+  ],
+  "sha": "05c3a52",
+  "sha_completo": "05c3a521412d8e2e7ace454ad70b5104cae73eb2",
+  "run": "37006573398",
+  "mock": null,
+  "build": null,
+  "pagina": null,
+  "fly": "https://openrouter-npiobject-labs.fly.dev/salud",
+  "pendiente": [
+    "Merge del PR #32 a main.",
+    "«OK release» del usuario para que el VPS devuelva los campos nuevos.",
+    "Etapa 8 (alias y enrutado): valorar alias:auto apoyado en GET /api/recomendar?n=1 de mercamodels."
+  ],
+  "enlaces": [
+    { "texto": "PR #32", "url": "https://github.com/npiobject-labs/openrouter/pull/32" },
+    { "texto": "Run 21 de deploy.yml sobre la rama", "url": "https://github.com/npiobject-labs/openrouter/actions/runs/37006573398" },
+    { "texto": "Repositorio mercamodels", "url": "https://github.com/peripateticos-app/mercamodels" }
+  ],
+  "notas": "Trabajo en rama con PR borrador, no directo a main. Los prompts son una transcripción aproximada: la sesión fue larga y cubrió sobre todo el repo mercamodels."
+}

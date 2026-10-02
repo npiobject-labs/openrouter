@@ -133,5 +133,10 @@ http="$(curl -s -o "$tmp/modelos.json" -w '%{http_code}' --max-time 40 "${auth[@
 n="$(jq -r '.data | length' "$tmp/modelos.json" 2> /dev/null || echo 0)"
 [ "${n}" -gt 0 ] || fallo "el catalogo vino vacio o ilegible"
 ok "el catalogo trae ${n} modelos"
+# Desde 0.6.2 cada modelo lleva descripcion, precios completos, modalidades de
+# salida y parametros: es lo que consumen las aplicaciones que comparan modelos.
+jq -e '.data[0] | has("descripcion") and has("precios") and has("modalidades_salida") and has("parametros")' "$tmp/modelos.json" > /dev/null \
+  || fallo "/v1/models no trae los campos ampliados (descripcion, precios, modalidades_salida, parametros)"
+ok "cada modelo trae descripcion, precios completos, modalidades de salida y parametros"
 
 resumen "Verificacion completa en verde: /salud=${sha}, OpenRouter conectado, ${n} modelos"
