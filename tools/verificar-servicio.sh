@@ -126,6 +126,12 @@ done
 almacen="$(jq -r '.almacen' "$tmp/estado.json")"
 [ "${almacen}" = "sqlite" ] || fallo "el historico esta en '${almacen}', no en disco: revisa el montaje de /datos."
 ok "el servicio habla con OpenRouter; historico en sqlite con $(jq -r '.registros' "$tmp/estado.json") registros"
+# Sin `model`, el servicio elige por contenido: uno de texto y uno multimodal.
+# Que falte el segundo es un despliegue anterior al 06/10/2026.
+defecto="$(jq -r '.modelo_defecto // empty' "$tmp/estado.json")"
+multimodal="$(jq -r '.modelo_multimodal // empty' "$tmp/estado.json")"
+[ -n "${defecto}" ] && [ -n "${multimodal}" ] || fallo "/v1/estado no publica modelo_defecto y modelo_multimodal."
+ok "modelos por defecto: ${defecto} (texto) y ${multimodal} (adjuntos)"
 
 # --- /v1/models: el catalogo trae modelos de verdad ---
 http="$(curl -s -o "$tmp/modelos.json" -w '%{http_code}' --max-time 40 "${auth[@]}" "${base}/v1/models" || true)"
