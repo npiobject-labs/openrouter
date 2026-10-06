@@ -45,6 +45,8 @@ jobs:
       # reescribe /srv/openrouter/.env entero, y sin ellas dejaría el VPS
       # cerrado (503 sin_configurar) borrando las que hubiera escritas a mano.
       # Pasó el 20/09/2026 y nadie lo vio hasta que una app nueva intentó entrar.
+      # VPS_HF_TOKEN no está en la lista a propósito: es opcional, y sin él
+      # solo los modelos hf: responden 503 upstream_sin_configurar.
       - name: Comprobar los secretos
         env:
           VPS_SERVICIO_CLAVE: ${{ secrets.VPS_SERVICIO_CLAVE }}
@@ -114,6 +116,7 @@ jobs:
           SHA: ${{ steps.sha.outputs.sha }}
           OPENROUTER_API_KEY: ${{ secrets.VPS_OPENROUTER_API_KEY }}
           SERVICIO_CLAVE: ${{ secrets.VPS_SERVICIO_CLAVE }}
+          HF_TOKEN: ${{ secrets.VPS_HF_TOKEN }}
           MODELO_DEFECTO: ${{ vars.MODELO_DEFECTO }}
           MODELO_MULTIMODAL: ${{ vars.MODELO_MULTIMODAL }}
           CORS_ORIGENES: ${{ vars.VPS_CORS_ORIGENES || 'https://npiobject-labs.github.io' }}
@@ -126,6 +129,8 @@ jobs:
             echo "CORS_ORIGENES=${CORS_ORIGENES}"
             [ -n "${MODELO_DEFECTO}" ] && echo "MODELO_DEFECTO=${MODELO_DEFECTO}"
             [ -n "${MODELO_MULTIMODAL}" ] && echo "MODELO_MULTIMODAL=${MODELO_MULTIMODAL}"
+            # Opcional: el router de Hugging Face. Sin el, los modelos hf: responden 503 y el resto sigue.
+            if [ -n "${HF_TOKEN}" ]; then echo "HF_TOKEN=${HF_TOKEN}"; else echo "Sin VPS_HF_TOKEN: el router de Hugging Face (modelos hf:) queda sin configurar." >&2; fi
             if [ -n "${OPENROUTER_API_KEY}" ]; then echo "OPENROUTER_API_KEY=${OPENROUTER_API_KEY}"; else echo "::warning::Sin VPS_OPENROUTER_API_KEY: /v1 respondera 503 hasta que se defina." >&2; fi
             if [ -n "${SERVICIO_CLAVE}" ]; then echo "SERVICIO_CLAVE=${SERVICIO_CLAVE}"; else echo "::warning::Sin VPS_SERVICIO_CLAVE: /v1 queda cerrado, que es lo correcto para un proxy publico." >&2; fi
           } | ssh vps 'sudo -n /srv/openrouter/vps/escribir-env.sh'
@@ -140,8 +145,10 @@ jobs:
           SHA: ${{ steps.sha.outputs.sha }}
           SERVICIO_CLAVE: ${{ secrets.VPS_SERVICIO_CLAVE }}
           OPENROUTER_API_KEY: ${{ secrets.VPS_OPENROUTER_API_KEY }}
+          HF_TOKEN: ${{ secrets.VPS_HF_TOKEN }}
         run: |
           export CON_OPENROUTER="$([ -n "${OPENROUTER_API_KEY}" ] && echo 1 || echo 0)"
+          export CON_HF="$([ -n "${HF_TOKEN}" ] && echo 1 || echo 0)"
           tools/verificar-servicio.sh "https://${API_DOMINIO}" "${SHA}"
 
       - name: Resumen del despliegue

@@ -2,9 +2,9 @@
   "openapi": "3.1.0",
   "info": {
     "title": "openrouter · servicio",
-    "version": "0.6.3",
-    "summary": "Pasarela propia sobre OpenRouter, pensada para ser llamada por otras aplicaciones.",
-    "description": "Esto no es una aplicación con interfaz: es un conjunto de servicios HTTP. La clave de OpenRouter vive solo en el backend y nunca sale de él. Cada aplicación consumidora tiene su propia clave, que se da de alta y se revoca sin tocar el despliegue.\n\nEl contrato sigue el de la API de OpenAI donde existe equivalente, así que cualquier cliente de OpenAI funciona cambiando la URL base. Lo propio del servicio va en rutas propias y en cabeceras `X-...`. Una ruta publicada no se rompe: lo incompatible iría a `/v2/`.\n\nLa versión de este documento acompaña a la etapa entregada: `0.6.0` es la etapa 6; `0.6.2` amplía `/v1/models` con descripción, precios completos, modalidades de salida y parámetros, sin cambiar nada de lo publicado.",
+    "version": "0.6.4",
+    "summary": "Pasarela propia sobre OpenRouter y el router de Hugging Face, pensada para ser llamada por otras aplicaciones.",
+    "description": "Esto no es una aplicación con interfaz: es un conjunto de servicios HTTP. La clave de OpenRouter vive solo en el backend y nunca sale de él. Cada aplicación consumidora tiene su propia clave, que se da de alta y se revoca sin tocar el despliegue.\n\nEl contrato sigue el de la API de OpenAI donde existe equivalente, así que cualquier cliente de OpenAI funciona cambiando la URL base. Lo propio del servicio va en rutas propias y en cabeceras `X-...`. Una ruta publicada no se rompe: lo incompatible iría a `/v2/`.\n\nLa versión de este documento acompaña a la etapa entregada: `0.6.0` es la etapa 6; `0.6.2` amplía `/v1/models` con descripción, precios completos, modalidades de salida y parámetros, sin cambiar nada de lo publicado; `0.6.4` entrega la etapa 9 (catálogo completo de OpenRouter y compra en el router de Hugging Face con el prefijo `hf:`), también sin cambiar nada: solo añade campos, parámetros y códigos. Las etapas 7 y 8 siguen pendientes.",
     "license": {
       "name": "Uso interno"
     }
@@ -61,7 +61,7 @@
           "Servicio"
         ],
         "summary": "Salud del proceso",
-        "description": "Dice si el proceso está en pie, con qué build y si tiene configuradas las dos claves. No llama a OpenRouter. Es la ruta que usan las comprobaciones automáticas y la única, junto a `/holamundo`, que no exige clave.",
+        "description": "Dice si el proceso está en pie, con qué build y si tiene configuradas las claves: la de servicio, la de OpenRouter y, en `upstreams`, cada upstream al que puede comprar. No llama a OpenRouter. Es la ruta que usan las comprobaciones automáticas y la única, junto a `/holamundo`, que no exige clave.",
         "security": [],
         "responses": {
           "200": {
@@ -75,7 +75,11 @@
                   "ok": true,
                   "build": "87e6a89",
                   "openrouter": true,
-                  "clave_servicio": true
+                  "clave_servicio": true,
+                  "upstreams": {
+                    "openrouter": true,
+                    "hf": false
+                  }
                 }
               }
             }
@@ -138,6 +142,10 @@
                     "nombre": "presupuestos",
                     "app_id": "app_27b1d11e45",
                     "administracion": false
+                  },
+                  "upstreams": {
+                    "openrouter": true,
+                    "hf": true
                   }
                 }
               }
@@ -158,7 +166,7 @@
           "Modelos"
         ],
         "summary": "Catálogo de modelos",
-        "description": "El catálogo de OpenRouter con el formato de la API de OpenAI, más los campos que hacen falta para elegir: precio en dólares por millón de tokens, ventana de contexto, modalidades de entrada y de salida, si admite herramientas o salida estructurada y, desde 0.6.2, la descripción del proveedor, los precios completos (imagen, petición, caché, audio) y la lista de parámetros.\n\nSe cachea una hora en memoria. Si OpenRouter no responde y hay copia caducada, se sirve la caducada antes que un error: para elegir modelo, una lista de ayer es mejor que nada. La cabecera `X-Cache` dice de dónde salió.",
+        "description": "El catálogo del upstream elegido con el formato de la API de OpenAI, más los campos que hacen falta para elegir: precio en dólares por millón de tokens, ventana de contexto, modalidades de entrada y de salida, si admite herramientas o salida estructurada y, desde 0.6.2, la descripción del proveedor, los precios completos (imagen, petición, caché, audio) y la lista de parámetros.\n\nDesde 0.6.4 el catálogo de OpenRouter es el completo (`output_modalities=all`): además de los modelos que escriben texto trae los de imagen, vídeo, voz, transcripción y embeddings, que antes quedaban ocultos. Cada modelo dice su `upstream` y conserva `canonical_slug` y `hugging_face_id`. Con `salida=<modalidad>` se pide solo lo que interesa; sin él, todo.\n\nCon `upstream=hf` se devuelve el catálogo del router de Hugging Face normalizado a la misma forma: una entrada `hf:<id>` por modelo, con el precio del host más barato, y una `hf:<id>:<host>` por cada host que lo sirve con su precio, contexto, latencia hasta el primer token y tokens por segundo. Todos los ids se mandan tal cual en `model`. Sin `upstream`, el de OpenRouter, como siempre.\n\nCada catálogo se cachea una hora en memoria. Si el upstream no responde y hay copia caducada, se sirve la caducada antes que un error: para elegir modelo, una lista de ayer es mejor que nada. La cabecera `X-Cache` dice de dónde salió.",
         "parameters": [
           {
             "name": "texto",
@@ -204,6 +212,37 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "name": "salida",
+            "in": "query",
+            "description": "Solo los modelos que producen esa modalidad: `text`, `image`, `video`, `speech`, `transcription` o `embeddings`. Sin él, todas.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "text",
+                "image",
+                "video",
+                "speech",
+                "transcription",
+                "embeddings"
+              ]
+            },
+            "example": "image"
+          },
+          {
+            "name": "upstream",
+            "in": "query",
+            "description": "De quién es el catálogo: `openrouter` (por defecto) o `hf`, el router de Hugging Face. Con `hf` sin `HF_TOKEN` en el despliegue, `503 upstream_sin_configurar`. Un valor desconocido es `400 upstream_desconocido`.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "openrouter",
+                "hf"
+              ],
+              "default": "openrouter"
+            },
+            "example": "hf"
           }
         ],
         "responses": {
@@ -254,7 +293,8 @@
                         "cache_escritura": 0,
                         "audio": 0,
                         "razonamiento": 0,
-                        "busqueda_web": 0
+                        "busqueda_web": 0,
+                        "imagen_salida": 0
                       },
                       "modalidades_salida": [
                         "text"
@@ -266,14 +306,61 @@
                         "max_tokens"
                       ],
                       "max_salida": 65535,
-                      "moderado": false
+                      "moderado": false,
+                      "upstream": "openrouter",
+                      "canonical_slug": "google/gemini-2.5-flash-lite-20250617",
+                      "hugging_face_id": null,
+                      "primer_token_ms": null,
+                      "tokens_por_segundo": null
+                    },
+                    {
+                      "id": "hf:openai/gpt-oss-120b:groq",
+                      "object": "model",
+                      "created": 1754346786,
+                      "owned_by": "openai",
+                      "nombre": "openai/gpt-oss-120b · groq",
+                      "contexto": 131072,
+                      "entrada": 0.15,
+                      "salida": 0.75,
+                      "gratis": false,
+                      "herramientas": true,
+                      "json": true,
+                      "modalidades": [
+                        "text"
+                      ],
+                      "descripcion": "",
+                      "precios": {
+                        "imagen": 0,
+                        "peticion": 0,
+                        "cache_lectura": 0,
+                        "cache_escritura": 0,
+                        "audio": 0,
+                        "razonamiento": 0,
+                        "busqueda_web": 0,
+                        "imagen_salida": 0
+                      },
+                      "modalidades_salida": [
+                        "text"
+                      ],
+                      "parametros": [],
+                      "max_salida": null,
+                      "moderado": false,
+                      "upstream": "hf",
+                      "canonical_slug": null,
+                      "hugging_face_id": "openai/gpt-oss-120b",
+                      "primer_token_ms": 228,
+                      "tokens_por_segundo": 416.2
                     }
                   ],
-                  "total": 445,
-                  "antiguedad_minutos": 12
+                  "total": 649,
+                  "antiguedad_minutos": 12,
+                  "upstream": "openrouter"
                 }
               }
             }
+          },
+          "400": {
+            "$ref": "#/components/responses/PeticionInvalida"
           },
           "401": {
             "$ref": "#/components/responses/NoAutorizado"
@@ -293,7 +380,7 @@
           "Consultas"
         ],
         "summary": "Consulta a un modelo",
-        "description": "Proxy fino sobre OpenRouter con el contrato de OpenAI. El cuerpo se reenvía tal cual salvo dos retoques: si no traes `model` se rellena con el modelo por defecto del servicio (`modelo_defecto` de `/v1/estado`), o con el multimodal (`modelo_multimodal`) si algún mensaje lleva una parte que no es texto; con el de texto, y si no mandas `reasoning`, se añade `{\"effort\":\"low\"}` para que el razonamiento no se coma el `max_tokens`; y `stream: true` se rechaza con `400` porque el streaming llega en la etapa 7.\n\nLa respuesta es la de OpenRouter sin tocar, incluido el bloque `usage`, que es lo que permite saber qué costó la llamada.\n\nToda llamada que llega a salir queda anotada en el registro de uso, vaya bien o mal, y su identificador vuelve en la cabecera `X-Uso-Id`. Con él se consulta después lo que costó, en `/v1/uso/{id}`.\n\nCon clave de aplicación, la llamada pasa antes por tres controles: el cortacircuitos de bucles, la cuota por minuto y el presupuesto. La clave de administración no tiene ninguno.",
+        "description": "Proxy fino sobre OpenRouter, y desde 0.6.4 también sobre el router de Hugging Face, con el contrato de OpenAI. A quién va lo decide el prefijo de `model`: `hf:<id>` sale hacia Hugging Face sin el prefijo (`hf:meta-llama/Llama-3.3-70B-Instruct:groq` pide `meta-llama/Llama-3.3-70B-Instruct:groq`, donde `:groq` es el host; `:cheapest` y `:fastest` dejan que elija el router); todo lo demás va a OpenRouter exactamente como siempre. Sin `HF_TOKEN` en el despliegue, `hf:` responde `503 upstream_sin_configurar`.\n\nEl cuerpo se reenvía tal cual salvo tres retoques: el prefijo, si no traes `model` se rellena con el modelo por defecto del servicio (`modelo_defecto` de `/v1/estado`), o con el multimodal (`modelo_multimodal`) si algún mensaje lleva una parte que no es texto; con el de texto, y si no mandas `reasoning`, se añade `{\"effort\":\"low\"}` para que el razonamiento no se coma el `max_tokens`; y `stream: true` se rechaza con `400` porque el streaming llega en la etapa 7.\n\nLa respuesta es la del upstream sin tocar, incluido el bloque `usage`, que es lo que permite saber qué costó la llamada. En Hugging Face el coste queda `estimado` con los precios de su catálogo (los del host pedido, o los del más barato si no se pidió ninguno) y no se reconcilia: el router no tiene `/generation`.\n\nToda llamada que llega a salir queda anotada en el registro de uso, vaya bien o mal, y su identificador vuelve en la cabecera `X-Uso-Id`. Con él se consulta después lo que costó, en `/v1/uso/{id}`.\n\nVaya a un upstream o a otro, con clave de aplicación la llamada pasa antes por los mismos tres controles: el cortacircuitos de bucles, la cuota por minuto y el presupuesto. La clave de administración no tiene ninguno.",
         "requestBody": {
           "required": true,
           "content": {
@@ -461,6 +548,19 @@
               "type": "string"
             },
             "example": "presupuesto-2026-0417"
+          },
+          {
+            "name": "upstream",
+            "in": "query",
+            "description": "Solo lo comprado en ese upstream: `openrouter` o `hf`. Un valor desconocido es `400 upstream_desconocido`.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "openrouter",
+                "hf"
+              ]
+            },
+            "example": "hf"
           }
         ],
         "responses": {
@@ -511,6 +611,9 @@
                 }
               }
             }
+          },
+          "400": {
+            "$ref": "#/components/responses/PeticionInvalida"
           },
           "401": {
             "$ref": "#/components/responses/NoAutorizado"
@@ -617,14 +720,15 @@
           {
             "name": "agrupar",
             "in": "query",
-            "description": "`dia` (por defecto), `modelo`, `app` u `operacion` (el valor de `X-Operacion`; las llamadas sin cabecera van al grupo `(sin operacion)`).",
+            "description": "`dia` (por defecto), `modelo`, `app`, `operacion` (el valor de `X-Operacion`; las llamadas sin cabecera van al grupo `(sin operacion)`) o `upstream` (`openrouter` o `hf`).",
             "schema": {
               "type": "string",
               "enum": [
                 "dia",
                 "modelo",
                 "app",
-                "operacion"
+                "operacion",
+                "upstream"
               ],
               "default": "dia"
             },
@@ -647,6 +751,19 @@
               "type": "string"
             },
             "example": "presupuesto-2026-0417"
+          },
+          {
+            "name": "upstream",
+            "in": "query",
+            "description": "Solo lo comprado en ese upstream: `openrouter` o `hf`. Un valor desconocido es `400 upstream_desconocido`.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "openrouter",
+                "hf"
+              ]
+            },
+            "example": "hf"
           }
         ],
         "responses": {
@@ -731,6 +848,9 @@
               }
             }
           },
+          "400": {
+            "$ref": "#/components/responses/PeticionInvalida"
+          },
           "401": {
             "$ref": "#/components/responses/NoAutorizado"
           }
@@ -743,7 +863,7 @@
           "Uso"
         ],
         "summary": "Exportar el histórico",
-        "description": "El histórico de un intervalo, en JSON o en CSV.\n\nEl CSV llega con `Content-Disposition`, así que un navegador lo guarda como fichero. Ojo: la ruta exige la clave en la cabecera, de modo que un enlace suelto no sirve; hay que traerlo con una petición y guardarlo desde ahí.",
+        "description": "El histórico de un intervalo, en JSON o en CSV.\n\nEl CSV llega con `Content-Disposition`, así que un navegador lo guarda como fichero. Ojo: la ruta exige la clave en la cabecera, de modo que un enlace suelto no sirve; hay que traerlo con una petición y guardarlo desde ahí. Desde 0.6.4 el CSV lleva una columna más al final, `upstream`; las anteriores no cambian de sitio.",
         "parameters": [
           {
             "name": "desde",
@@ -794,6 +914,19 @@
               "type": "string"
             },
             "example": "presupuesto-2026-0417"
+          },
+          {
+            "name": "upstream",
+            "in": "query",
+            "description": "Solo lo comprado en ese upstream: `openrouter` o `hf`. Un valor desconocido es `400 upstream_desconocido`.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "openrouter",
+                "hf"
+              ]
+            },
+            "example": "hf"
           }
         ],
         "responses": {
@@ -1234,6 +1367,9 @@
           "clave_servicio": {
             "type": "boolean",
             "description": "Hay clave de servicio configurada."
+          },
+          "upstreams": {
+            "$ref": "#/components/schemas/Upstreams"
           }
         },
         "required": [
@@ -1292,6 +1428,9 @@
                 "type": "boolean"
               }
             }
+          },
+          "upstreams": {
+            "$ref": "#/components/schemas/Upstreams"
           }
         },
         "required": [
@@ -1305,11 +1444,11 @@
       },
       "Modelo": {
         "type": "object",
-        "description": "Los cuatro primeros campos son los de la API de OpenAI; el resto es lo que añade este servicio. Desde 0.6.2 añade `descripcion`, `precios`, `modalidades_salida`, `parametros`, `max_salida` y `moderado`; lo anterior no cambia.",
+        "description": "Los cuatro primeros campos son los de la API de OpenAI; el resto es lo que añade este servicio. Desde 0.6.2 añade `descripcion`, `precios`, `modalidades_salida`, `parametros`, `max_salida` y `moderado`; desde 0.6.4, `upstream`, `canonical_slug`, `hugging_face_id`, `primer_token_ms` y `tokens_por_segundo`. Lo anterior no cambia.",
         "properties": {
           "id": {
             "type": "string",
-            "description": "Identificador que se manda en `model`."
+            "description": "Identificador que se manda en `model`. Los del router de Hugging Face llevan el prefijo `hf:` y, opcionalmente, el sufijo `:<host>`."
           },
           "object": {
             "type": "string",
@@ -1341,7 +1480,7 @@
           },
           "gratis": {
             "type": "boolean",
-            "description": "Entrada y salida a coste cero."
+            "description": "Ningún precio publicado distinto de cero: ni tokens, ni imagen, ni petición. Los modelos de vídeo de OpenRouter no publican precio en el catálogo y salen gratis aunque no lo sean."
           },
           "herramientas": {
             "type": "boolean",
@@ -1370,7 +1509,7 @@
             "items": {
               "type": "string"
             },
-            "description": "Modalidades de salida, por ejemplo `text`, `image` o `audio`."
+            "description": "Modalidades de salida: `text`, `image`, `video`, `speech`, `transcription`, `embeddings`..."
           },
           "parametros": {
             "type": "array",
@@ -1389,6 +1528,42 @@
           "moderado": {
             "type": "boolean",
             "description": "Si el proveedor principal modera las peticiones."
+          },
+          "upstream": {
+            "type": "string",
+            "enum": [
+              "openrouter",
+              "hf"
+            ],
+            "description": "De qué upstream es el modelo. El `id` ya lleva el prefijo que hace falta para pedirlo."
+          },
+          "canonical_slug": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Identificador estable de OpenRouter, con la fecha de versión cuando el id corto apunta a la más reciente. `null` en Hugging Face."
+          },
+          "hugging_face_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Repositorio de Hugging Face del modelo, si se conoce. Es la llave para encontrar el mismo modelo en el otro upstream: `hf:<hugging_face_id>`."
+          },
+          "primer_token_ms": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "description": "Milisegundos hasta el primer token en ese host, medidos por el router de Hugging Face. `null` en OpenRouter."
+          },
+          "tokens_por_segundo": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "description": "Tokens por segundo en ese host, idem."
           }
         },
         "required": [
@@ -1422,6 +1597,14 @@
           "antiguedad_minutos": {
             "type": "integer",
             "description": "Minutos desde que se trajo el catálogo."
+          },
+          "upstream": {
+            "type": "string",
+            "enum": [
+              "openrouter",
+              "hf"
+            ],
+            "description": "De quién es el catálogo devuelto."
           }
         },
         "required": [
@@ -1436,7 +1619,7 @@
         "properties": {
           "model": {
             "type": "string",
-            "description": "Opcional. Si falta, el modelo por defecto del servicio."
+            "description": "Opcional. Si falta, el modelo por defecto del servicio. Con el prefijo `hf:` va al router de Hugging Face; sin él, a OpenRouter."
           },
           "messages": {
             "type": "array",
@@ -1572,13 +1755,14 @@
               "string",
               "null"
             ],
-            "description": "Puede no ser el pedido: OpenRouter enruta."
+            "description": "Puede no ser el pedido: OpenRouter enruta. En Hugging Face lleva el prefijo `hf:` para que no se confunda con el mismo modelo en OpenRouter."
           },
           "proveedor": {
             "type": [
               "string",
               "null"
-            ]
+            ],
+            "description": "Quién sirvió la llamada. En OpenRouter lo dice la respuesta; en Hugging Face es el host pedido con `:<host>`, o `null` si se dejó elegir al router."
           },
           "tokens_entrada": {
             "type": "integer"
@@ -1606,7 +1790,7 @@
               "estimado",
               "openrouter"
             ],
-            "description": "`estimado` con los precios del catálogo; `openrouter` cuando ya se reconcilió con lo que factura el proveedor, unos segundos después de la llamada."
+            "description": "`estimado` con los precios del catálogo; `openrouter` cuando ya se reconcilió con lo que factura el proveedor, unos segundos después de la llamada. Las llamadas a Hugging Face se quedan en `estimado`."
           },
           "latencia_ms": {
             "type": "integer"
@@ -1626,7 +1810,8 @@
             "type": [
               "string",
               "null"
-            ]
+            ],
+            "description": "Id de la generación en OpenRouter, con el que se reconcilia el coste. `null` en Hugging Face."
           },
           "app_id": {
             "type": [
@@ -1648,6 +1833,14 @@
               "null"
             ],
             "description": "Hash del cuerpo de la consulta, con el que se detectan los bucles."
+          },
+          "upstream": {
+            "type": "string",
+            "enum": [
+              "openrouter",
+              "hf"
+            ],
+            "description": "A quién se le compró. Los registros anteriores a 0.6.4 se leen como `openrouter`."
           }
         },
         "required": [
@@ -1798,6 +1991,10 @@
           },
           "busqueda_web": {
             "type": "number"
+          },
+          "imagen_salida": {
+            "type": "number",
+            "description": "Dólares por millón de tokens de imagen generada: lo que cobran los modelos que dibujan."
           }
         },
         "required": [
@@ -1807,7 +2004,24 @@
           "cache_escritura",
           "audio",
           "razonamiento",
-          "busqueda_web"
+          "busqueda_web",
+          "imagen_salida"
+        ]
+      },
+      "Upstreams": {
+        "type": "object",
+        "description": "Qué upstreams tienen clave configurada: `openrouter` (repite el campo anterior) y `hf` (el router de Hugging Face, secreto `HF_TOKEN`). Sin clave, los modelos `hf:` responden `503 upstream_sin_configurar` y todo lo demás funciona.",
+        "properties": {
+          "openrouter": {
+            "type": "boolean"
+          },
+          "hf": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "openrouter",
+          "hf"
         ]
       }
     },
@@ -1907,7 +2121,7 @@
         }
       },
       "FalloDeProveedor": {
-        "description": "No se pudo alcanzar a OpenRouter, tardó demasiado o devolvió algo ilegible.",
+        "description": "No se pudo alcanzar al upstream (OpenRouter o Hugging Face), tardó demasiado o devolvió algo ilegible.",
         "content": {
           "application/json": {
             "schema": {
@@ -1925,7 +2139,7 @@
         }
       },
       "SinConfigurar": {
-        "description": "Al servicio le falta un secreto y no puede atender.",
+        "description": "Al servicio le falta un secreto y no puede atender: `sin_configurar` si falta la clave de servicio o la de OpenRouter; `upstream_sin_configurar` si solo falta la de otro upstream (`HF_TOKEN`) y se pidió un modelo suyo.",
         "content": {
           "application/json": {
             "schema": {
@@ -1979,6 +2193,16 @@
       "cuando": "Falta un secreto en el backend: clave de OpenRouter o clave de servicio."
     },
     {
+      "code": "upstream_sin_configurar",
+      "http": 503,
+      "cuando": "Se pidió un modelo `hf:` (o `/v1/models?upstream=hf`) y el despliegue no tiene `HF_TOKEN`. El resto del servicio funciona."
+    },
+    {
+      "code": "upstream_desconocido",
+      "http": 400,
+      "cuando": "`?upstream=` con un valor que no es `openrouter` ni `hf`."
+    },
+    {
       "code": "ruta_desconocida",
       "http": 404,
       "cuando": "La ruta no existe. Suele significar que el cliente es más nuevo que el backend desplegado."
@@ -1999,9 +2223,19 @@
       "cuando": "OpenRouter rechazó la llamada: modelo inexistente, saldo, permisos. Su cuerpo queda en error.upstream."
     },
     {
+      "code": "hf_rechaza",
+      "http": "el del proveedor",
+      "cuando": "El router de Hugging Face rechazó la llamada: modelo o host inexistente, cuota, permisos. Su cuerpo queda en error.upstream."
+    },
+    {
       "code": "openrouter_inalcanzable",
       "http": 502,
       "cuando": "No hubo forma de conectar con OpenRouter."
+    },
+    {
+      "code": "hf_inalcanzable",
+      "http": 502,
+      "cuando": "No hubo forma de conectar con el router de Hugging Face."
     },
     {
       "code": "openrouter_tardo_demasiado",
@@ -2009,9 +2243,14 @@
       "cuando": "Se agotó la espera: 120 segundos en consultas, 20 en el resto."
     },
     {
+      "code": "hf_tardo_demasiado",
+      "http": 502,
+      "cuando": "Se agotó la espera hablando con el router de Hugging Face: 120 segundos en consultas, 20 en el catálogo."
+    },
+    {
       "code": "respuesta_ilegible",
       "http": 502,
-      "cuando": "OpenRouter devolvió algo que no es JSON."
+      "cuando": "El upstream devolvió algo que no es JSON."
     },
     {
       "code": "uso_desconocido",
@@ -2188,6 +2427,29 @@
         }
       ],
       "nota": "Una aplicación pedirá \"alias:redactor\" en vez de un modelo concreto, y el servicio decidirá el modelo, la cadena de respaldo y los parámetros. Cambiar de modelo dejará de tocar el código de las aplicaciones."
+    },
+    {
+      "numero": 9,
+      "titulo": "Catálogo completo y upstreams: Hugging Face",
+      "estado": "entregada",
+      "rutas": [
+        {
+          "metodo": "GET",
+          "ruta": "/v1/models",
+          "nota": "output_modalities=all, ?salida=, ?upstream=hf"
+        },
+        {
+          "metodo": "POST",
+          "ruta": "/v1/chat/completions",
+          "nota": "model: hf:<id>[:<host>]"
+        },
+        {
+          "metodo": "GET",
+          "ruta": "/v1/uso",
+          "nota": "?upstream=, y agrupar=upstream en el resumen"
+        }
+      ],
+      "nota": "El catálogo de OpenRouter deja de esconder los modelos de imagen, vídeo, voz, transcripción y embeddings, y cada modelo conserva canonical_slug y hugging_face_id. El servicio puede comprar fuera de OpenRouter: con el prefijo hf: la llamada va al router de Hugging Face, que con una sola clave (HF_TOKEN, opcional) da acceso a una docena de hosts (Groq, Cerebras, Together, Fireworks, DeepInfra, Novita, Scaleway, OVHcloud, Nscale...). Mismos topes, misma medición: cada registro dice su upstream y el coste de Hugging Face queda estimado con su catálogo. Entregada antes que la 7 y la 8 porque es aditiva."
     }
   ]
 }

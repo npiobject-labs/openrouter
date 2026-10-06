@@ -87,6 +87,7 @@ jobs:
           FLY_APP: ${{ steps.app.outputs.app }}
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
           SERVICIO_CLAVE: ${{ secrets.SERVICIO_CLAVE }}
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
           MODELO_DEFECTO: ${{ vars.MODELO_DEFECTO }}
           MODELO_MULTIMODAL: ${{ vars.MODELO_MULTIMODAL }}
         run: |
@@ -100,6 +101,12 @@ jobs:
             set -- "$@" "SERVICIO_CLAVE=${SERVICIO_CLAVE}"
           else
             echo "Sin SERVICIO_CLAVE: /v1 queda cerrado, que es lo correcto para un proxy publico."
+          fi
+          # Opcional: sin el, los modelos hf: responden 503 y el resto sigue.
+          if [ -n "${HF_TOKEN}" ]; then
+            set -- "$@" "HF_TOKEN=${HF_TOKEN}"
+          else
+            echo "Sin HF_TOKEN: el router de Hugging Face (modelos hf:) queda sin configurar."
           fi
           if [ -n "${MODELO_DEFECTO}" ]; then
             set -- "$@" "MODELO_DEFECTO=${MODELO_DEFECTO}"
@@ -138,8 +145,10 @@ jobs:
           FLY_APP: ${{ steps.app.outputs.app }}
           SERVICIO_CLAVE: ${{ secrets.SERVICIO_CLAVE }}
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
         run: |
           export CON_OPENROUTER="$([ -n "${OPENROUTER_API_KEY}" ] && echo 1 || echo 0)"
+          export CON_HF="$([ -n "${HF_TOKEN}" ] && echo 1 || echo 0)"
           tools/verificar-servicio.sh "https://${FLY_APP}.fly.dev" "${GITHUB_SHA}"
 
       - name: Resumen del despliegue

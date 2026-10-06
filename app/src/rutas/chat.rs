@@ -8,7 +8,15 @@ use axum::{
 };
 use serde_json::{json, Value};
 
-use crate::{apps::Identidad, error::ErrorApi, guardia, rutas::uso::CABECERA_USO, Servicio};
+use crate::{
+    apps::Identidad,
+    error::ErrorApi,
+    guardia,
+    rutas::{modelos::catalogo_de, uso::CABECERA_USO},
+    upstream::{Destino, Medicion, Upstream},
+    uso::Registro,
+    Servicio,
+};
 
 /// Cuánto se espera entre intentos de reconciliación. OpenRouter tarda un poco
 /// en dejar lista la contabilidad de una generación.
@@ -19,10 +27,11 @@ const CABECERA_AVISO: HeaderName = HeaderName::from_static("x-presupuesto");
 
 /// `POST /v1/chat/completions`: proxy fino con el contrato de OpenAI.
 ///
-/// El cuerpo se reenvía tal cual salvo dos retoques: se rellena `model` si no
-/// viene, y se rechaza `stream`, que es de la etapa 7. Toda llamada que llega a
-/// salir queda anotada en el registro de uso, vaya bien o mal, y su id viaja de
-/// vuelta en la cabecera `X-Uso-Id`.
+/// El cuerpo se reenvía tal cual salvo tres retoques: se rellena `model` si no
+/// viene, se rechaza `stream`, que es de la etapa 7, y si el modelo lleva el
+/// prefijo `hf:` se le quita y la llamada va al router de Hugging Face en vez
+/// de a OpenRouter. Toda llamada que llega a salir queda anotada en el registro
+/// de uso, vaya bien o mal, y su id viaja de vuelta en la cabecera `X-Uso-Id`.
 pub async fn chat(
     State(servicio): State<Arc<Servicio>>,
     Extension(quien): Extension<Identidad>,
@@ -75,9 +84,19 @@ pub async fn chat(
     let huella = crate::apps::hash(&cuerpo.to_string());
     let aviso = guardia::comprueba(&servicio, &quien, &huella)?;
 
+    // A quién se le compra lo decide el prefijo del modelo. El upstream recibe
+    // el id como él lo entiende; el registro guarda el que pidió la aplicación.
+    let destino = Destino::de(&pedido);
+    if destino.modelo != pedido {
+        if let Some(objeto) = cuerpo.as_object_mut() {
+            objeto.insert("model".to_string(), Value::String(destino.modelo.clone()));
+        }
+    }
+
     let mut registro = servicio.uso.abre(pedido.clone());
     registro.app_id = quien.app_id();
     registro.huella = Some(huella);
+    registro.upstream = destino.upstream.nombre().to_string();
     // El trabajo de negocio al que pertenece la llamada: varias consultas de un
     // mismo presupuesto se agrupan luego por aqui.
     registro.operacion = cabeceras
@@ -88,18 +107,32 @@ pub async fn chat(
     let id_uso = registro.id.clone();
 
     let reloj = Instant::now();
-    let resultado = servicio.openrouter.chat(cuerpo).await;
+    let resultado = servicio.openrouter.chat(destino.upstream, cuerpo).await;
     registro.latencia_ms = reloj.elapsed().as_millis() as i64;
 
     match resultado {
         Ok(respuesta) => {
             registro.estado = StatusCode::OK.as_u16();
             registro.desde_respuesta(&respuesta);
-            // El modelo servido puede no ser el pedido: OpenRouter enruta.
-            let servido = registro.modelo_servido.clone().unwrap_or(pedido);
-            registro.estima(servicio.catalogo.precio(&servido));
+            anota_destino(&mut registro, &destino);
+            let referencia = referencia_de_precio(&registro, &destino);
+            let precio = match servicio.catalogo.precio(&referencia) {
+                Some(p) => Some(p),
+                // Sin reconciliación, la estimación es el único coste que va a
+                // haber: merece traer el catálogo si aún no está. Una vez por
+                // hora, lo que dura la caché.
+                None if destino.upstream.medicion() == Medicion::Estimada => {
+                    let _ = catalogo_de(&servicio, destino.upstream, false).await;
+                    servicio.catalogo.precio(&referencia)
+                }
+                None => None,
+            };
+            registro.estima(precio);
 
-            let pendiente = registro.id_openrouter.clone();
+            let pendiente = match destino.upstream.medicion() {
+                Medicion::Reconciliada => registro.id_openrouter.clone(),
+                Medicion::Estimada => None,
+            };
             servicio.uso.anota(registro);
             if let Some(generacion) = pendiente {
                 reconcilia(servicio.clone(), id_uso.clone(), generacion);
@@ -118,6 +151,45 @@ pub async fn chat(
             servicio.uso.anota(registro);
             Err(fallo.con_uso(&id_uso))
         }
+    }
+}
+
+/// Deja el registro de una llamada a otro upstream coherente con el resto del
+/// histórico: el modelo servido con su prefijo, para que `agrupar=modelo` no
+/// mezcle el `openai/gpt-oss-120b` de Hugging Face con el de OpenRouter; el
+/// host elegido como proveedor, porque el router no lo dice en la respuesta;
+/// y sin `id_openrouter`, que es de quien lo reconcilia.
+///
+/// [SUPUESTO] la respuesta del router de Hugging Face no trae `provider` ni
+/// un `model` con el sufijo `:<host>`. Plan B si lo trae: `desde_respuesta`
+/// ya lo habrá leído y aquí no se pisa nada que venga informado.
+fn anota_destino(registro: &mut Registro, destino: &Destino) {
+    if destino.upstream == Upstream::OpenRouter {
+        return;
+    }
+    let prefijo = destino.upstream.prefijo();
+    if let Some(servido) = &registro.modelo_servido {
+        if !servido.starts_with(prefijo) {
+            registro.modelo_servido = Some(format!("{prefijo}{servido}"));
+        }
+    }
+    if registro.proveedor.is_none() {
+        registro.proveedor = destino.host().map(str::to_string);
+    }
+    registro.id_openrouter = None;
+}
+
+/// Con qué id se busca el precio en el catálogo. En OpenRouter, el modelo
+/// servido, que puede no ser el pedido porque enruta. En Hugging Face, el
+/// pedido: lleva el host (`hf:...:groq`) que fija el precio, y el servido
+/// solo dice el modelo.
+fn referencia_de_precio(registro: &Registro, destino: &Destino) -> String {
+    match destino.upstream {
+        Upstream::OpenRouter => registro
+            .modelo_servido
+            .clone()
+            .unwrap_or_else(|| registro.modelo_pedido.clone()),
+        Upstream::HuggingFace => registro.modelo_pedido.clone(),
     }
 }
 
@@ -172,8 +244,51 @@ fn lleva_adjuntos(mensajes: Option<&Value>) -> bool {
 
 #[cfg(test)]
 mod pruebas {
-    use super::lleva_adjuntos;
+    use super::{anota_destino, lleva_adjuntos, referencia_de_precio};
+    use crate::{upstream::Destino, uso::Uso};
     use serde_json::json;
+
+    #[test]
+    fn una_llamada_hf_se_anota_con_prefijo_host_y_sin_reconciliar() {
+        let uso = Uso::nuevo(Some("/no/existe/uso.db"));
+        let destino = Destino::de("hf:openai/gpt-oss-120b:groq");
+        let mut r = uso.abre("hf:openai/gpt-oss-120b:groq".into());
+        r.desde_respuesta(&json!({
+            "id": "chatcmpl-1", "model": "openai/gpt-oss-120b",
+            "usage": { "prompt_tokens": 10, "completion_tokens": 5 }
+        }));
+        anota_destino(&mut r, &destino);
+        assert_eq!(r.modelo_servido.as_deref(), Some("hf:openai/gpt-oss-120b"));
+        assert_eq!(r.proveedor.as_deref(), Some("groq"));
+        assert_eq!(r.id_openrouter, None, "no hay /generation que consultar");
+        // El precio se busca por lo pedido, que es lo que lleva el host.
+        assert_eq!(
+            referencia_de_precio(&r, &destino),
+            "hf:openai/gpt-oss-120b:groq"
+        );
+
+        // Sin host, el proveedor queda sin informar y el precio es el general.
+        let destino = Destino::de("hf:openai/gpt-oss-120b:cheapest");
+        let mut r = uso.abre("hf:openai/gpt-oss-120b:cheapest".into());
+        r.desde_respuesta(&json!({ "model": "openai/gpt-oss-120b" }));
+        anota_destino(&mut r, &destino);
+        assert_eq!(r.proveedor, None);
+    }
+
+    #[test]
+    fn en_openrouter_no_se_toca_nada_y_el_precio_es_el_del_servido() {
+        let uso = Uso::nuevo(Some("/no/existe/uso.db"));
+        let destino = Destino::de("openai/gpt-oss-120b");
+        let mut r = uso.abre("openai/gpt-oss-120b".into());
+        r.desde_respuesta(&json!({
+            "id": "gen-1", "model": "openai/gpt-oss-120b", "provider": "Groq"
+        }));
+        anota_destino(&mut r, &destino);
+        assert_eq!(r.modelo_servido.as_deref(), Some("openai/gpt-oss-120b"));
+        assert_eq!(r.proveedor.as_deref(), Some("Groq"));
+        assert_eq!(r.id_openrouter.as_deref(), Some("gen-1"));
+        assert_eq!(referencia_de_precio(&r, &destino), "openai/gpt-oss-120b");
+    }
 
     #[test]
     fn distingue_texto_de_adjuntos() {
