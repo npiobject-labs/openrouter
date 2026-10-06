@@ -186,6 +186,186 @@ streaming, varias claves.
   catálogo actual.
 - Consola: pestaña «Alias» y opción de elegir alias en el selector de modelo.
 
+## Segundo agregador: Requesty (propuesta del 06/10/2026, pendiente de visto bueno)
+
+Origen: [`segundo-agregador-requesty.md`](segundo-agregador-requesty.md) y
+[`alternativas-a-openrouter.md`](alternativas-a-openrouter.md). Objetivo: que
+el gateway deje de depender de un solo agregador sin que las apps cambien nada,
+y que mercamodels pueda enseñar y lanzar las ofertas de Requesty (proveedor y
+región). Las etapas R0–R4 **se adelantan a la 7 (streaming) y a la 8 (alias)**;
+la R0 lleva fecha fija.
+
+### Decisiones que fija esta propuesta
+
+- **Nada de lo publicado cambia por defecto.** `GET /v1/models` sin parámetros
+  sigue devolviendo exactamente el catálogo de OpenRouter. Hay dos motivos: el
+  contrato, y que la captura de mercamodels lee esa ruta y, si le entraran de
+  golpe ~750 modelos, generaría fichas con LLM para todos. Requesty se pide con
+  `?agregador=requesty|todos`.
+- **Un id sin prefijo es de OpenRouter; uno con prefijo `requesty/` es de
+  Requesty.** El prefijo hace falta porque 69 ids existen igual en los dos
+  catálogos (`openai/…`, `anthropic/…`, `google/…`) y otros, como
+  `vertex/gemini-2.5-flash-lite@europe-west1`, solo existen en Requesty. El
+  gateway quita el prefijo antes de reenviar la petición. [SUPUESTO] OpenRouter
+  no tiene ningún fabricante llamado `requesty`. Plan B: la R1 lo comprueba
+  contra el catálogo real y, si chocara, se usa `rq:`.
+- **Ningún dato del cuerpo elige URL ni credencial:** el prefijo solo
+  selecciona uno de los dos upstreams declarados en `config.rs`. Es la lección
+  del SSRF de LiteLLM.
+- **Endpoint `https://router.eu.requesty.ai/v1` por defecto** (`REQUESTY_BASE`),
+  porque procesar en Fráncfort no cuesta más. Que la inferencia quede también
+  en la UE depende del id que se elija (`@eu`, `@europe-…`), no del endpoint.
+- **Secretos**: `REQUESTY_API_KEY` (Fly) y `VPS_REQUESTY_API_KEY` (VPS), dos
+  claves distintas como ya pasa con OpenRouter. Las crea el dueño en Requesty
+  **con el log de prompts apagado** y las guarda como secretos de repositorio;
+  nunca se pegan en una sesión. Son **opcionales**: sin clave, las rutas
+  `requesty/…` responden `503 sin_configurar` y `deploy-vps.yml` no falla
+  (no es como `VPS_OPENROUTER_API_KEY`, que sí es obligatoria).
+- **Presupuestos, cuotas y cortacircuitos (`guardia.rs`) no cambian**: cuentan
+  el coste real venga de donde venga, en dólares.
+- **La verificación de cada despliegue sigue sin gastar**: catálogo, sobre de
+  error y `503` sin clave. La llamada real a Requesty va en un workflow a mano,
+  `probar-requesty.yml`, con texto de prueba y tope de `max_tokens`.
+
+### Etapa R0 — Sustituto de `gemini-2.5-flash-lite` (antes del 20/10/2026)
+
+Hoy es el modelo por defecto (`MODELO_DEFECTO` en `config.rs` y en la variable
+de repositorio), el de las fichas y el clasificador de mercamodels y el de la
+extracción de maydom. Vertex lo apaga el 20/10/2026. [SUPUESTO] OpenRouter lo
+seguirá sirviendo por Google AI Studio, pero con menos redundancia; Requesty
+dejará de tenerlo en la UE.
+
+- Candidatos que están en los dos agregadores y en la UE por Requesty:
+  `openai/gpt-oss-120b`, `mistralai/mistral-small-2603`,
+  `google/gemini-3.1-flash-lite` y DeepSeek V4 Flash. [SUPUESTO] los ids de
+  OpenRouter son estos; se confirman con `/v1/models?texto=`.
+- La prueba se hace en mercamodels (etapa 9 de su plan): la misma batería de
+  fichas y clasificación, lanzada por el gateway con tope de 0,50 $, para medir
+  JSON válido, acuerdo con las fichas actuales, coste y latencia. Cada app con
+  casos propios (maydom, gestionpresupuestos con `tools/probar-bom.ps1
+  -Comparar`) repite la prueba con los suyos.
+- Cambio en el gateway: la constante `MODELO_DEFECTO` de `config.rs` y la
+  variable de repositorio; para el VPS, un `deploy-vps.yml` a mano sobre el SHA
+  de `release`, porque el `.env` se escribe al desplegar. En `docs/openapi.json`,
+  la descripción del modelo por defecto.
+- No entra: cambiar el modelo de las apps que lo escriben en su código. Eso es
+  de cada app, o de los alias de la etapa 8.
+- Hecho cuando: `/salud` del VPS sirve con el nuevo `MODELO_DEFECTO` antes del
+  16/10 y una llamada sin `model` lo usa.
+
+### Etapa R1 — Catálogo de Requesty en `/v1/models` (no necesita clave)
+
+- `catalogo.rs` descarga también el catálogo público de Requesty, con la misma
+  caché de una hora y una copia caducada propia: si Requesty no responde, la
+  parte de OpenRouter se sirve igual.
+- `?agregador=openrouter` (valor por defecto), `requesty` o `todos`. Los
+  filtros de hoy valen para los dos.
+- Campos nuevos, todos opcionales:
+  - En todos los modelos: `agregador` y `nombre_canonico` (`canonical_slug` en
+    OpenRouter, `model_canonical_name` en Requesty, normalizado).
+  - En los de Requesty: `region` (`geolocation`), `retencion`, `retencion_dias`,
+    `entrena` y `cuantizacion`, más los precios por tramo y de caché donde ya
+    existan campos.
+  - En los de OpenRouter, esos campos van a `null`, porque OpenRouter no los
+    publica. Nunca a `false`.
+- Filtros nuevos: `region=eu` y `sin_retencion=1` (sin retención y sin
+  entrenamiento). Un modelo de OpenRouter no pasa ninguno de los dos.
+- `X-Cache` informa del peor de los dos estados.
+- `docs/openapi.json` sube a 0.7.0. Consola: selector de agregador en el
+  catálogo.
+- Verificación (`verificar-servicio.sh`):
+  - `/v1/models` sin parámetros no trae ningún `requesty/`.
+  - `?agregador=requesty` trae más de 0 modelos y ninguno sin `region`.
+- [SUPUESTO] El catálogo de Requesty es público en `/v1/models` del endpoint UE
+  (lo descargó así el run 37436216507), con precio por token en
+  `input_price`/`output_price`. Plan B: si pide clave, R1 se aplaza hasta tener
+  `REQUESTY_API_KEY`.
+
+### Etapa R2 — Lanzar por Requesty (necesita la clave)
+
+- `openrouter.rs` pasa a ser un módulo de upstreams. Lo común va en un cliente
+  compartido: `chat()`, tiempo de espera y traducción de errores. Lo propio de
+  cada upstream se queda en el suyo: en OpenRouter, `generacion()` y
+  `HTTP-Referer`; en Requesty, nada más. Las claves solo las conoce ese módulo.
+- `rutas/chat.rs`: `requesty/<id>` va a Requesty con `<id>`; lo demás, como
+  hoy. Cabecera `X-Upstream` (`openrouter` | `requesty`) en la respuesta y en
+  `expose_headers`.
+- Errores con el mismo sobre:
+  - `requesty_rechaza`, con su estado y su cuerpo en `error.upstream`.
+  - `sin_configurar` si falta la clave.
+  - Se añaden a `x-codigos-de-error`.
+- `uso.rs`:
+  - Columna `upstream` (por defecto `openrouter`, con la migración `ALTER` que
+    ya existe) y columna `id_upstream`. `id_openrouter` se mantiene en la
+    salida por compatibilidad.
+  - Con Requesty, el coste se toma de `usage.cost` con
+    `coste_origen = "requesty"`, sin conciliación.
+  - La estimación previa (`guardia.rs` y `estima()`) usa los precios del
+    catálogo del upstream que va a responder.
+  - `/v1/uso/resumen` admite `agrupar=upstream`.
+- `/salud` y `/v1/estado` dicen si hay clave de Requesty. [SUPUESTO] Requesty no
+  tiene un equivalente a `GET /key`. Plan B: solo `"requesty":"configurada"`.
+- `deploy.yml` y `deploy-vps.yml` vuelcan `REQUESTY_API_KEY` y
+  `VPS_REQUESTY_API_KEY` si existen.
+- `probar-requesty.yml` (a mano) hace estas llamadas:
+  - una de texto,
+  - una con `response_format` `json_schema` a un modelo `vertex/…@eu` y a uno
+    `azure/…@swedencentral`,
+  - una sin clave de aplicación.
+
+  Después imprime `usage` y compara `usage.cost` con tokens × precio del
+  catálogo, para resolver los dos [SUPUESTO] del 5 %.
+- Hecho cuando: con la clave puesta, la consola lanza
+  `requesty/vertex/…@europe-west1`, `/v1/uso` lo anota con `upstream` y coste
+  real, y el presupuesto de la app lo descuenta.
+
+### Etapa R3 — Respaldo cuando OpenRouter falla
+
+- Equivalencia automática de id de OpenRouter a id de Requesty:
+  - Se cruzan por nombre canónico normalizado (puntos y guiones, sufijos de
+    fecha).
+  - Entre las variantes de Requesty, se elige la de la UE, sin retención ni
+    entrenamiento, con `json_schema` si la petición lo usa, y la más barata.
+- Una tabla a mano (`EQUIVALENCIAS`, en el código) manda sobre lo automático.
+  `/v1/models` añade `respaldo` (el id equivalente o `null`).
+- Cuándo se conmuta:
+  - Pasa a Requesty con el id equivalente si hay error de conexión, se agota el
+    tiempo de espera, o OpenRouter responde 5xx, 429 o 402.
+  - Cualquier otro 4xx se devuelve tal cual.
+  - Si fallan los dos, `502 todos_fallan` con los dos errores en
+    `error.upstream`.
+  - Nunca se conmuta a mitad de un stream; eso aplica cuando llegue la etapa 7.
+- Cortacircuitos por upstream: tras N fallos seguidos, OpenRouter se salta
+  durante M segundos. Cada intento que cobre un upstream se anota en el uso y
+  en el presupuesto.
+- Desactivable por petición con la cabecera `X-Respaldo: no`. Ese «no» es lo
+  que mandará una operación «solo UE» cuando pruebe OpenRouter.
+- Verificación sin gasto: el sobre de `todos_fallan` se fuerza en una prueba
+  unitaria con `OPENROUTER_BASE` apuntando a un host inválido.
+  `probar-requesty.yml` hace lo mismo contra el despliegue de Fly.
+
+### Etapa R4 — «Solo UE» por aplicación u operación (más adelante)
+
+- Política por aplicación en `PUT /v1/apps/{id}/politica`:
+  `{"solo_ue":true,"sin_retencion":true}`.
+- Con esa política, la llamada va directa a Requesty. Si el id pedido no cumple
+  la política, se traduce a su variante UE; si no tiene una, se responde
+  `422 sin_oferta_ue`. Nunca se conmuta fuera de la UE: si Requesty falla, `502`.
+- Junto a esta etapa, OpenRouter con `provider: {zdr: true, data_collection:
+  "deny"}`:
+  - **por aplicación**, no global: forzarlo en todas las llamadas dejaría sin
+    proveedor (404) a los modelos que no tienen ninguno ZDR y rompería a quien
+    hoy funciona;
+  - mientras tanto, una app puede mandarlo ya en el cuerpo, porque el proxy lo
+    reenvía tal cual.
+
+### Orden y dependencias
+
+R0 primero, por la fecha. R1 no espera a la clave. R2 espera a
+`REQUESTY_API_KEY` y R3 a R2. Cada etapa llega al VPS solo cuando el dueño dice
+«OK release». mercamodels empieza sus ofertas tras R1 y lanza por Requesty
+tras R2 en el VPS.
+
 ## Después (sin orden ni compromiso)
 
 Especificación OpenAPI publicada en `docs/`, salida estructurada validada contra
