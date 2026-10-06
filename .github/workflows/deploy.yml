@@ -88,6 +88,7 @@ jobs:
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
           SERVICIO_CLAVE: ${{ secrets.SERVICIO_CLAVE }}
           MODELO_DEFECTO: ${{ vars.MODELO_DEFECTO }}
+          MODELO_MULTIMODAL: ${{ vars.MODELO_MULTIMODAL }}
         run: |
           set -- "BUILD_ID=${GITHUB_SHA}"
           if [ -n "${OPENROUTER_API_KEY}" ]; then
@@ -102,6 +103,9 @@ jobs:
           fi
           if [ -n "${MODELO_DEFECTO}" ]; then
             set -- "$@" "MODELO_DEFECTO=${MODELO_DEFECTO}"
+          fi
+          if [ -n "${MODELO_MULTIMODAL}" ]; then
+            set -- "$@" "MODELO_MULTIMODAL=${MODELO_MULTIMODAL}"
           fi
           echo "Fijando $# secretos (valores ocultos)."
           flyctl secrets set "$@" --app "${FLY_APP}" --stage

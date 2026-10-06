@@ -5,10 +5,12 @@ use std::env;
 pub const TITULO: &str = "openrouter (npiobject-labs)";
 pub const REFERER: &str = "https://npiobject-labs.github.io/openrouter/";
 
-/// Sustituye a `google/gemini-2.5-flash-lite`, que Vertex apaga el 20/10/2026.
-/// Lo eligió la comparación de auxiliares de mercamodels del 06/10/2026: JSON
-/// válido siempre, multimodal como el anterior y con variante UE en Requesty.
-const MODELO_DEFECTO: &str = "google/gemini-3.1-flash-lite";
+/// Sustituyen a `google/gemini-2.5-flash-lite`, que Vertex apaga el 20/10/2026.
+/// Para texto, `gpt-oss-120b`: el más barato, de pesos abiertos y servido por
+/// muchos proveedores, también en la UE. No ve imágenes ni ficheros: una
+/// consulta sin `model` que los lleve va al multimodal.
+const MODELO_DEFECTO: &str = "openai/gpt-oss-120b";
+const MODELO_MULTIMODAL: &str = "google/gemini-3.1-flash-lite";
 const BASE_OPENROUTER: &str = "https://openrouter.ai/api/v1";
 
 #[derive(Clone)]
@@ -18,6 +20,8 @@ pub struct Config {
     /// Clave que exigimos a quien llama a /v1. Sin ella el servicio no atiende.
     pub clave_servicio: Option<String>,
     pub modelo_defecto: String,
+    /// El de las consultas sin `model` que llevan imagen, audio, vídeo o fichero.
+    pub modelo_multimodal: String,
     pub base_openrouter: String,
     pub build: String,
     pub puerto: u16,
@@ -35,6 +39,8 @@ impl Config {
             clave_servicio: variable("SERVICIO_CLAVE"),
             modelo_defecto: variable("MODELO_DEFECTO")
                 .unwrap_or_else(|| MODELO_DEFECTO.to_string()),
+            modelo_multimodal: variable("MODELO_MULTIMODAL")
+                .unwrap_or_else(|| MODELO_MULTIMODAL.to_string()),
             base_openrouter: variable("OPENROUTER_BASE")
                 .unwrap_or_else(|| BASE_OPENROUTER.to_string())
                 .trim_end_matches('/')

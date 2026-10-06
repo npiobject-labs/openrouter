@@ -6,7 +6,7 @@ use axum::{
     response::{IntoResponse, Response},
     Extension, Json,
 };
-use serde_json::Value;
+use serde_json::{json, Value};
 
 use crate::{apps::Identidad, error::ErrorApi, guardia, rutas::uso::CABECERA_USO, Servicio};
 
@@ -50,11 +50,18 @@ pub async fn chat(
     }
 
     // Sin modelo, el de la casa: así una app puede empezar a llamar sin elegir.
+    // El de texto razona: si la app no dice cuánto, poco, para que no se coma
+    // el `max_tokens` pensando y devuelva la respuesta vacía o cortada.
     if !objeto.contains_key("model") {
-        objeto.insert(
-            "model".to_string(),
-            Value::String(servicio.config.modelo_defecto.clone()),
-        );
+        let modelo = if lleva_adjuntos(objeto.get("messages")) {
+            servicio.config.modelo_multimodal.clone()
+        } else {
+            objeto
+                .entry("reasoning")
+                .or_insert_with(|| json!({ "effort": "low" }));
+            servicio.config.modelo_defecto.clone()
+        };
+        objeto.insert("model".to_string(), Value::String(modelo));
     }
 
     let pedido = objeto
@@ -149,4 +156,43 @@ fn reconcilia(servicio: Arc<Servicio>, id_uso: String, generacion: String) {
             }
         }
     });
+}
+
+/// Si algún mensaje trae una parte que no es texto (`image_url`, `file`,
+/// `input_audio`, `video_url`...). Con contenido en texto plano, no.
+fn lleva_adjuntos(mensajes: Option<&Value>) -> bool {
+    mensajes
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(|m| m.get("content").and_then(Value::as_array))
+        .flatten()
+        .any(|parte| parte.get("type").and_then(Value::as_str) != Some("text"))
+}
+
+#[cfg(test)]
+mod pruebas {
+    use super::lleva_adjuntos;
+    use serde_json::json;
+
+    #[test]
+    fn distingue_texto_de_adjuntos() {
+        assert!(!lleva_adjuntos(None));
+        assert!(!lleva_adjuntos(Some(
+            &json!([{"role": "user", "content": "hola"}])
+        )));
+        assert!(!lleva_adjuntos(Some(&json!([
+            {"role": "user", "content": [{"type": "text", "text": "hola"}]}
+        ]))));
+        assert!(lleva_adjuntos(Some(&json!([
+            {"role": "system", "content": "eres útil"},
+            {"role": "user", "content": [
+                {"type": "text", "text": "¿qué es?"},
+                {"type": "image_url", "image_url": {"url": "data:image/png;base64,AAA"}}
+            ]}
+        ]))));
+        assert!(lleva_adjuntos(Some(&json!([
+            {"role": "user", "content": [{"type": "file", "file": {"filename": "a.pdf"}}]}
+        ]))));
+    }
 }

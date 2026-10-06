@@ -22,6 +22,7 @@ pub async fn estado(
         "ok": true,
         "build": servicio.config.build,
         "modelo_defecto": servicio.config.modelo_defecto,
+        "modelo_multimodal": servicio.config.modelo_multimodal,
         "identidad": {
             "nombre": quien.nombre(),
             "app_id": quien.app_id(),

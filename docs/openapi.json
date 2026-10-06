@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "openrouter · servicio",
-    "version": "0.6.2",
+    "version": "0.6.3",
     "summary": "Pasarela propia sobre OpenRouter, pensada para ser llamada por otras aplicaciones.",
     "description": "Esto no es una aplicación con interfaz: es un conjunto de servicios HTTP. La clave de OpenRouter vive solo en el backend y nunca sale de él. Cada aplicación consumidora tiene su propia clave, que se da de alta y se revoca sin tocar el despliegue.\n\nEl contrato sigue el de la API de OpenAI donde existe equivalente, así que cualquier cliente de OpenAI funciona cambiando la URL base. Lo propio del servicio va en rutas propias y en cabeceras `X-...`. Una ruta publicada no se rompe: lo incompatible iría a `/v2/`.\n\nLa versión de este documento acompaña a la etapa entregada: `0.6.0` es la etapa 6; `0.6.2` amplía `/v1/models` con descripción, precios completos, modalidades de salida y parámetros, sin cambiar nada de lo publicado.",
     "license": {
@@ -124,7 +124,8 @@
                 "example": {
                   "ok": true,
                   "build": "87e6a89",
-                  "modelo_defecto": "google/gemini-3.1-flash-lite",
+                  "modelo_defecto": "openai/gpt-oss-120b",
+                  "modelo_multimodal": "google/gemini-3.1-flash-lite",
                   "clave": {
                     "label": "openrouter",
                     "usage": 0.0123,
@@ -292,7 +293,7 @@
           "Consultas"
         ],
         "summary": "Consulta a un modelo",
-        "description": "Proxy fino sobre OpenRouter con el contrato de OpenAI. El cuerpo se reenvía tal cual salvo dos retoques: si no traes `model` se rellena con el modelo por defecto del servicio, y `stream: true` se rechaza con `400` porque el streaming llega en la etapa 7.\n\nLa respuesta es la de OpenRouter sin tocar, incluido el bloque `usage`, que es lo que permite saber qué costó la llamada.\n\nToda llamada que llega a salir queda anotada en el registro de uso, vaya bien o mal, y su identificador vuelve en la cabecera `X-Uso-Id`. Con él se consulta después lo que costó, en `/v1/uso/{id}`.\n\nCon clave de aplicación, la llamada pasa antes por tres controles: el cortacircuitos de bucles, la cuota por minuto y el presupuesto. La clave de administración no tiene ninguno.",
+        "description": "Proxy fino sobre OpenRouter con el contrato de OpenAI. El cuerpo se reenvía tal cual salvo dos retoques: si no traes `model` se rellena con el modelo por defecto del servicio (`modelo_defecto` de `/v1/estado`), o con el multimodal (`modelo_multimodal`) si algún mensaje lleva una parte que no es texto; con el de texto, y si no mandas `reasoning`, se añade `{\"effort\":\"low\"}` para que el razonamiento no se coma el `max_tokens`; y `stream: true` se rechaza con `400` porque el streaming llega en la etapa 7.\n\nLa respuesta es la de OpenRouter sin tocar, incluido el bloque `usage`, que es lo que permite saber qué costó la llamada.\n\nToda llamada que llega a salir queda anotada en el registro de uso, vaya bien o mal, y su identificador vuelve en la cabecera `X-Uso-Id`. Con él se consulta después lo que costó, en `/v1/uso/{id}`.\n\nCon clave de aplicación, la llamada pasa antes por tres controles: el cortacircuitos de bucles, la cuota por minuto y el presupuesto. La clave de administración no tiene ninguno.",
         "requestBody": {
           "required": true,
           "content": {
@@ -1251,7 +1252,11 @@
           },
           "modelo_defecto": {
             "type": "string",
-            "description": "El que se usa si la consulta no trae `model`."
+            "description": "El que se usa si la consulta no trae `model` y es solo texto."
+          },
+          "modelo_multimodal": {
+            "type": "string",
+            "description": "El que se usa si la consulta no trae `model` y algún mensaje lleva imagen, audio, vídeo o fichero."
           },
           "clave": {
             "type": "object",

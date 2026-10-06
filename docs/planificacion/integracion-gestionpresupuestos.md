@@ -95,8 +95,9 @@ la real tienen claves y presupuestos distintos.
    datos reales, no por precio: para mapear columnas de un BOM, el modelo por
    defecto de entonces (`google/gemini-2.5-flash-lite`) igualó a los caros a
    una fracción del coste. Detalle en `prueba-bom.md`. Vertex lo apaga el
-   20/10/2026 y desde el 06/10 el modelo por defecto es
-   `google/gemini-3.1-flash-lite`: repite la prueba con `-Comparar` antes de
+   20/10/2026. Desde el 06/10 el modelo por defecto es `openai/gpt-oss-120b`
+   para texto (con razonamiento bajo) y `google/gemini-3.1-flash-lite` si la
+   consulta lleva imagen o fichero: repite la prueba con `-Comparar` antes de
    fijar uno en tu código.
 
 ## Errores: todos con el mismo sobre
