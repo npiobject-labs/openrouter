@@ -229,6 +229,21 @@ la R0 lleva fecha fija.
 
 ### Etapa R0 — Sustituto de `gemini-2.5-flash-lite` (antes del 20/10/2026)
 
+**Estado (06/10/2026): hecha en `main` y en Fly** (`6a953ae` y `2249dfc`,
+contrato 0.6.3); **falta el VPS**, que espera a «OK release». Decisión del
+dueño, tras la comparación de mercamodels (run 37444012246):
+
+- Sin `model` y solo texto: `openai/gpt-oss-120b`, con
+  `reasoning: {effort: "low"}` si la app no fija el razonamiento.
+- Sin `model` y con imagen, audio, vídeo o fichero:
+  `google/gemini-3.1-flash-lite` (`MODELO_MULTIMODAL`).
+- `/v1/estado` publica `modelo_defecto` y `modelo_multimodal`.
+
+[SUPUESTO] Las variables de repositorio `MODELO_DEFECTO` y `MODELO_MULTIMODAL`
+no existen; si `MODELO_DEFECTO` existe con el 2.5, manda sobre la constante.
+Plan B: borrarla o cambiarla en *Settings → Variables*.
+
+
 Hoy es el modelo por defecto (`MODELO_DEFECTO` en `config.rs` y en la variable
 de repositorio), el de las fichas y el clasificador de mercamodels y el de la
 extracción de maydom. Vertex lo apaga el 20/10/2026. [SUPUESTO] OpenRouter lo
