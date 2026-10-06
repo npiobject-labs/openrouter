@@ -186,7 +186,7 @@ streaming, varias claves.
   catálogo actual.
 - Consola: pestaña «Alias» y opción de elegir alias en el selector de modelo.
 
-## Segundo agregador: Requesty (propuesta del 06/10/2026, pendiente de visto bueno)
+## Segundo agregador: Requesty (propuesta del 06/10/2026, aprobada el mismo día)
 
 Origen: [`segundo-agregador-requesty.md`](segundo-agregador-requesty.md) y
 [`alternativas-a-openrouter.md`](alternativas-a-openrouter.md). Objetivo: que
@@ -380,6 +380,101 @@ R0 primero, por la fecha. R1 no espera a la clave. R2 espera a
 `REQUESTY_API_KEY` y R3 a R2. Cada etapa llega al VPS solo cuando el dueño dice
 «OK release». mercamodels empieza sus ofertas tras R1 y lanza por Requesty
 tras R2 en el VPS.
+
+## Vídeo: generación y edición (propuesta del 06/10/2026, pendiente de visto bueno)
+
+Petición del dueño: un catálogo de modelos para resolver problemas de vídeo,
+desde la edición hasta la generación, y lanzarlos desde mercamodels, incluida
+**Higgsfield**. Tope: **10 $/mes** de vídeo.
+
+Por qué hoy no hay ninguno: el catálogo de chat de OpenRouter
+(`/api/v1/models`, el que sirve `/v1/models`) no trae generadores de vídeo.
+OpenRouter los sirve desde el 15/04/2026 en una **API aparte y asíncrona**:
+`POST /api/v1/videos` encola el trabajo, `GET /api/v1/videos/{id}` consulta su
+estado (`pending`, `in_progress`, `completed`, `failed`) y, al acabar, trae
+`unsigned_urls` y `usage.cost` en dólares. Modelos: Veo 3.1, Seedance 2.x,
+Sora 2 Pro, Wan, Kling y HeyGen, entre otros. Higgsfield tiene su propia API,
+también asíncrona (`https://api.higgsfield.ai`, envío a un endpoint por modelo
+y consulta o webhook), con pago por uso en dólares y más de 50 modelos:
+generación, edición por instrucción (Kling 3.0 Omni Edit, FLUX Video Edit),
+alargar, reencuadrar, ampliar a 4K y sincronizar labios. No cobra los trabajos
+fallidos. Lo de esta sección se ha leído por resúmenes de búsqueda: openrouter.ai
+y higgsfield.ai están bloqueados desde la sesión.
+
+Precios orientativos por segundo: Kling 2.5 a 0,042 $; Kling 3.0 a 0,112 $;
+Seedance 2.0 entre 0,14 y 0,30 $; Veo 3.1 Fast entre 0,10 y 0,15 $; Veo 3.1
+entre 0,20 y 0,40 $ con audio. Un clip de 8 s cuesta entre 0,35 y 3,20 $:
+**10 $/mes dan para unos 10–25 clips cortos**.
+
+### Decisiones que fija esta propuesta
+
+- **Rutas propias bajo `/v1/videos`**, con la forma de la API de vídeo de
+  OpenAI donde coincida (`POST /v1/videos`, `GET /v1/videos/{id}`). Nada de lo
+  publicado cambia: `/v1/models` sigue siendo solo de chat. Si los modelos de
+  vídeo entraran ahí, la captura de mercamodels los tomaría por modelos de
+  texto.
+- **Un id con prefijo `higgsfield/` va a Higgsfield**; sin prefijo, a la API
+  de vídeo de OpenRouter. Es la misma regla que `requesty/`. Secretos
+  opcionales: `HIGGSFIELD_API_KEY` (Fly) y `VPS_HIGGSFIELD_API_KEY` (VPS). Sin
+  ellos, las rutas `higgsfield/…` responden `503 sin_configurar`.
+- **El gateway no guarda vídeos.** Devuelve las URL del proveedor y dice
+  cuándo caducan; descargarlas a tiempo es cosa de quien llama. El volumen de
+  Fly es de 1 GB y es para el histórico.
+- **El presupuesto se comprueba antes de encolar**, con el coste estimado
+  (precio por segundo × duración). Un vídeo cuesta lo que cien consultas de
+  texto: si no cabe, `402` antes de gastar. Al terminar se anota el coste real.
+- **El vídeo va con su propia clave de aplicación**, `mercamodels-video`, con
+  10 $/mes de tope, aparte de los 5 $ de texto de `mercamodels`. Así no hacen
+  falta topes por tipo dentro de una misma app.
+- **La verificación no gasta**: catálogo de vídeo, sobre de error y `402` con
+  un presupuesto a cero. Las pruebas con gasto, en un workflow a mano con un
+  clip de 2 s del modelo más barato.
+
+### Etapa V1 — Catálogo de vídeo (`GET /v1/videos/models`)
+
+- Junta el catálogo de vídeo de OpenRouter y el de Higgsfield, con caché de
+  una hora y copia caducada si un proveedor no responde.
+- Cada modelo trae:
+  - `id` y `agregador`;
+  - `tareas`, de una lista cerrada: `texto_a_video`, `imagen_a_video`,
+    `video_a_video`, `alargar`, `ampliar`, `labios`, `avatar`;
+  - `duraciones`, `resoluciones`, `formatos` y `audio`;
+  - `precios`: dólares por segundo según resolución y audio;
+  - `descripcion`.
+- Filtros: `tarea`, `audio`, `max_precio_segundo`.
+- [SUPUESTO] OpenRouter publica la lista de modelos de vídeo con precios por
+  API; su documentación lo describe, pero no se ha leído la ruta exacta. Plan
+  B: un workflow temporal lee la doc desde el runner. [SUPUESTO] Higgsfield no
+  tiene listado de modelos con precios; plan B: una tabla a mano en
+  `app/src/video_higgsfield.json`, con la fecha en que se comprobó cada precio.
+
+### Etapa V2 — Generar (trabajos asíncronos)
+
+- `POST /v1/videos` admite dos cuerpos:
+  - texto o imagen a vídeo: `{model, prompt, imagen?, duracion, resolucion,
+    formato, audio}`;
+  - edición: `{model, prompt, video_url, …}`.
+- Responde `202` con `{id, estado, coste_estimado}` y la cabecera `X-Uso-Id`.
+- Tabla `videos` en SQLite: id propio, id del proveedor, app, operación,
+  estado, coste estimado y real, URL y caducidad.
+- Una tarea en segundo plano consulta al proveedor (5 s, 10 s, 30 s y después
+  cada minuto, hasta 30 minutos).
+- `GET /v1/videos/{id}` devuelve el estado y, al acabar, `urls` y `caduca`.
+- Registro de uso:
+  - `tipo = "video"`, segundos y resolución;
+  - coste real de `usage.cost` (OpenRouter) o de la tarifa (Higgsfield);
+  - un fallo cuesta 0 si el proveedor no lo cobra.
+- Contrato 0.8.0. La consola gana una pestaña «Vídeo» para probar a mano.
+
+### Etapa V3 — Editar
+
+Vídeo a vídeo, alargar, ampliar y labios con los modelos de Higgsfield y los de
+OpenRouter que lo admitan.
+
+- El vídeo de entrada va por URL.
+- [SUPUESTO] Los proveedores aceptan vídeos de hasta 100 MB por URL. Plan B:
+  la página de mercamodels sube el vídeo a un almacén temporal; eso se decide
+  en V3, no antes.
 
 ## Después (sin orden ni compromiso)
 
