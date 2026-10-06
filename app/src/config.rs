@@ -5,7 +5,10 @@ use std::env;
 pub const TITULO: &str = "openrouter (npiobject-labs)";
 pub const REFERER: &str = "https://npiobject-labs.github.io/openrouter/";
 
-const MODELO_DEFECTO: &str = "google/gemini-2.5-flash-lite";
+/// Sustituye a `google/gemini-2.5-flash-lite`, que Vertex apaga el 20/10/2026.
+/// Lo eligió la comparación de auxiliares de mercamodels del 06/10/2026: JSON
+/// válido siempre, multimodal como el anterior y con variante UE en Requesty.
+const MODELO_DEFECTO: &str = "google/gemini-3.1-flash-lite";
 const BASE_OPENROUTER: &str = "https://openrouter.ai/api/v1";
 
 #[derive(Clone)]

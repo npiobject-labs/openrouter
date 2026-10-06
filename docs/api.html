@@ -306,7 +306,7 @@ footer{grid-column:1/-1;display:flex;flex-wrap:wrap;gap:.4rem 1.2rem;font-size:.
           'from openai import OpenAI\n\n' +
           'cliente = OpenAI(base_url="' + base + '/v1", api_key=CLAVE_DE_SERVICIO)\n\n' +
           'r = cliente.chat.completions.create(\n' +
-          '    model="google/gemini-2.5-flash-lite",\n' +
+          '    model="google/gemini-3.1-flash-lite",\n' +
           '    messages=[{"role": "user", "content": "hola"}],\n' +
           ')\n' +
           'print(r.choices[0].message.content, r.usage)'
@@ -316,7 +316,7 @@ footer{grid-column:1/-1;display:flex;flex-wrap:wrap;gap:.4rem 1.2rem;font-size:.
           'import OpenAI from "openai";\n\n' +
           'const cliente = new OpenAI({ baseURL: "' + base + '/v1", apiKey: CLAVE_DE_SERVICIO });\n\n' +
           'const r = await cliente.chat.completions.create({\n' +
-          '  model: "google/gemini-2.5-flash-lite",\n' +
+          '  model: "google/gemini-3.1-flash-lite",\n' +
           '  messages: [{ role: "user", content: "hola" }],\n' +
           '});\n' +
           'console.log(r.choices[0].message.content, r.usage);'

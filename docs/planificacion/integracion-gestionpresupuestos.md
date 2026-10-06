@@ -25,7 +25,7 @@ Con el SDK de OpenAI en Python es cambiar dos parámetros:
 from openai import OpenAI
 cliente = OpenAI(base_url="https://apisor.oracle402.com/v1", api_key=CLAVE_DE_APLICACION)
 r = cliente.chat.completions.create(
-    model="google/gemini-2.5-flash-lite",
+    model="google/gemini-3.1-flash-lite",
     messages=[{"role": "user", "content": "..."}],
     max_tokens=800,
     extra_headers={"X-Operacion": "presupuesto-2026-0417"},
@@ -93,8 +93,11 @@ la real tienen claves y presupuestos distintos.
 7. **Salida estructurada**: `response_format` con esquema, `max_tokens`, y
    `maxLength` en los campos de texto. El modelo se elige por la prueba con
    datos reales, no por precio: para mapear columnas de un BOM, el modelo por
-   defecto (`google/gemini-2.5-flash-lite`) igualó a los caros a una fracción
-   del coste. Detalle en `prueba-bom.md`.
+   defecto de entonces (`google/gemini-2.5-flash-lite`) igualó a los caros a
+   una fracción del coste. Detalle en `prueba-bom.md`. Vertex lo apaga el
+   20/10/2026 y desde el 06/10 el modelo por defecto es
+   `google/gemini-3.1-flash-lite`: repite la prueba con `-Comparar` antes de
+   fijar uno en tu código.
 
 ## Errores: todos con el mismo sobre
 
