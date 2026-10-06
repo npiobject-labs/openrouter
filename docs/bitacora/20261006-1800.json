@@ -1,0 +1,37 @@
+{
+  "fecha": "2026-10-06T18:00:00+02:00",
+  "titulo": "Upstreams: comprar también en el router de Hugging Face y ver todo el catálogo de OpenRouter",
+  "objetivo": "Que la pasarela pueda comprar fuera de OpenRouter (empezando por el router de Hugging Face) y deje de ocultar los modelos de imagen, vídeo y audio de OpenRouter, como pide el estudio del observatorio agregadores.",
+  "prompts": [
+    { "texto": "Vamos a trabajar en los agregadores de modelos. Haz un estudio profundo de cómo se plantea todo esto; de momento solo OpenRouter, pero habría que hacer más enlaces y con el análisis de cuál es el mejor modelo.", "nota": "Sesión compartida con los repos agregadores y mercamodels; prompts aproximados." },
+    { "texto": "También comprar fuera de OpenRouter." },
+    { "texto": "Arranca con todas las fases. No voy a estar presente. A ver si puedes llegar hasta el final y darme un enlace donde pueda probar lo que has hecho." },
+    { "texto": "Ya tengo cuenta en Hugging Face. ¿Cómo continúo?" },
+    { "texto": "Mañana terminamos esta fase." }
+  ],
+  "cambios": [
+    "app/src/upstream.rs (nuevo): OpenRouter y Hugging Face como upstreams; el prefijo hf: del id de modelo decide a quién se compra; :<host>, :cheapest y :fastest pasan al router de HF.",
+    "Catálogo de OpenRouter pedido con output_modalities=all (649 modelos en vez de 465) y Modelo conserva canonical_slug, hugging_face_id y upstream; filtro salida=; GET /v1/models?upstream=hf da el catálogo de HF con una entrada por host y precio.",
+    "Guardia, X-Operacion, X-Uso-Id y aplicaciones iguales para los dos upstreams; el uso guarda upstream (columna nueva con migración) y el coste de hf: queda estimado; /v1/uso y hermanas aceptan ?upstream= y agrupar=upstream.",
+    "HF_TOKEN (Fly) y VPS_HF_TOKEN (VPS) opcionales en deploy.yml y deploy-vps.yml; sin token, hf: responde 503 upstream_sin_configurar; /salud y /v1/estado dicen qué upstreams hay.",
+    "docs/openapi.json 0.6.4 con la etapa 9 entregada; tools/verificar-servicio.sh comprueba el catálogo ampliado y ?upstream=hf con y sin token; docs/consola.html con selector «Comprar en»; CLAUDE.md documenta los upstreams.",
+    "38 pruebas, fmt y clippy en verde. Todo en la rama claude/sweet-curie-vkqsu8 y en el PR borrador #36: la fusión en main exige revisión del dueño."
+  ],
+  "sha": "5685abc",
+  "sha_completo": "5685abc",
+  "run": null,
+  "mock": null,
+  "build": null,
+  "pagina": null,
+  "fly": null,
+  "pendiente": [
+    "El dueño crea el token de Hugging Face (preajuste Inference) y los secretos HF_TOKEN y VPS_HF_TOKEN; revisa y fusiona el PR #36 (deploy.yml verifica ?upstream=hf en Fly).",
+    "«OK release» para llevarlo al VPS.",
+    "fal como segundo upstream (medios), cuando el dueño tenga cuenta."
+  ],
+  "enlaces": [
+    { "texto": "PR #36", "url": "https://github.com/npiobject-labs/openrouter/pull/36" },
+    { "texto": "El observatorio agregadores", "url": "https://peripateticos-agregadores.fly.dev" }
+  ],
+  "notas": "Sin run ni despliegue: el cambio no ha entrado en main. sha_completo se rellena al fusionar. La sesión de agregadores (repo peripateticos-app/agregadores) tiene su propia bitácora con el estudio y la app."
+}
