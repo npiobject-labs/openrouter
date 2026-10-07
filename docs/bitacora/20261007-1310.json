@@ -1,15 +1,24 @@
 {
   "fecha": "2026-10-07T13:10:00+02:00",
-  "titulo": "Upstreams en Fly: fusionado el PR #36 y verificado el router de Hugging Face con token",
-  "objetivo": "Cerrar la etapa 9 en el despliegue de previsualización: fusionar el PR de los upstreams en main y confirmar que deploy.yml lo publica y verifica con HF_TOKEN.",
+  "titulo": "Upstreams publicados en Fly y en el VPS: fusionado el PR #36 y «OK release»",
+  "objetivo": "Cerrar la etapa 9 en producción: fusionar el PR de los upstreams en main, confirmar que deploy.yml lo publica y verifica con HF_TOKEN, y llevarlo al VPS con «OK release».",
   "prompts": [
-    { "texto": "Ya está fusionado el PR, comprueba el run.", "nota": "El PR seguía abierto como borrador; se pasó a listo para revisión y el dueño lo fusionó después." },
-    { "texto": "¿Qué hago? Ya tengo generados los tokens de Hugging Face." }
+    {
+      "texto": "Ya está fusionado el PR, comprueba el run.",
+      "nota": "El PR seguía abierto como borrador; se pasó a listo para revisión y el dueño lo fusionó después."
+    },
+    {
+      "texto": "¿Qué hago? Ya tengo generados los tokens de Hugging Face."
+    },
+    {
+      "texto": "OK release"
+    }
   ],
   "cambios": [
     "Ningún cambio de código: la sesión pasa el PR #36 de borrador a listo para revisión (GitHub no muestra el botón de fusionar en un borrador), el dueño lo fusiona (merge commit a22b69c) y deploy.yml lo publica en Fly.",
     "Verificación del run 37611742544 en verde: /salud con build a22b69c y upstreams {hf: true, openrouter: true}; /v1/models?upstream=hf responde 200 con 317 entradas (modelo y modelo:host); el catálogo de OpenRouter trae 651 modelos, 186 sin salida de texto, con canonical_slug y hugging_face_id; sobre de error, CORS, /v1/apps sin claves y administración sin topes como siempre.",
-    "El secreto HF_TOKEN ya existía en el repo: deploy.yml lo volcó a Fly y la verificación corrió con CON_HF=1."
+    "El secreto HF_TOKEN ya existía en el repo: deploy.yml lo volcó a Fly y la verificación corrió con CON_HF=1.",
+    "«OK release»: release avanza con fast-forward de 15401b9 a a22b69c (7 commits: los upstreams y el cambio de modelos por defecto de la sesión anterior). Run 37612922929 de deploy-vps.yml en verde: apisor.oracle402.com responde /salud con el build a22b69c y upstreams {hf: true, openrouter: true}; /v1/models?upstream=hf → 200 con 317 entradas, así que VPS_HF_TOKEN también estaba; 5 aplicaciones sin claves, administración sin topes, 339 registros de uso en SQLite."
   ],
   "sha": "a22b69c",
   "sha_completo": "a22b69cacd3ea36f82d35901f193e331219b42f2",
@@ -19,13 +28,30 @@
   "pagina": "consola.html",
   "fly": "https://openrouter-npiobject-labs.fly.dev/salud",
   "pendiente": [
-    "«OK release» para llevar los upstreams al VPS (apisor.oracle402.com); deploy-vps.yml vuelca VPS_HF_TOKEN si existe.",
-    "fal como segundo upstream (medios), cuando el dueño tenga cuenta."
+    "fal como segundo upstream (medios), cuando el dueño tenga cuenta.",
+    "mercamodels: usar hf:<modelo>:<host> cuando agregadores diga que sale más barato que OpenRouter (etapa 8 del plan de agregadores)."
   ],
   "enlaces": [
-    { "texto": "PR #36", "url": "https://github.com/npiobject-labs/openrouter/pull/36" },
-    { "texto": "Run de deploy.yml", "url": "https://github.com/npiobject-labs/openrouter/actions/runs/37611742544" },
-    { "texto": "Consola (selector «Comprar en»)", "url": "https://npiobject-labs.github.io/openrouter/consola.html" }
+    {
+      "texto": "PR #36",
+      "url": "https://github.com/npiobject-labs/openrouter/pull/36"
+    },
+    {
+      "texto": "Run de deploy.yml",
+      "url": "https://github.com/npiobject-labs/openrouter/actions/runs/37611742544"
+    },
+    {
+      "texto": "Consola (selector «Comprar en»)",
+      "url": "https://npiobject-labs.github.io/openrouter/consola.html"
+    },
+    {
+      "texto": "Run de deploy-vps.yml",
+      "url": "https://github.com/npiobject-labs/openrouter/actions/runs/37612922929"
+    },
+    {
+      "texto": "Consola contra el VPS",
+      "url": "https://npiobject-labs.github.io/openrouter/consola.html?api=https://apisor.oracle402.com"
+    }
   ],
   "notas": "Continuación de la sesión del 6 de octubre (entrada 20261006-1800), cuyo run y build quedaron en null porque el cambio aún no había entrado en main."
 }
