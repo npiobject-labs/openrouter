@@ -1,0 +1,35 @@
+{
+  "fecha": "2026-10-07T20:45:00+02:00",
+  "titulo": "Requesty como segundo agregador, respaldo automático y vídeo con OpenRouter y Higgsfield",
+  "objetivo": "Que la pasarela no dependa de OpenRouter, que pueda comprar en la UE sin retención y que genere y edite vídeo con presupuesto.",
+  "prompts": [
+    { "texto": "Adelante con el ajuste pequeño, el tema ese del vídeo. Okay a encajar nuestros planes con los de la sesión anterior." },
+    { "texto": "Me tienes que ayudar en detalle, paso a paso y solamente un paso cada vez, en cómo conseguir las claves de Requesty y de Higgsfield." },
+    { "texto": "empezamos", "nota": "Siguieron las capturas de pantalla de cada paso, sin claves; la que se vio salía oculta." },
+    { "texto": "sí, hasta el final. Desconecto ordenador" }
+  ],
+  "cambios": [
+    "Claves creadas por el dueño y guardadas solo en GitHub: REQUESTY_API_KEY y VPS_REQUESTY_API_KEY (registro de prompts apagado, 2 $/mes cada una), HIGGSFIELD_API_KEY y VPS_HIGGSFIELD_API_KEY.",
+    "Etapa 10 (0.7.0): Requesty como upstream rq: con coste real de usage.cost; /v1/models?upstream=rq con region, retencion, entrena y cuantizacion; filtros region= y sin_retencion=1.",
+    "Respaldo automático: si OpenRouter no contesta (conexión, tiempo, 5xx, 429, 402), la misma consulta va al mismo modelo en Hugging Face y después en Requesty (UE sin retención, la más barata); cabeceras X-Upstream y X-Respaldo; X-Respaldo: no lo apaga.",
+    "Etapa 11 (0.8.0): vídeo con la API asíncrona de OpenRouter y con Higgsfield (higgsfield:); /v1/videos/models, /estimar, POST /v1/videos con corte 402 presupuesto_insuficiente antes de encolar, /v1/videos/{id} y /contenido. Sección «Vídeo» en la consola.",
+    "verificar-servicio.sh comprueba Requesty, Higgsfield y el catálogo de vídeo en cada despliegue; probar-upstreams.yml hace la prueba real a mano.",
+    "Prueba real en Fly (run 37659814259): Requesty respondió por 0,000046 $; un vídeo de 1 s de Grok Imagine Video 1.5 Lite se generó en 35 s y costó 0,02 $, lo estimado."
+  ],
+  "sha": "3ef1090",
+  "sha_completo": "3ef109053d5c4cad2d9162e4fe0b4880c0a77801",
+  "run": 37659814259,
+  "mock": null,
+  "build": "OP-B1-20261007-018",
+  "pagina": "https://npiobject-labs.github.io/openrouter/consola.html",
+  "fly": "https://openrouter-npiobject-labs.fly.dev/salud",
+  "pendiente": [
+    "«OK release» para llevar las etapas 10 y 11 al VPS.",
+    "Opcional: app mercamodels-video con 10 $/mes y su secreto LLM_VIDEO_API_KEY en mercamodels."
+  ],
+  "enlaces": [
+    { "texto": "mercamodels PR #13", "url": "https://github.com/peripateticos-app/mercamodels/pull/13" },
+    { "texto": "Documentación de la API", "url": "https://npiobject-labs.github.io/openrouter/api.html" }
+  ],
+  "notas": "Prompts aproximados, corregidos de un dictado por voz. Ninguna clave pasó por la sesión: las creó el dueño y las pegó directamente en GitHub."
+}

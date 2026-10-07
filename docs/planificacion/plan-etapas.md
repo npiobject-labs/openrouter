@@ -495,6 +495,21 @@ Donde esta sección contradiga a las de Requesty o vídeo de arriba, gana esta.
 | R3: respaldo solo hacia Requesty | El VPS ya tiene token de Hugging Face (`hf=true`) | El respaldo recorre una lista ordenada de upstreams. Hugging Face entra ya, **sin esperar a la clave de Requesty**: `gpt-oss-120b`, el modelo por defecto, lo sirven allí varios hosts |
 | V1: `GET /v1/videos/models` | `/v1/models?salida=video` ya lista los de vídeo de OpenRouter | **No hay ruta nueva**: V1 añade a esos modelos `precio_segundo` y `tareas`, y Higgsfield entra como upstream con prefijo **`higgsfield:`** (`?upstream=higgsfield`). V2 y V3 (`POST/GET /v1/videos`) siguen igual |
 
+**Estado (07/10/2026, noche).** Hecho en `main` y verificado en Fly; el VPS,
+pendiente de «OK release»:
+
+- **R1 + R2 = etapa 10 del contrato (0.7.0)**: `rq:` con coste real, catálogo
+  `?upstream=rq` (770 modelos, 216 en la UE sin retención), filtros `region`
+  y `sin_retencion`. Claves `REQUESTY_API_KEY` / `VPS_REQUESTY_API_KEY` puestas
+  por el dueño, con registro apagado y 2 $/mes de tope cada una.
+- **R3, en la misma etapa 10**: respaldo OpenRouter → Hugging Face → Requesty
+  (`X-Upstream`, `X-Respaldo`), probado de punta a punta en `cargo test`.
+- **V1–V3 = etapa 11 (0.8.0)**: `/v1/videos/models`, `/v1/videos/estimar`,
+  `POST /v1/videos`, `/v1/videos/{id}` y `/contenido`, con OpenRouter y
+  Higgsfield (`HIGGSFIELD_API_KEY` / `VPS_HIGGSFIELD_API_KEY` puestas). Prueba
+  real con `probar-upstreams.yml` (run 37659814259): Requesty contestó por
+  0,000046 $ y un vídeo de 1 s de Grok Imagine Lite costó 0,02 $, lo estimado.
+
 Orden nuevo:
 
 1. **R3 con Hugging Face**: respaldo de OpenRouter → HF. Ya tiene token en el VPS.
