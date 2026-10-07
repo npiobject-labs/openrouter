@@ -11,7 +11,7 @@ use axum::{
 };
 use serde_json::{json, Value};
 
-use crate::{apps::Identidad, error::ErrorApi, uso::Agrupacion, Servicio};
+use crate::{apps::Identidad, error::ErrorApi, upstream::Upstream, uso::Agrupacion, Servicio};
 
 /// Cabecera con la que el cliente sabe qué registro mirar después. Va en
 /// `expose_headers` del CORS: sin eso el navegador no la deja leer.
@@ -27,7 +27,7 @@ pub async fn lista(
     State(servicio): State<Arc<Servicio>>,
     Extension(quien): Extension<Identidad>,
     Query(parametros): Query<HashMap<String, String>>,
-) -> Json<Value> {
+) -> Result<Json<Value>, ErrorApi> {
     let n = parametros
         .get("n")
         .and_then(|n| n.parse::<usize>().ok())
@@ -36,11 +36,12 @@ pub async fn lista(
 
     let app = filtro_de_app(&quien, &parametros);
     let operacion = filtro_de_operacion(&parametros);
-    Json(json!({
+    let upstream = filtro_de_upstream(&parametros)?;
+    Ok(Json(json!({
         "object": "list",
-        "data": servicio.uso.ultimos(n, app.as_deref(), operacion.as_deref()),
+        "data": servicio.uso.ultimos(n, app.as_deref(), operacion.as_deref(), upstream),
         "total": servicio.uso.total(),
-    }))
+    })))
 }
 
 /// `GET /v1/uso/{id}`: una llamada concreta, la que devolvió `X-Uso-Id`.
@@ -65,7 +66,8 @@ pub async fn una(
         })
 }
 
-/// `GET /v1/uso/resumen`: totales por día, modelo, aplicación u operación.
+/// `GET /v1/uso/resumen`: totales por día, modelo, aplicación, operación o
+/// upstream.
 ///
 /// `desde` y `hasta` se comparan como texto contra la fecha ISO, así que valen
 /// tanto `2026-09-12` como `2026-09-12T14:00:00Z`. Sin ellos, todo el histórico.
@@ -73,16 +75,18 @@ pub async fn resumen(
     State(servicio): State<Arc<Servicio>>,
     Extension(quien): Extension<Identidad>,
     Query(parametros): Query<HashMap<String, String>>,
-) -> Json<Value> {
+) -> Result<Json<Value>, ErrorApi> {
     let agrupar = Agrupacion::desde(parametros.get("agrupar").map(String::as_str));
     let app = filtro_de_app(&quien, &parametros);
     let operacion = filtro_de_operacion(&parametros);
+    let upstream = filtro_de_upstream(&parametros)?;
     let filas = servicio.uso.resumen(
         intervalo(&parametros, "desde").as_deref(),
         intervalo(&parametros, "hasta").as_deref(),
         &agrupar,
         app.as_deref(),
         operacion.as_deref(),
+        upstream,
     );
 
     // Los contadores se suman como enteros: un "llamadas: 3.0" en el JSON
@@ -100,12 +104,13 @@ pub async fn resumen(
         .sum::<f64>()
         + 0.0;
 
-    Json(json!({
+    Ok(Json(json!({
         "object": "list",
         "agrupar": match agrupar {
             Agrupacion::Modelo => "modelo",
             Agrupacion::App => "app",
             Agrupacion::Operacion => "operacion",
+            Agrupacion::Upstream => "upstream",
             Agrupacion::Dia => "dia",
         },
         "data": filas,
@@ -116,7 +121,7 @@ pub async fn resumen(
             "tokens_salida": cuenta("tokens_salida"),
             "coste": coste,
         },
-    }))
+    })))
 }
 
 /// `GET /v1/uso/exportar`: el histórico de un intervalo en JSON o en CSV.
@@ -135,23 +140,27 @@ pub async fn exportar(
 
     let app = filtro_de_app(&quien, &parametros);
     let operacion = filtro_de_operacion(&parametros);
+    let upstream = filtro_de_upstream(&parametros)?;
     let registros = servicio.uso.intervalo(
         intervalo(&parametros, "desde").as_deref(),
         intervalo(&parametros, "hasta").as_deref(),
         app.as_deref(),
         operacion.as_deref(),
+        upstream,
     );
 
     match formato {
         "json" => Ok(Json(json!({ "object": "list", "data": registros })).into_response()),
         "csv" => {
+            // La columna `upstream` va al final: quien lea por cabecera la
+            // encuentra y quien lea por posición no pierde ninguna de antes.
             let mut csv = String::from(
                 "id,fecha,modelo_pedido,modelo_servido,proveedor,tokens_entrada,tokens_salida,\
-tokens_razonamiento,tokens_cache,coste,coste_origen,latencia_ms,motivo_fin,estado\n",
+tokens_razonamiento,tokens_cache,coste,coste_origen,latencia_ms,motivo_fin,estado,upstream\n",
             );
             for r in &registros {
                 csv.push_str(&format!(
-                    "{},{},{},{},{},{},{},{},{},{},{},{},{},{}\n",
+                    "{},{},{},{},{},{},{},{},{},{},{},{},{},{},{}\n",
                     campo(&r.id),
                     campo(&r.fecha),
                     campo(&r.modelo_pedido),
@@ -166,6 +175,7 @@ tokens_razonamiento,tokens_cache,coste,coste_origen,latencia_ms,motivo_fin,estad
                     r.latencia_ms,
                     campo(r.motivo_fin.as_deref().unwrap_or("")),
                     r.estado,
+                    campo(&r.upstream),
                 ));
             }
             Ok((
@@ -211,6 +221,37 @@ fn filtro_de_operacion(parametros: &HashMap<String, String>) -> Option<String> {
         .map(String::as_str)
         .filter(|v| !v.is_empty())
         .map(str::to_string)
+}
+
+/// `?upstream=`: solo lo comprado en ese upstream (`openrouter` o `hf`). Un
+/// valor desconocido es un error y no "nada", para que una errata no pase por
+/// un histórico vacío.
+pub fn filtro_de_upstream(
+    parametros: &HashMap<String, String>,
+) -> Result<Option<&'static str>, ErrorApi> {
+    let Some(valor) = parametros
+        .get("upstream")
+        .map(String::as_str)
+        .filter(|v| !v.is_empty())
+    else {
+        return Ok(None);
+    };
+    Upstream::desde_nombre(valor)
+        .map(|u| Some(u.nombre()))
+        .ok_or_else(|| upstream_desconocido(valor))
+}
+
+/// El 400 de un `?upstream=` que no es ninguno de los que hay.
+pub fn upstream_desconocido(valor: &str) -> ErrorApi {
+    let conocidos: Vec<&str> = Upstream::TODOS.iter().map(|u| u.nombre()).collect();
+    ErrorApi::nuevo(
+        StatusCode::BAD_REQUEST,
+        "upstream_desconocido",
+        format!(
+            "No hay ningún upstream llamado \"{valor}\"; los que hay son {}.",
+            conocidos.join(", ")
+        ),
+    )
 }
 
 /// Un parámetro de fecha, descartando el vacío para que `?desde=` no filtre.

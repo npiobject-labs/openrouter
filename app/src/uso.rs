@@ -36,7 +36,8 @@ CREATE TABLE IF NOT EXISTS uso (
     id_openrouter  TEXT,
     app_id         TEXT,
     operacion      TEXT,
-    huella         TEXT
+    huella         TEXT,
+    upstream       TEXT
 );
 CREATE INDEX IF NOT EXISTS uso_fecha ON uso(fecha);
 CREATE INDEX IF NOT EXISTS uso_modelo ON uso(modelo_servido);
@@ -78,6 +79,10 @@ pub struct Registro {
     /// Lo que venga en la cabecera `X-Operacion`: el trabajo de negocio al que
     /// pertenece la llamada, para agrupar varias de un mismo presupuesto.
     pub operacion: Option<String>,
+    /// A quién se le compró: `openrouter` o `hf`. Los registros anteriores a
+    /// la etapa 9 no lo tienen guardado y se leen como `openrouter`, que es
+    /// lo único que había.
+    pub upstream: String,
 }
 
 impl Registro {
@@ -114,7 +119,8 @@ impl Registro {
     }
 
     /// Coste con los precios del catálogo, que están en dólares por millón.
-    /// Solo se aplica si no hay ya un coste dado por OpenRouter.
+    /// Solo se aplica si no hay ya un coste dado por OpenRouter. Para los
+    /// upstreams sin reconciliación (Hugging Face) es el coste definitivo.
     pub fn estima(&mut self, precios: Option<(f64, f64)>) {
         if self.coste_origen == "openrouter" {
             return;
@@ -147,9 +153,15 @@ impl Registro {
             app_id: f.get("app_id")?,
             operacion: f.get("operacion")?,
             huella: f.get("huella")?,
+            upstream: f
+                .get::<_, Option<String>>("upstream")?
+                .unwrap_or_else(|| UPSTREAM_DEFECTO.to_string()),
         })
     }
 }
+
+/// Lo que se entiende cuando un registro no dice su upstream.
+const UPSTREAM_DEFECTO: &str = "openrouter";
 
 fn texto(v: Option<&Value>) -> Option<String> {
     v.and_then(Value::as_str)
@@ -167,6 +179,7 @@ pub enum Agrupacion {
     Modelo,
     App,
     Operacion,
+    Upstream,
 }
 
 impl Agrupacion {
@@ -177,6 +190,7 @@ impl Agrupacion {
             Some("modelo") => Self::Modelo,
             Some("app") => Self::App,
             Some("operacion") => Self::Operacion,
+            Some("upstream") => Self::Upstream,
             _ => Self::Dia,
         }
     }
@@ -190,6 +204,8 @@ impl Agrupacion {
             // Lo que vino en X-Operacion: el trabajo de negocio. Sin cabecera,
             // un grupo propio para que no se mezcle con los que sí la traen.
             Self::Operacion => "coalesce(operacion, '(sin operacion)')",
+            // Lo anterior a la etapa 9 solo pudo ir a OpenRouter.
+            Self::Upstream => "coalesce(upstream, 'openrouter')",
         }
     }
 }
@@ -277,6 +293,7 @@ impl Uso {
             app_id: None,
             operacion: None,
             huella: None,
+            upstream: UPSTREAM_DEFECTO.into(),
         }
     }
 
@@ -286,8 +303,8 @@ impl Uso {
             "INSERT OR REPLACE INTO uso (id, fecha, modelo_pedido, modelo_servido, proveedor,
                 tokens_entrada, tokens_salida, tokens_razonamiento, tokens_cache,
                 coste, coste_origen, latencia_ms, motivo_fin, estado, id_openrouter,
-                app_id, operacion, huella)
-             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18)",
+                app_id, operacion, huella, upstream)
+             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?19)",
             params![
                 r.id,
                 r.fecha,
@@ -306,7 +323,8 @@ impl Uso {
                 r.id_openrouter,
                 r.app_id,
                 r.operacion,
-                r.huella
+                r.huella,
+                r.upstream
             ],
         );
         if let Err(e) = hecho {
@@ -315,13 +333,21 @@ impl Uso {
     }
 
     /// Los últimos `n`, del más reciente al más antiguo. Con `app`, solo los de
-    /// esa aplicación; con `operacion`, solo los de ese trabajo de negocio.
-    pub fn ultimos(&self, n: usize, app: Option<&str>, operacion: Option<&str>) -> Vec<Registro> {
+    /// esa aplicación; con `operacion`, solo los de ese trabajo de negocio;
+    /// con `upstream`, solo lo comprado ahí.
+    pub fn ultimos(
+        &self,
+        n: usize,
+        app: Option<&str>,
+        operacion: Option<&str>,
+        upstream: Option<&str>,
+    ) -> Vec<Registro> {
         self.consulta(
             "SELECT * FROM uso
              WHERE (?2 IS NULL OR app_id = ?2) AND (?3 IS NULL OR operacion = ?3)
+               AND (?4 IS NULL OR coalesce(upstream, 'openrouter') = ?4)
              ORDER BY fecha DESC, rowid DESC LIMIT ?1",
-            params![n as i64, app, operacion],
+            params![n as i64, app, operacion, upstream],
         )
     }
 
@@ -418,17 +444,20 @@ impl Uso {
         hasta: Option<&str>,
         app: Option<&str>,
         operacion: Option<&str>,
+        upstream: Option<&str>,
     ) -> Vec<Registro> {
         self.consulta(
             "SELECT * FROM uso
              WHERE (?1 IS NULL OR fecha >= ?1) AND (?2 IS NULL OR fecha <= ?2)
                AND (?3 IS NULL OR app_id = ?3) AND (?4 IS NULL OR operacion = ?4)
+               AND (?5 IS NULL OR coalesce(upstream, 'openrouter') = ?5)
              ORDER BY fecha ASC, rowid ASC",
-            params![desde, hasta, app, operacion],
+            params![desde, hasta, app, operacion, upstream],
         )
     }
 
-    /// Totales por día o por modelo. Devuelve filas ya listas para el JSON.
+    /// Totales por día, modelo, aplicación, operación o upstream. Devuelve
+    /// filas ya listas para el JSON.
     pub fn resumen(
         &self,
         desde: Option<&str>,
@@ -436,6 +465,7 @@ impl Uso {
         agrupar: &Agrupacion,
         app: Option<&str>,
         operacion: Option<&str>,
+        upstream: Option<&str>,
     ) -> Vec<Value> {
         let consulta = format!(
             "SELECT {columna} AS grupo,
@@ -448,6 +478,7 @@ impl Uso {
              FROM uso
              WHERE (?1 IS NULL OR fecha >= ?1) AND (?2 IS NULL OR fecha <= ?2)
                AND (?3 IS NULL OR app_id = ?3) AND (?4 IS NULL OR operacion = ?4)
+               AND (?5 IS NULL OR coalesce(upstream, 'openrouter') = ?5)
              GROUP BY grupo
              ORDER BY grupo DESC",
             columna = agrupar.columna()
@@ -457,7 +488,7 @@ impl Uso {
         let Ok(mut sentencia) = conexion.prepare(&consulta) else {
             return Vec::new();
         };
-        let filas = sentencia.query_map(params![desde, hasta, app, operacion], |f| {
+        let filas = sentencia.query_map(params![desde, hasta, app, operacion, upstream], |f| {
             Ok(serde_json::json!({
                 "grupo": f.get::<_, String>("grupo")?,
                 "llamadas": f.get::<_, i64>("llamadas")?,
@@ -516,6 +547,7 @@ fn prepara(conexion: &Connection) -> rusqlite::Result<()> {
         ("app_id", "TEXT"),
         ("operacion", "TEXT"),
         ("huella", "TEXT"),
+        ("upstream", "TEXT"),
     ] {
         asegura_columna(conexion, "uso", columna, tipo)?;
     }
@@ -623,6 +655,74 @@ mod pruebas {
     }
 
     #[test]
+    fn una_llamada_a_hugging_face_se_estima_con_su_catalogo_y_no_se_reconcilia() {
+        let uso = en_memoria();
+        let mut r = uso.abre("hf:openai/gpt-oss-120b:groq".into());
+        r.upstream = "hf".into();
+        // Lo que devuelve el router: `usage` sin `cost`, que es cosa de OpenRouter.
+        r.desde_respuesta(&serde_json::json!({
+            "id": "chatcmpl-abc", "model": "openai/gpt-oss-120b",
+            "usage": { "prompt_tokens": 2_000_000, "completion_tokens": 1_000_000 }
+        }));
+        // Precio de groq en el catálogo de Hugging Face: 0.15 / 0.75 por millón.
+        r.estima(Some((0.15, 0.75)));
+        assert_eq!(r.coste, Some(0.3 + 0.75));
+        assert_eq!(r.coste_origen, "estimado");
+        uso.anota(r.clone());
+
+        let guardado = uso.uno(&r.id).unwrap();
+        assert_eq!(guardado.upstream, "hf");
+        assert_eq!(guardado.coste_origen, "estimado");
+        assert_eq!(serde_json::to_value(&guardado).unwrap()["upstream"], "hf");
+    }
+
+    #[test]
+    fn el_upstream_filtra_y_agrupa_y_lo_viejo_cuenta_como_openrouter() {
+        let uso = en_memoria();
+        for (upstream, coste) in [("openrouter", 1.0), ("hf", 2.0), ("hf", 4.0)] {
+            let mut r = uso.abre("m".into());
+            r.upstream = upstream.into();
+            r.coste = Some(coste);
+            r.estado = 200;
+            uso.anota(r);
+        }
+        // Un registro de antes de la etapa 9: sin upstream guardado.
+        uso.con(|c| {
+            c.execute(
+                "INSERT INTO uso (id, fecha, modelo_pedido, coste_origen, coste, estado)
+                 VALUES ('u-viejo', '2026-09-01T00:00:00Z', 'm', 'estimado', 8.0, 200)",
+                [],
+            )
+            .unwrap();
+        });
+
+        assert_eq!(uso.ultimos(50, None, None, Some("hf")).len(), 2);
+        assert_eq!(
+            uso.ultimos(50, None, None, Some("openrouter")).len(),
+            2,
+            "el viejo se lee como openrouter"
+        );
+        assert_eq!(uso.ultimos(50, None, None, None).len(), 4);
+        assert_eq!(uso.uno("u-viejo").unwrap().upstream, "openrouter");
+        assert_eq!(uso.intervalo(None, None, None, None, Some("hf")).len(), 2);
+
+        let por_upstream = uso.resumen(None, None, &Agrupacion::Upstream, None, None, None);
+        assert_eq!(por_upstream.len(), 2);
+        let hf = por_upstream.iter().find(|f| f["grupo"] == "hf").unwrap();
+        assert_eq!(hf["coste"], 6.0);
+        let openrouter = por_upstream
+            .iter()
+            .find(|f| f["grupo"] == "openrouter")
+            .unwrap();
+        assert_eq!(openrouter["coste"], 9.0);
+
+        // Filtro y agrupación a la vez: por día, solo lo de Hugging Face.
+        let solo_hf = uso.resumen(None, None, &Agrupacion::Dia, None, None, Some("hf"));
+        assert_eq!(solo_hf.len(), 1);
+        assert_eq!(solo_hf[0]["coste"], 6.0);
+    }
+
+    #[test]
     fn el_historico_sobrevive_a_reabrir_el_fichero() {
         let ruta = std::env::temp_dir().join(format!("uso-{}.db", std::process::id()));
         let ruta = ruta.to_str().unwrap();
@@ -651,7 +751,7 @@ mod pruebas {
             uso.anota(r);
         }
 
-        let por_modelo = uso.resumen(None, None, &Agrupacion::Modelo, None, None);
+        let por_modelo = uso.resumen(None, None, &Agrupacion::Modelo, None, None, None);
         assert_eq!(por_modelo.len(), 2);
         let a = por_modelo.iter().find(|f| f["grupo"] == "a").unwrap();
         assert_eq!(a["llamadas"], 2);
@@ -660,7 +760,7 @@ mod pruebas {
         assert_eq!(a["tokens_entrada"], 20);
 
         // Todas son de hoy, así que por día sale un solo grupo con las tres.
-        let por_dia = uso.resumen(None, None, &Agrupacion::Dia, None, None);
+        let por_dia = uso.resumen(None, None, &Agrupacion::Dia, None, None, None);
         assert_eq!(por_dia.len(), 1);
         assert_eq!(por_dia[0]["llamadas"], 3);
         assert_eq!(por_dia[0]["coste"], 7.0);
@@ -681,10 +781,13 @@ mod pruebas {
             r.estado = 200;
             uso.anota(r);
         }
-        assert_eq!(uso.ultimos(50, None, Some("pres-1")).len(), 2);
-        assert_eq!(uso.intervalo(None, None, None, Some("pres-2")).len(), 1);
+        assert_eq!(uso.ultimos(50, None, Some("pres-1"), None).len(), 2);
+        assert_eq!(
+            uso.intervalo(None, None, None, Some("pres-2"), None).len(),
+            1
+        );
 
-        let por_operacion = uso.resumen(None, None, &Agrupacion::Operacion, None, None);
+        let por_operacion = uso.resumen(None, None, &Agrupacion::Operacion, None, None, None);
         assert_eq!(
             por_operacion.len(),
             3,
@@ -702,7 +805,14 @@ mod pruebas {
         assert_eq!(sin["coste"], 8.0);
 
         // El filtro y la agrupación se combinan: solo un grupo.
-        let solo = uso.resumen(None, None, &Agrupacion::Operacion, None, Some("pres-2"));
+        let solo = uso.resumen(
+            None,
+            None,
+            &Agrupacion::Operacion,
+            None,
+            Some("pres-2"),
+            None,
+        );
         assert_eq!(solo.len(), 1);
         assert_eq!(solo[0]["coste"], 4.0);
     }
@@ -715,12 +825,16 @@ mod pruebas {
         uso.anota(r);
         // Lo que manda la ruta tras normalizar un "hasta" de solo fecha.
         assert_eq!(
-            uso.intervalo(None, Some("2026-09-12T23:59:59Z"), None, None)
+            uso.intervalo(None, Some("2026-09-12T23:59:59Z"), None, None, None)
                 .len(),
             1
         );
         // Sin normalizar, la fecha suelta dejaria el dia fuera.
-        assert_eq!(uso.intervalo(None, Some("2026-09-12"), None, None).len(), 0);
+        assert_eq!(
+            uso.intervalo(None, Some("2026-09-12"), None, None, None)
+                .len(),
+            0
+        );
     }
 
     /// El esquema tal como quedaba en la etapa 4, sin aplicaciones.
@@ -763,7 +877,7 @@ mod pruebas {
         let mut r = uso.abre("m".into());
         r.app_id = Some("app_uno".into());
         uso.anota(r);
-        assert_eq!(uso.ultimos(50, Some("app_uno"), None).len(), 1);
+        assert_eq!(uso.ultimos(50, Some("app_uno"), None, None).len(), 1);
         let _ = std::fs::remove_file(ruta);
     }
 
@@ -783,19 +897,19 @@ mod pruebas {
             uso.anota(r);
         }
 
-        assert_eq!(uso.ultimos(50, Some("app_uno"), None).len(), 2);
-        assert_eq!(uso.ultimos(50, Some("app_dos"), None).len(), 1);
+        assert_eq!(uso.ultimos(50, Some("app_uno"), None, None).len(), 2);
+        assert_eq!(uso.ultimos(50, Some("app_dos"), None, None).len(), 1);
         assert_eq!(
-            uso.ultimos(50, None, None).len(),
+            uso.ultimos(50, None, None, None).len(),
             4,
             "sin filtro se ve todo"
         );
 
-        let de_una = uso.resumen(None, None, &Agrupacion::Dia, Some("app_uno"), None);
+        let de_una = uso.resumen(None, None, &Agrupacion::Dia, Some("app_uno"), None, None);
         assert_eq!(de_una[0]["coste"], 3.0);
 
         // Agrupado por aplicacion, la de administracion sale con su etiqueta.
-        let por_app = uso.resumen(None, None, &Agrupacion::App, None, None);
+        let por_app = uso.resumen(None, None, &Agrupacion::App, None, None, None);
         assert_eq!(por_app.len(), 3);
         assert!(por_app.iter().any(|f| f["grupo"] == "administracion"));
     }
@@ -842,8 +956,16 @@ mod pruebas {
             r.fecha = fecha.into();
             uso.anota(r);
         }
-        assert_eq!(uso.intervalo(Some("2026-03-01"), None, None, None).len(), 1);
-        assert_eq!(uso.intervalo(None, Some("2026-03-01"), None, None).len(), 1);
-        assert_eq!(uso.intervalo(None, None, None, None).len(), 2);
+        assert_eq!(
+            uso.intervalo(Some("2026-03-01"), None, None, None, None)
+                .len(),
+            1
+        );
+        assert_eq!(
+            uso.intervalo(None, Some("2026-03-01"), None, None, None)
+                .len(),
+            1
+        );
+        assert_eq!(uso.intervalo(None, None, None, None, None).len(), 2);
     }
 }

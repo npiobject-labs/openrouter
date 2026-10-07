@@ -6,6 +6,7 @@ mod error;
 mod guardia;
 mod openrouter;
 mod rutas;
+mod upstream;
 mod uso;
 
 use std::sync::Arc;
@@ -27,6 +28,9 @@ use crate::{catalogo::Catalogo, config::Config, openrouter::Cliente, uso::Uso};
 /// Lo que comparten todas las rutas.
 pub struct Servicio {
     pub config: Config,
+    /// El cliente hacia los upstreams. Se sigue llamando `openrouter` porque
+    /// así nació y así lo nombran todas las rutas; desde la etapa 9 habla
+    /// también con Hugging Face.
     pub openrouter: Cliente,
     pub catalogo: Catalogo,
     pub uso: Uso,

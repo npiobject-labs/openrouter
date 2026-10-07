@@ -11,6 +11,9 @@
 #   CON_OPENROUTER   "1" si el despliegue tiene clave de OpenRouter: entonces
 #                    se comprueban /v1/estado, /v1/models y /v1/uso, que
 #                    hablan con OpenRouter sin gastar credito.
+#   CON_HF           "1" si el despliegue tiene HF_TOKEN: entonces
+#                    /v1/models?upstream=hf tiene que responder 200; sin el,
+#                    503 con el sobre y el codigo upstream_sin_configurar.
 #
 # Ninguna comprobacion gasta credito ni crea nada en el servicio.
 
@@ -19,6 +22,7 @@ base="${1:?url base}"; base="${base%/}"
 sha="${2:?sha esperado}"
 clave="${SERVICIO_CLAVE:-}"
 con_openrouter="${CON_OPENROUTER:-0}"
+con_hf="${CON_HF:-0}"
 tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"' EXIT
 
@@ -108,6 +112,25 @@ http="$(curl -s -o "$tmp/uso.json" -w '%{http_code}' --max-time 20 "${auth[@]}" 
   || { cat "$tmp/uso.json"; fallo "/v1/uso no devolvio la lista esperada (HTTP ${http})."; }
 ok "registro de uso con $(jq -r '.total' "$tmp/uso.json") llamadas"
 
+# --- /v1/models?upstream=hf: el catalogo del router de Hugging Face ---
+# Con HF_TOKEN tiene que responder; sin el, 503 con el sobre habitual y un
+# codigo propio, porque el resto del servicio sigue funcionando.
+http="$(curl -s -o "$tmp/hf.json" -w '%{http_code}' --max-time 40 "${auth[@]}" "${base}/v1/models?upstream=hf" || true)"
+echo "/v1/models?upstream=hf -> HTTP ${http}"
+if [ "${con_hf}" = "1" ]; then
+  [ "${http}" = "200" ] || { cat "$tmp/hf.json"; fallo "/v1/models?upstream=hf respondio ${http} con HF_TOKEN configurado."; }
+  n_hf="$(jq -r '.data | length' "$tmp/hf.json" 2> /dev/null || echo 0)"
+  [ "${n_hf}" -gt 0 ] || fallo "el catalogo de Hugging Face vino vacio o ilegible"
+  jq -e '.upstream == "hf" and (.data | all(.id | startswith("hf:")))' "$tmp/hf.json" > /dev/null \
+    || fallo "el catalogo de Hugging Face no viene con ids hf: y upstream=hf"
+  ok "el catalogo de Hugging Face trae ${n_hf} entradas (modelo y modelo:host)"
+else
+  [ "${http}" = "503" ] || { cat "$tmp/hf.json"; fallo "/v1/models?upstream=hf respondio ${http} sin HF_TOKEN y se esperaba 503."; }
+  jq -e '.ok == false and .error.code == "upstream_sin_configurar" and .error.type == "api_error"' "$tmp/hf.json" > /dev/null \
+    || { cat "$tmp/hf.json"; fallo "sin HF_TOKEN, /v1/models?upstream=hf no devolvio el sobre upstream_sin_configurar."; }
+  ok "sin HF_TOKEN, hf: responde 503 upstream_sin_configurar y el resto sigue"
+fi
+
 if [ "${con_openrouter}" != "1" ]; then
   echo "Sin clave de OpenRouter en el despliegue: no se comprueban /v1/estado ni /v1/models."
   resumen "Sin clave de OpenRouter: /v1/estado y /v1/models sin comprobar"
@@ -132,6 +155,13 @@ defecto="$(jq -r '.modelo_defecto // empty' "$tmp/estado.json")"
 multimodal="$(jq -r '.modelo_multimodal // empty' "$tmp/estado.json")"
 [ -n "${defecto}" ] && [ -n "${multimodal}" ] || fallo "/v1/estado no publica modelo_defecto y modelo_multimodal."
 ok "modelos por defecto: ${defecto} (texto) y ${multimodal} (adjuntos)"
+# Desde 0.6.4 /v1/estado dice que upstreams tienen clave; un despliegue
+# anterior no lo trae y es la pista de que corre un build viejo.
+jq -e '.upstreams.openrouter == true and (.upstreams.hf | type == "boolean")' "$tmp/estado.json" > /dev/null \
+  || fallo "/v1/estado no publica upstreams (openrouter y hf)."
+[ "$(jq -r '.upstreams.hf' "$tmp/estado.json")" = "$([ "${con_hf}" = "1" ] && echo true || echo false)" ] \
+  || fallo "/v1/estado dice upstreams.hf=$(jq -r '.upstreams.hf' "$tmp/estado.json") y CON_HF=${con_hf}: el secreto HF_TOKEN no llego al despliegue."
+ok "upstreams: openrouter=true, hf=$(jq -r '.upstreams.hf' "$tmp/estado.json")"
 
 # --- /v1/models: el catalogo trae modelos de verdad ---
 http="$(curl -s -o "$tmp/modelos.json" -w '%{http_code}' --max-time 40 "${auth[@]}" "${base}/v1/models" || true)"
@@ -144,5 +174,13 @@ ok "el catalogo trae ${n} modelos"
 jq -e '.data[0] | has("descripcion") and has("precios") and has("modalidades_salida") and has("parametros")' "$tmp/modelos.json" > /dev/null \
   || fallo "/v1/models no trae los campos ampliados (descripcion, precios, modalidades_salida, parametros)"
 ok "cada modelo trae descripcion, precios completos, modalidades de salida y parametros"
+# Desde 0.6.4 el catalogo es el completo: tiene que haber modelos que no
+# escriben texto (imagen, video, voz...), y cada uno trae canonical_slug.
+jq -e '[.data[] | select((.modalidades_salida | length) > 0 and (.modalidades_salida | index("text")) == null)] | length > 0' "$tmp/modelos.json" > /dev/null \
+  || fallo "/v1/models solo trae modelos de texto: falta output_modalities=all en la peticion a OpenRouter."
+jq -e '.data[0] | has("canonical_slug") and has("hugging_face_id") and has("upstream")' "$tmp/modelos.json" > /dev/null \
+  || fallo "/v1/models no trae canonical_slug, hugging_face_id y upstream"
+sin_texto="$(jq -r '[.data[] | select((.modalidades_salida | index("text")) == null)] | length' "$tmp/modelos.json")"
+ok "el catalogo es el completo: ${sin_texto} modelos sin salida de texto, con canonical_slug y hugging_face_id"
 
 resumen "Verificacion completa en verde: /salud=${sha}, OpenRouter conectado, ${n} modelos"

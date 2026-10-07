@@ -12,17 +12,24 @@ pub const REFERER: &str = "https://npiobject-labs.github.io/openrouter/";
 const MODELO_DEFECTO: &str = "openai/gpt-oss-120b";
 const MODELO_MULTIMODAL: &str = "google/gemini-3.1-flash-lite";
 const BASE_OPENROUTER: &str = "https://openrouter.ai/api/v1";
+/// El router de Hugging Face habla la API de OpenAI bajo `/v1`. Una clave da
+/// acceso a todos los hosts que sirven cada modelo.
+const BASE_HF: &str = "https://router.huggingface.co/v1";
 
 #[derive(Clone)]
 pub struct Config {
     /// Clave de OpenRouter. Nunca sale del backend.
     pub clave_openrouter: Option<String>,
+    /// Token del router de Hugging Face (`HF_TOKEN`). Opcional: sin él, los
+    /// modelos `hf:` responden 503 y todo lo demás sigue igual.
+    pub clave_hf: Option<String>,
     /// Clave que exigimos a quien llama a /v1. Sin ella el servicio no atiende.
     pub clave_servicio: Option<String>,
     pub modelo_defecto: String,
     /// El de las consultas sin `model` que llevan imagen, audio, vídeo o fichero.
     pub modelo_multimodal: String,
     pub base_openrouter: String,
+    pub base_hf: String,
     pub build: String,
     pub puerto: u16,
     /// Fichero SQLite del histórico. Por defecto, el volumen de Fly.
@@ -36,6 +43,7 @@ impl Config {
     pub fn del_entorno() -> Self {
         Self {
             clave_openrouter: variable("OPENROUTER_API_KEY"),
+            clave_hf: variable("HF_TOKEN"),
             clave_servicio: variable("SERVICIO_CLAVE"),
             modelo_defecto: variable("MODELO_DEFECTO")
                 .unwrap_or_else(|| MODELO_DEFECTO.to_string()),
@@ -43,6 +51,12 @@ impl Config {
                 .unwrap_or_else(|| MODELO_MULTIMODAL.to_string()),
             base_openrouter: variable("OPENROUTER_BASE")
                 .unwrap_or_else(|| BASE_OPENROUTER.to_string())
+                .trim_end_matches('/')
+                .to_string(),
+            // HF_BASE, como OPENROUTER_BASE, solo sirve para probar contra un
+            // servidor falso; en producción no se define.
+            base_hf: variable("HF_BASE")
+                .unwrap_or_else(|| BASE_HF.to_string())
                 .trim_end_matches('/')
                 .to_string(),
             build: variable("BUILD_ID").unwrap_or_else(|| "dev".to_string()),

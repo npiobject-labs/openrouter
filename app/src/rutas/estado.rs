@@ -31,5 +31,7 @@ pub async fn estado(
         "almacen": servicio.uso.almacen(),
         "registros": servicio.uso.total(),
         "clave": clave,
+        // Qué se puede comprar desde este despliegue. No dice ninguna clave.
+        "upstreams": servicio.openrouter.configurados(),
     })))
 }

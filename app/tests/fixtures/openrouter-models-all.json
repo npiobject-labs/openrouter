@@ -1,0 +1,299 @@
+{
+ "data": [
+  {
+   "id": "openai/gpt-oss-120b",
+   "canonical_slug": "openai/gpt-oss-120b",
+   "hugging_face_id": "openai/gpt-oss-120b",
+   "name": "OpenAI: gpt-oss-120b",
+   "created": 1754414231,
+   "description": "gpt-oss-120b is an open-weight, 117B-parameter Mixture-of-Experts (MoE) language model from OpenAI designed for high-reasoning, agentic, and general-purpose production use cases. It activates 5.1B parameters per forward pass and is optimized...",
+   "context_length": 131072,
+   "architecture": {
+    "modality": "text->text",
+    "input_modalities": [
+     "text"
+    ],
+    "output_modalities": [
+     "text"
+    ],
+    "tokenizer": "GPT",
+    "instruct_type": null
+   },
+   "pricing": {
+    "prompt": "0.000000037",
+    "completion": "0.00000017"
+   },
+   "top_provider": {
+    "context_length": 131072,
+    "max_completion_tokens": 117964,
+    "is_moderated": false
+   },
+   "per_request_limits": null,
+   "supported_parameters": [
+    "frequency_penalty",
+    "include_reasoning",
+    "logit_bias",
+    "logprobs",
+    "max_tokens",
+    "min_p",
+    "presence_penalty",
+    "reasoning",
+    "reasoning_effort",
+    "repetition_penalty",
+    "response_format",
+    "seed",
+    "stop",
+    "structured_outputs",
+    "temperature",
+    "tool_choice",
+    "tools",
+    "top_a",
+    "top_k",
+    "top_logprobs",
+    "top_p"
+   ],
+   "default_parameters": {
+    "temperature": null,
+    "top_p": null,
+    "frequency_penalty": null
+   },
+   "supported_voices": null,
+   "knowledge_cutoff": "2024-06-30",
+   "expiration_date": null,
+   "links": {
+    "details": "/api/v1/models/openai/gpt-oss-120b/endpoints"
+   },
+   "reasoning": {
+    "mandatory": true,
+    "supported_efforts": [
+     "high",
+     "medium",
+     "low"
+    ],
+    "default_effort": "medium"
+   }
+  },
+  {
+   "id": "meta-llama/llama-3.3-70b-instruct",
+   "canonical_slug": "meta-llama/llama-3.3-70b-instruct",
+   "hugging_face_id": "meta-llama/Llama-3.3-70B-Instruct",
+   "name": "Meta: Llama 3.3 70B Instruct",
+   "created": 1733506137,
+   "description": "The Meta Llama 3.3 multilingual large language model (LLM) is a pretrained and instruction tuned generative model in 70B (text in/text out). The Llama 3.3 instruction tuned text only model...",
+   "context_length": 131072,
+   "architecture": {
+    "modality": "text->text",
+    "input_modalities": [
+     "text"
+    ],
+    "output_modalities": [
+     "text"
+    ],
+    "tokenizer": "Llama3",
+    "instruct_type": "llama3"
+   },
+   "pricing": {
+    "prompt": "0.00000022",
+    "completion": "0.0000005",
+    "input_cache_read": "0.00000011"
+   },
+   "top_provider": {
+    "context_length": 131072,
+    "max_completion_tokens": 16384,
+    "is_moderated": false
+   },
+   "per_request_limits": null,
+   "supported_parameters": [
+    "frequency_penalty",
+    "logit_bias",
+    "logprobs",
+    "max_tokens",
+    "min_p",
+    "presence_penalty",
+    "repetition_penalty",
+    "response_format",
+    "seed",
+    "stop",
+    "structured_outputs",
+    "temperature",
+    "tool_choice",
+    "tools",
+    "top_k",
+    "top_logprobs",
+    "top_p"
+   ],
+   "default_parameters": {},
+   "supported_voices": null,
+   "knowledge_cutoff": "2023-12-31",
+   "expiration_date": null,
+   "links": {
+    "details": "/api/v1/models/meta-llama/llama-3.3-70b-instruct/endpoints"
+   }
+  },
+  {
+   "id": "alibaba/wan-3.0",
+   "canonical_slug": "alibaba/wan-3.0-20260824",
+   "hugging_face_id": null,
+   "name": "Alibaba: Wan 3.0",
+   "created": 1787603856,
+   "description": "Wan 3.0 is a video generation model from Alibaba for text-to-video, image-to-video, and reference-guided video generation. It produces 480p, 720p, or 1080p video with durations from 2 to 30 seconds.",
+   "context_length": 0,
+   "architecture": {
+    "modality": "text+image->video",
+    "input_modalities": [
+     "text",
+     "image"
+    ],
+    "output_modalities": [
+     "video"
+    ],
+    "tokenizer": "Other",
+    "instruct_type": null
+   },
+   "pricing": {
+    "prompt": "0",
+    "completion": "0"
+   },
+   "top_provider": {
+    "context_length": 0,
+    "max_completion_tokens": 0,
+    "is_moderated": false
+   },
+   "per_request_limits": null,
+   "supported_parameters": [
+    "max_tokens",
+    "presence_penalty",
+    "response_format",
+    "seed",
+    "temperature",
+    "top_p"
+   ],
+   "default_parameters": {},
+   "supported_voices": null,
+   "knowledge_cutoff": null,
+   "expiration_date": null,
+   "links": {
+    "details": "/api/v1/models/alibaba/wan-3.0-20260824/endpoints"
+   }
+  },
+  {
+   "id": "black-forest-labs/flux-3-image",
+   "canonical_slug": "black-forest-labs/flux-3-image-20261001",
+   "hugging_face_id": null,
+   "name": "Black Forest Labs: FLUX.3 Image",
+   "created": 1790885807,
+   "description": "FLUX.3 Image is Black Forest Labs' flagship image generation and editing model. It handles text-to-image and multi-reference editing with up to 10 input images, and renders at fixed resolution tiers...",
+   "context_length": 46864,
+   "architecture": {
+    "modality": "text+image->image",
+    "input_modalities": [
+     "text",
+     "image"
+    ],
+    "output_modalities": [
+     "image"
+    ],
+    "tokenizer": "Other",
+    "instruct_type": null
+   },
+   "pricing": {
+    "prompt": "0",
+    "completion": "0",
+    "image_token": "0.00000491017964071857",
+    "image_output": "0.00000491017964071857"
+   },
+   "top_provider": {
+    "context_length": 46864,
+    "max_completion_tokens": 42177,
+    "is_moderated": false
+   },
+   "per_request_limits": null,
+   "supported_parameters": [
+    "seed"
+   ],
+   "default_parameters": {},
+   "supported_voices": null,
+   "knowledge_cutoff": null,
+   "expiration_date": null,
+   "links": {
+    "details": "/api/v1/models/black-forest-labs/flux-3-image-20261001/endpoints"
+   }
+  },
+  {
+   "id": "google/gemini-3.5-transcribe",
+   "canonical_slug": "google/gemini-3.5-transcribe-20260827",
+   "hugging_face_id": null,
+   "name": "Google: Gemini 3.5 Transcribe",
+   "created": 1790295820,
+   "description": "Gemini 3.5 Transcribe is a speech-to-text model from Google. It is suited for synchronous transcription that needs word-level timestamps or speaker diarization, with support for up to eight speakers. Audio...",
+   "context_length": 98304,
+   "architecture": {
+    "modality": "audio->transcription",
+    "input_modalities": [
+     "audio"
+    ],
+    "output_modalities": [
+     "transcription"
+    ],
+    "tokenizer": "Gemini",
+    "instruct_type": null
+   },
+   "pricing": {
+    "prompt": "0.000002",
+    "completion": "0.000012"
+   },
+   "top_provider": {
+    "context_length": 98304,
+    "max_completion_tokens": 32768,
+    "is_moderated": false
+   },
+   "per_request_limits": null,
+   "supported_parameters": [],
+   "default_parameters": {},
+   "supported_voices": null,
+   "knowledge_cutoff": null,
+   "expiration_date": null,
+   "links": {
+    "details": "/api/v1/models/google/gemini-3.5-transcribe-20260827/endpoints"
+   }
+  },
+  {
+   "id": "voyageai/voyage-code-4",
+   "canonical_slug": "voyageai/voyage-code-4-20260812",
+   "hugging_face_id": null,
+   "name": "VoyageAI by MongoDB: voyage-code-4",
+   "created": 1786636912,
+   "description": "voyage-code-4 is a code embedding model from Voyage AI, a MongoDB company. It is designed for coding agents and code retrieval, with Matryoshka embeddings at 2048, 1024, 512, and 256...",
+   "context_length": 32000,
+   "architecture": {
+    "modality": "text->embeddings",
+    "input_modalities": [
+     "text"
+    ],
+    "output_modalities": [
+     "embeddings"
+    ],
+    "tokenizer": "Other",
+    "instruct_type": null
+   },
+   "pricing": {
+    "prompt": "0.00000012",
+    "completion": "0"
+   },
+   "top_provider": {
+    "context_length": 32000,
+    "max_completion_tokens": 28800,
+    "is_moderated": false
+   },
+   "per_request_limits": null,
+   "supported_parameters": [],
+   "default_parameters": {},
+   "supported_voices": null,
+   "knowledge_cutoff": null,
+   "expiration_date": null,
+   "links": {
+    "details": "/api/v1/models/voyageai/voyage-code-4-20260812/endpoints"
+   }
+  }
+ ]
+}

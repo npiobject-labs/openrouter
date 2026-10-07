@@ -5,7 +5,7 @@ use axum::{
 };
 use serde_json::{json, Value};
 
-use crate::rutas::uso::CABECERA_USO;
+use crate::{rutas::uso::CABECERA_USO, upstream::Upstream};
 
 /// Error de la API. Sale siempre con el mismo sobre, venga de aquí o de
 /// OpenRouter, porque una app que llama no tiene por qué saber dónde falló:
@@ -51,16 +51,44 @@ impl ErrorApi {
         )
     }
 
+    /// Falta la clave de un upstream que no es OpenRouter. Es otro código que
+    /// `sin_configurar` a propósito: aquel significa que el servicio entero no
+    /// puede atender; este, que solo los modelos de ese upstream no responden
+    /// y todo lo demás sigue funcionando.
+    pub fn upstream_sin_configurar(upstream: Upstream) -> Self {
+        Self::nuevo(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "upstream_sin_configurar",
+            format!(
+                "El servicio no tiene clave de {} configurada (secreto {}); los modelos \"{}\" no \
+                 responden hasta que se defina.",
+                upstream.titulo(),
+                upstream.secreto(),
+                upstream.prefijo()
+            ),
+        )
+    }
+
     /// Un rechazo de OpenRouter, traducido a nuestro sobre. Se conserva su
     /// código de estado: un 402 por saldo o un 404 por modelo inexistente
     /// significan lo mismo para quien llama, y taparlos con un 502 le quitaría
     /// la única pista útil.
     pub fn de_openrouter(estado: StatusCode, cuerpo: Value) -> Self {
+        Self::de_upstream(Upstream::OpenRouter, estado, cuerpo)
+    }
+
+    /// Lo mismo para cualquier upstream: el código lleva su nombre
+    /// (`openrouter_rechaza`, `hf_rechaza`) y el cuerpo original va en
+    /// `error.upstream`.
+    pub fn de_upstream(upstream: Upstream, estado: StatusCode, cuerpo: Value) -> Self {
         Self {
             estado,
-            codigo: "openrouter_rechaza",
+            codigo: upstream.codigo_rechaza(),
             mensaje: mensaje_de(&cuerpo).unwrap_or_else(|| {
-                format!("OpenRouter respondió {estado} sin explicar el motivo.")
+                format!(
+                    "{} respondió {estado} sin explicar el motivo.",
+                    upstream.titulo()
+                )
             }),
             upstream: Some(cuerpo),
             uso: None,

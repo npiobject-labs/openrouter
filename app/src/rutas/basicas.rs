@@ -18,14 +18,16 @@ pub async fn holamundo() -> &'static str {
     "holamundo"
 }
 
-/// Salud del proceso. No llama a OpenRouter: dice si el servicio está en pie y
-/// con qué build, nada más.
+/// Salud del proceso. No llama a ningún upstream: dice si el servicio está en
+/// pie, con qué build y qué claves tiene, nada más. `openrouter` se conserva
+/// tal cual desde la etapa 1; `upstreams` lo repite junto a los demás.
 pub async fn salud(State(servicio): State<Arc<Servicio>>) -> Json<Value> {
     Json(json!({
         "ok": true,
         "build": servicio.config.build,
         "openrouter": servicio.config.clave_openrouter.is_some(),
         "clave_servicio": servicio.config.clave_servicio.is_some(),
+        "upstreams": servicio.openrouter.configurados(),
     }))
 }
 

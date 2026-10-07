@@ -109,6 +109,12 @@ footer{display:flex;flex-wrap:wrap;gap:.4rem 1.2rem;font-size:.8rem;color:var(--
   <section class="panel">
     <h2>Modelo <span id="cat-estado" class="estado">catálogo sin cargar</span></h2>
     <div class="fila">
+      <label for="f-upstream">Comprar en
+        <select id="f-upstream" title="OpenRouter es el de siempre; Hugging Face solo responde si el despliegue tiene HF_TOKEN">
+          <option value="">OpenRouter</option>
+          <option value="hf">Hugging Face (hf:)</option>
+        </select>
+      </label>
       <label for="f-texto">Buscar<input id="f-texto" placeholder="id o nombre" autocomplete="off"></label>
       <label for="f-prov">Proveedor<select id="f-prov"><option value="">Todos</option></select></label>
       <label for="f-ctx">Contexto mínimo
@@ -135,7 +141,7 @@ footer{display:flex;flex-wrap:wrap;gap:.4rem 1.2rem;font-size:.8rem;color:var(--
       <div><dt>Herramientas</dt><dd id="m-tools">–</dd></div>
       <div><dt>Salida JSON</dt><dd id="m-json">–</dd></div>
     </dl>
-    <p>Precios en dólares por millón de tokens, tal como los publica OpenRouter. El servicio cachea el catálogo una hora.</p>
+    <p>Precios en dólares por millón de tokens, tal como los publica cada upstream. El servicio cachea cada catálogo una hora. Los modelos <code>hf:</code> van al router de Hugging Face; el sufijo <code>:host</code> elige quién sirve.</p>
   </section>
 
   <section class="panel">
@@ -378,6 +384,7 @@ footer{display:flex;flex-wrap:wrap;gap:.4rem 1.2rem;font-size:.8rem;color:var(--
 
   function consulta(refrescar){
     var p = new URLSearchParams();
+    if ($('f-upstream').value) p.set('upstream', $('f-upstream').value);
     if ($('f-texto').value.trim()) p.set('texto', $('f-texto').value.trim());
     if ($('f-prov').value) p.set('proveedor', $('f-prov').value);
     if ($('f-ctx').value) p.set('contexto_min', $('f-ctx').value);
@@ -407,8 +414,10 @@ footer{display:flex;flex-wrap:wrap;gap:.4rem 1.2rem;font-size:.8rem;color:var(--
     });
   }
 
-  // El desplegable de proveedores se llena una vez, con el catálogo sin filtrar.
+  // El desplegable de proveedores se llena una vez por upstream, con el catálogo sin filtrar.
   function ponProveedores(){
+    var sel0 = $('f-prov');
+    while (sel0.options.length > 1) sel0.remove(1);
     var vistos = {};
     modelos.forEach(function(m){ vistos[m.owned_by] = true; });
     var nombres = Object.keys(vistos).sort();
@@ -467,6 +476,12 @@ footer{display:flex;flex-wrap:wrap;gap:.4rem 1.2rem;font-size:.8rem;color:var(--
   });
   ['f-prov','f-ctx','f-gratis'].forEach(function(id){
     $(id).addEventListener('change', function(){ cargarCatalogo(false); });
+  });
+  // Otro upstream es otro catálogo: proveedores nuevos y filtro de proveedor a cero.
+  $('f-upstream').addEventListener('change', function(){
+    $('f-prov').value = '';
+    proveedoresPuestos = false;
+    cargarCatalogo(false);
   });
 
   // --- uso ----------------------------------------------------------------
