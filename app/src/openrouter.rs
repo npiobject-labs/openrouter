@@ -20,7 +20,7 @@ const ESPERA_CORTA: Duration = Duration::from_secs(20);
 /// `info_clave` y `generacion` son solo de OpenRouter porque solo él las tiene.
 pub struct Cliente {
     http: Client,
-    conexiones: [Conexion; 2],
+    conexiones: [Conexion; 3],
 }
 
 impl Cliente {
@@ -41,6 +41,11 @@ impl Cliente {
                     upstream: Upstream::HuggingFace,
                     base: config.base_hf.clone(),
                     clave: config.clave_hf.clone(),
+                },
+                Conexion {
+                    upstream: Upstream::Requesty,
+                    base: config.base_rq.clone(),
+                    clave: config.clave_rq.clone(),
                 },
             ],
         }
@@ -241,7 +246,7 @@ fn respuesta_ilegible(upstream: Upstream, e: reqwest::Error) -> ErrorApi {
 }
 
 #[cfg(test)]
-mod pruebas {
+pub(crate) mod pruebas {
     use std::{
         io::{Read, Write},
         net::TcpListener,
@@ -255,7 +260,7 @@ mod pruebas {
     /// cliente sin salir de la máquina: la sesión no llega ni a OpenRouter ni
     /// a Hugging Face. Devuelve la base (`http://127.0.0.1:puerto`) y un canal
     /// por el que llega la petición cruda (línea de estado, cabeceras y cuerpo).
-    fn servidor_falso(estado: u16, cuerpo: &str) -> (String, mpsc::Receiver<String>) {
+    pub(crate) fn servidor_falso(estado: u16, cuerpo: &str) -> (String, mpsc::Receiver<String>) {
         let escucha = TcpListener::bind("127.0.0.1:0").unwrap();
         let base = format!("http://{}", escucha.local_addr().unwrap());
         let (tx, rx) = mpsc::channel();
@@ -295,15 +300,17 @@ mod pruebas {
         (base, rx)
     }
 
-    fn config(base_openrouter: &str, base_hf: &str, clave_hf: Option<&str>) -> Config {
+    pub(crate) fn config(base_openrouter: &str, base_hf: &str, clave_hf: Option<&str>) -> Config {
         Config {
             clave_openrouter: Some("sk-or-prueba".into()),
             clave_hf: clave_hf.map(str::to_string),
+            clave_rq: None,
             clave_servicio: None,
             modelo_defecto: "m".into(),
             modelo_multimodal: "mm".into(),
             base_openrouter: base_openrouter.into(),
             base_hf: base_hf.into(),
+            base_rq: "http://127.0.0.1:1".into(),
             build: "dev".into(),
             puerto: 0,
             bd: None,
@@ -335,7 +342,7 @@ mod pruebas {
         assert!(!cliente.configurado(Upstream::HuggingFace));
         assert_eq!(
             cliente.configurados(),
-            json!({ "openrouter": true, "hf": false })
+            json!({ "openrouter": true, "hf": false, "rq": false })
         );
 
         let fallo = cliente

@@ -88,6 +88,8 @@ jobs:
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
           SERVICIO_CLAVE: ${{ secrets.SERVICIO_CLAVE }}
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          REQUESTY_API_KEY: ${{ secrets.REQUESTY_API_KEY }}
+          HIGGSFIELD_API_KEY: ${{ secrets.HIGGSFIELD_API_KEY }}
           MODELO_DEFECTO: ${{ vars.MODELO_DEFECTO }}
           MODELO_MULTIMODAL: ${{ vars.MODELO_MULTIMODAL }}
         run: |
@@ -107,6 +109,18 @@ jobs:
             set -- "$@" "HF_TOKEN=${HF_TOKEN}"
           else
             echo "Sin HF_TOKEN: el router de Hugging Face (modelos hf:) queda sin configurar."
+          fi
+          # Opcionales, igual que el de Hugging Face: Requesty (modelos rq: y
+          # respaldo) y Higgsfield (vídeo higgsfield:).
+          if [ -n "${REQUESTY_API_KEY}" ]; then
+            set -- "$@" "REQUESTY_API_KEY=${REQUESTY_API_KEY}"
+          else
+            echo "Sin REQUESTY_API_KEY: Requesty (modelos rq:) queda sin configurar."
+          fi
+          if [ -n "${HIGGSFIELD_API_KEY}" ]; then
+            set -- "$@" "HIGGSFIELD_API_KEY=${HIGGSFIELD_API_KEY}"
+          else
+            echo "Sin HIGGSFIELD_API_KEY: el vídeo de Higgsfield queda sin configurar."
           fi
           if [ -n "${MODELO_DEFECTO}" ]; then
             set -- "$@" "MODELO_DEFECTO=${MODELO_DEFECTO}"
@@ -146,9 +160,13 @@ jobs:
           SERVICIO_CLAVE: ${{ secrets.SERVICIO_CLAVE }}
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          REQUESTY_API_KEY: ${{ secrets.REQUESTY_API_KEY }}
+          HIGGSFIELD_API_KEY: ${{ secrets.HIGGSFIELD_API_KEY }}
         run: |
           export CON_OPENROUTER="$([ -n "${OPENROUTER_API_KEY}" ] && echo 1 || echo 0)"
           export CON_HF="$([ -n "${HF_TOKEN}" ] && echo 1 || echo 0)"
+          export CON_RQ="$([ -n "${REQUESTY_API_KEY}" ] && echo 1 || echo 0)"
+          export CON_HG="$([ -n "${HIGGSFIELD_API_KEY}" ] && echo 1 || echo 0)"
           tools/verificar-servicio.sh "https://${FLY_APP}.fly.dev" "${GITHUB_SHA}"
 
       - name: Resumen del despliegue

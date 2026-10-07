@@ -12,6 +12,9 @@ use serde::Serialize;
 
 /// Prefijo con el que una aplicación pide un modelo del router de Hugging Face.
 pub const PREFIJO_HF: &str = "hf:";
+/// Prefijo de Requesty, el segundo agregador: `rq:<id de Requesty>`
+/// (`rq:vertex/gemini-3.1-flash-lite@eu`).
+pub const PREFIJO_RQ: &str = "rq:";
 
 /// Se serializa con el mismo nombre que da `nombre()`: `openrouter` y `hf`.
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Serialize)]
@@ -23,6 +26,11 @@ pub enum Upstream {
     /// (`:groq`, `:cerebras`...), y `:cheapest` y `:fastest` dejan que elija él.
     #[serde(rename = "hf")]
     HuggingFace,
+    /// Requesty (`router.eu.requesty.ai/v1`), compatible con la API de OpenAI.
+    /// Sus ids van por proveedor y región, no por fabricante, y cada respuesta
+    /// trae el coste real en `usage.cost`.
+    #[serde(rename = "rq")]
+    Requesty,
 }
 
 /// Cómo se sabe lo que costó una llamada.
@@ -33,10 +41,17 @@ pub enum Medicion {
     /// Solo la estimación con el catálogo: el upstream no tiene con qué
     /// reconciliar.
     Estimada,
+    /// El coste real llega en la propia respuesta (`usage.cost`) y no hay nada
+    /// que reconciliar después.
+    Directa,
 }
 
 impl Upstream {
-    pub const TODOS: [Upstream; 2] = [Upstream::OpenRouter, Upstream::HuggingFace];
+    pub const TODOS: [Upstream; 3] = [
+        Upstream::OpenRouter,
+        Upstream::HuggingFace,
+        Upstream::Requesty,
+    ];
 
     /// El nombre que viaja en la API: en `upstream` del registro de uso, en
     /// `?upstream=` y en `upstreams` de `/salud`.
@@ -44,6 +59,7 @@ impl Upstream {
         match self {
             Upstream::OpenRouter => "openrouter",
             Upstream::HuggingFace => "hf",
+            Upstream::Requesty => "rq",
         }
     }
 
@@ -53,6 +69,7 @@ impl Upstream {
         match texto.trim().to_ascii_lowercase().as_str() {
             "openrouter" => Some(Upstream::OpenRouter),
             "hf" | "huggingface" | "hugging-face" => Some(Upstream::HuggingFace),
+            "rq" | "requesty" => Some(Upstream::Requesty),
             _ => None,
         }
     }
@@ -62,6 +79,7 @@ impl Upstream {
         match self {
             Upstream::OpenRouter => "",
             Upstream::HuggingFace => PREFIJO_HF,
+            Upstream::Requesty => PREFIJO_RQ,
         }
     }
 
@@ -69,6 +87,7 @@ impl Upstream {
         match self {
             Upstream::OpenRouter => Medicion::Reconciliada,
             Upstream::HuggingFace => Medicion::Estimada,
+            Upstream::Requesty => Medicion::Directa,
         }
     }
 
@@ -77,6 +96,7 @@ impl Upstream {
         match self {
             Upstream::OpenRouter => "OPENROUTER_API_KEY",
             Upstream::HuggingFace => "HF_TOKEN",
+            Upstream::Requesty => "REQUESTY_API_KEY",
         }
     }
 
@@ -87,6 +107,7 @@ impl Upstream {
         match self {
             Upstream::OpenRouter => "openrouter_rechaza",
             Upstream::HuggingFace => "hf_rechaza",
+            Upstream::Requesty => "rq_rechaza",
         }
     }
 
@@ -94,6 +115,7 @@ impl Upstream {
         match self {
             Upstream::OpenRouter => "openrouter_inalcanzable",
             Upstream::HuggingFace => "hf_inalcanzable",
+            Upstream::Requesty => "rq_inalcanzable",
         }
     }
 
@@ -101,6 +123,7 @@ impl Upstream {
         match self {
             Upstream::OpenRouter => "openrouter_tardo_demasiado",
             Upstream::HuggingFace => "hf_tardo_demasiado",
+            Upstream::Requesty => "rq_tardo_demasiado",
         }
     }
 
@@ -109,6 +132,7 @@ impl Upstream {
         match self {
             Upstream::OpenRouter => "OpenRouter",
             Upstream::HuggingFace => "Hugging Face",
+            Upstream::Requesty => "Requesty",
         }
     }
 }
@@ -125,15 +149,17 @@ impl Destino {
     /// Decide por el prefijo del id que pidió la aplicación. Sin prefijo
     /// conocido, OpenRouter con el id intacto: es exactamente lo de siempre.
     pub fn de(id_pedido: &str) -> Self {
-        match id_pedido.strip_prefix(PREFIJO_HF) {
-            Some(resto) => Self {
-                upstream: Upstream::HuggingFace,
-                modelo: resto.to_string(),
-            },
-            None => Self {
-                upstream: Upstream::OpenRouter,
-                modelo: id_pedido.to_string(),
-            },
+        for upstream in [Upstream::HuggingFace, Upstream::Requesty] {
+            if let Some(resto) = id_pedido.strip_prefix(upstream.prefijo()) {
+                return Self {
+                    upstream,
+                    modelo: resto.to_string(),
+                };
+            }
+        }
+        Self {
+            upstream: Upstream::OpenRouter,
+            modelo: id_pedido.to_string(),
         }
     }
 
@@ -179,6 +205,15 @@ mod pruebas {
         assert_eq!(d.upstream, Upstream::OpenRouter);
         assert_eq!(d.modelo, "google/gemini-3.1-flash-lite:free");
         assert_eq!(d.host(), None, "en OpenRouter el sufijo no es un host");
+    }
+
+    #[test]
+    fn el_prefijo_rq_va_a_requesty_con_el_id_entero() {
+        let d = Destino::de("rq:vertex/gemini-3.1-flash-lite@eu");
+        assert_eq!(d.upstream, Upstream::Requesty);
+        assert_eq!(d.modelo, "vertex/gemini-3.1-flash-lite@eu");
+        assert_eq!(d.host(), None, "en Requesty no hay sufijo de host");
+        assert_eq!(Upstream::Requesty.medicion(), Medicion::Directa);
     }
 
     #[test]

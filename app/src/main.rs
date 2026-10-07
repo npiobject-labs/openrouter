@@ -103,12 +103,15 @@ async fn main() {
             AUTHORIZATION,
             CONTENT_TYPE,
             HeaderName::from_static("x-operacion"),
+            HeaderName::from_static("x-respaldo"),
         ])
         // Sin esto el navegador no puede leer estas dos aunque viajen.
         .expose_headers([
             HeaderName::from_static("x-cache"),
             HeaderName::from_static("x-uso-id"),
             HeaderName::from_static("x-presupuesto"),
+            HeaderName::from_static("x-upstream"),
+            HeaderName::from_static("x-respaldo"),
         ]);
 
     let app = Router::new()

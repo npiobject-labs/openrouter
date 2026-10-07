@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "openrouter · servicio",
-    "version": "0.6.4",
+    "version": "0.7.0",
     "summary": "Pasarela propia sobre OpenRouter y el router de Hugging Face, pensada para ser llamada por otras aplicaciones.",
     "description": "Esto no es una aplicación con interfaz: es un conjunto de servicios HTTP. La clave de OpenRouter vive solo en el backend y nunca sale de él. Cada aplicación consumidora tiene su propia clave, que se da de alta y se revoca sin tocar el despliegue.\n\nEl contrato sigue el de la API de OpenAI donde existe equivalente, así que cualquier cliente de OpenAI funciona cambiando la URL base. Lo propio del servicio va en rutas propias y en cabeceras `X-...`. Una ruta publicada no se rompe: lo incompatible iría a `/v2/`.\n\nLa versión de este documento acompaña a la etapa entregada: `0.6.0` es la etapa 6; `0.6.2` amplía `/v1/models` con descripción, precios completos, modalidades de salida y parámetros, sin cambiar nada de lo publicado; `0.6.4` entrega la etapa 9 (catálogo completo de OpenRouter y compra en el router de Hugging Face con el prefijo `hf:`), también sin cambiar nada: solo añade campos, parámetros y códigos. Las etapas 7 y 8 siguen pendientes.",
     "license": {
@@ -233,16 +233,37 @@
           {
             "name": "upstream",
             "in": "query",
-            "description": "De quién es el catálogo: `openrouter` (por defecto) o `hf`, el router de Hugging Face. Con `hf` sin `HF_TOKEN` en el despliegue, `503 upstream_sin_configurar`. Un valor desconocido es `400 upstream_desconocido`.",
+            "description": "De quién es el catálogo: `openrouter` (por defecto), `hf` (router de Hugging Face) o `rq` (Requesty). Sin la clave de ese upstream en el despliegue, `503 upstream_sin_configurar`. Un valor desconocido es `400 upstream_desconocido`.",
             "schema": {
               "type": "string",
               "enum": [
                 "openrouter",
-                "hf"
+                "hf",
+                "rq"
               ],
               "default": "openrouter"
             },
             "example": "hf"
+          },
+          {
+            "name": "region",
+            "in": "query",
+            "description": "Solo los modelos que publican que procesan en esa región (`eu`, `us`, `global`, `uk`, `sg`, `ap`). Hoy solo Requesty lo publica: en los demás upstreams no queda ninguno.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "eu"
+          },
+          {
+            "name": "sin_retencion",
+            "in": "query",
+            "description": "`1`: solo los que publican que ni guardan las peticiones ni entrenan con ellas (`retencion: false` y `entrena: false`). Hoy solo Requesty lo publica.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "1"
+              ]
+            }
           }
         ],
         "responses": {
@@ -380,7 +401,7 @@
           "Consultas"
         ],
         "summary": "Consulta a un modelo",
-        "description": "Proxy fino sobre OpenRouter, y desde 0.6.4 también sobre el router de Hugging Face, con el contrato de OpenAI. A quién va lo decide el prefijo de `model`: `hf:<id>` sale hacia Hugging Face sin el prefijo (`hf:meta-llama/Llama-3.3-70B-Instruct:groq` pide `meta-llama/Llama-3.3-70B-Instruct:groq`, donde `:groq` es el host; `:cheapest` y `:fastest` dejan que elija el router); todo lo demás va a OpenRouter exactamente como siempre. Sin `HF_TOKEN` en el despliegue, `hf:` responde `503 upstream_sin_configurar`.\n\nEl cuerpo se reenvía tal cual salvo tres retoques: el prefijo, si no traes `model` se rellena con el modelo por defecto del servicio (`modelo_defecto` de `/v1/estado`), o con el multimodal (`modelo_multimodal`) si algún mensaje lleva una parte que no es texto; con el de texto, y si no mandas `reasoning`, se añade `{\"effort\":\"low\"}` para que el razonamiento no se coma el `max_tokens`; y `stream: true` se rechaza con `400` porque el streaming llega en la etapa 7.\n\nLa respuesta es la del upstream sin tocar, incluido el bloque `usage`, que es lo que permite saber qué costó la llamada. En Hugging Face el coste queda `estimado` con los precios de su catálogo (los del host pedido, o los del más barato si no se pidió ninguno) y no se reconcilia: el router no tiene `/generation`.\n\nToda llamada que llega a salir queda anotada en el registro de uso, vaya bien o mal, y su identificador vuelve en la cabecera `X-Uso-Id`. Con él se consulta después lo que costó, en `/v1/uso/{id}`.\n\nVaya a un upstream o a otro, con clave de aplicación la llamada pasa antes por los mismos tres controles: el cortacircuitos de bucles, la cuota por minuto y el presupuesto. La clave de administración no tiene ninguno.",
+        "description": "Proxy fino sobre OpenRouter, y desde 0.6.4 también sobre el router de Hugging Face, con el contrato de OpenAI. A quién va lo decide el prefijo de `model`: `hf:<id>` sale hacia Hugging Face sin el prefijo (`hf:meta-llama/Llama-3.3-70B-Instruct:groq` pide `meta-llama/Llama-3.3-70B-Instruct:groq`, donde `:groq` es el host; `:cheapest` y `:fastest` dejan que elija el router); todo lo demás va a OpenRouter exactamente como siempre. Sin `HF_TOKEN` en el despliegue, `hf:` responde `503 upstream_sin_configurar`.\n\nEl cuerpo se reenvía tal cual salvo tres retoques: el prefijo, si no traes `model` se rellena con el modelo por defecto del servicio (`modelo_defecto` de `/v1/estado`), o con el multimodal (`modelo_multimodal`) si algún mensaje lleva una parte que no es texto; con el de texto, y si no mandas `reasoning`, se añade `{\"effort\":\"low\"}` para que el razonamiento no se coma el `max_tokens`; y `stream: true` se rechaza con `400` porque el streaming llega en la etapa 7.\n\nLa respuesta es la del upstream sin tocar, incluido el bloque `usage`, que es lo que permite saber qué costó la llamada. En Hugging Face el coste queda `estimado` con los precios de su catálogo (los del host pedido, o los del más barato si no se pidió ninguno) y no se reconcilia: el router no tiene `/generation`.\n\nToda llamada que llega a salir queda anotada en el registro de uso, vaya bien o mal, y su identificador vuelve en la cabecera `X-Uso-Id`. Con él se consulta después lo que costó, en `/v1/uso/{id}`.\n\nVaya a un upstream o a otro, con clave de aplicación la llamada pasa antes por los mismos tres controles: el cortacircuitos de bucles, la cuota por minuto y el presupuesto. La clave de administración no tiene ninguno.\n\nDesde 0.7.0 `model` admite también `rq:<id de Requesty>` (`rq:vertex/gemini-3.1-flash-lite@eu`), con el coste real que da Requesty en `usage.cost`. Y si OpenRouter no está (sin conexión, tiempo agotado, 5xx, 429 o 402), la consulta se repite automáticamente con el mismo modelo en Hugging Face y, si no, en Requesty (la variante de la UE que no retiene datos, la más barata). La respuesta dice quién contestó en `X-Upstream` y que hubo respaldo en `X-Respaldo`. Cada intento queda en el registro de uso. Para que una consulta nunca salga de OpenRouter, manda `X-Respaldo: no`.",
         "requestBody": {
           "required": true,
           "content": {
@@ -439,6 +460,23 @@
               },
               "X-Presupuesto": {
                 "description": "Aparece cuando el gasto del periodo ha pasado el umbral de aviso. No corta la llamada: es para que la aplicación sepa que se acerca al tope.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Upstream": {
+                "description": "Quién respondió: `openrouter`, `hf` o `rq`.",
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "openrouter",
+                    "hf",
+                    "rq"
+                  ]
+                }
+              },
+              "X-Respaldo": {
+                "description": "Solo si OpenRouter falló (sin conexión, tiempo agotado, 5xx, 429 o 402) y la consulta se repitió con el mismo modelo en otro upstream: el upstream que falló. En la petición, `X-Respaldo: no` apaga el respaldo para esa consulta.",
                 "schema": {
                   "type": "string"
                 }
@@ -1533,7 +1571,8 @@
             "type": "string",
             "enum": [
               "openrouter",
-              "hf"
+              "hf",
+              "rq"
             ],
             "description": "De qué upstream es el modelo. El `id` ya lleva el prefijo que hace falta para pedirlo."
           },
@@ -1564,6 +1603,40 @@
               "null"
             ],
             "description": "Tokens por segundo en ese host, idem."
+          },
+          "region": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Dónde procesa (`eu`, `us`, `global`...). Solo Requesty; `null` en los demás, que no significa «fuera de la UE»."
+          },
+          "retencion": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "description": "Si el proveedor guarda las peticiones. Solo Requesty."
+          },
+          "retencion_dias": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "entrena": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "description": "Si el proveedor entrena con las peticiones. Solo Requesty."
+          },
+          "cuantizacion": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Cuantización del modelo servido, si se publica."
           }
         },
         "required": [
@@ -2195,7 +2268,7 @@
     {
       "code": "upstream_sin_configurar",
       "http": 503,
-      "cuando": "Se pidió un modelo `hf:` (o `/v1/models?upstream=hf`) y el despliegue no tiene `HF_TOKEN`. El resto del servicio funciona."
+      "cuando": "Se pidió un modelo `hf:` o `rq:` (o `/v1/models?upstream=hf|rq`) y el despliegue no tiene `HF_TOKEN` o `REQUESTY_API_KEY`. El resto del servicio funciona."
     },
     {
       "code": "upstream_desconocido",
@@ -2296,6 +2369,21 @@
       "code": "periodo_invalido",
       "http": 400,
       "cuando": "Se fijó un presupuesto con un periodo que no es dia ni mes, o sin periodo."
+    },
+    {
+      "code": "rq_rechaza",
+      "http": "el de Requesty",
+      "cuando": "Requesty rechazó la consulta; su cuerpo va en `error.upstream`."
+    },
+    {
+      "code": "rq_inalcanzable",
+      "http": 502,
+      "cuando": "No se pudo conectar con Requesty."
+    },
+    {
+      "code": "rq_tardo_demasiado",
+      "http": 502,
+      "cuando": "Requesty no respondió a tiempo."
     }
   ],
   "x-etapas": [
@@ -2450,6 +2538,24 @@
         }
       ],
       "nota": "El catálogo de OpenRouter deja de esconder los modelos de imagen, vídeo, voz, transcripción y embeddings, y cada modelo conserva canonical_slug y hugging_face_id. El servicio puede comprar fuera de OpenRouter: con el prefijo hf: la llamada va al router de Hugging Face, que con una sola clave (HF_TOKEN, opcional) da acceso a una docena de hosts (Groq, Cerebras, Together, Fireworks, DeepInfra, Novita, Scaleway, OVHcloud, Nscale...). Mismos topes, misma medición: cada registro dice su upstream y el coste de Hugging Face queda estimado con su catálogo. Entregada antes que la 7 y la 8 porque es aditiva."
+    },
+    {
+      "numero": 10,
+      "titulo": "Requesty y respaldo automático",
+      "estado": "entregada",
+      "rutas": [
+        {
+          "metodo": "GET",
+          "ruta": "/v1/models",
+          "nota": "?upstream=rq, ?region=, ?sin_retencion=1"
+        },
+        {
+          "metodo": "POST",
+          "ruta": "/v1/chat/completions",
+          "nota": "model: rq:<id>; respaldo OpenRouter → Hugging Face → Requesty; cabeceras X-Upstream y X-Respaldo"
+        }
+      ],
+      "nota": "Requesty es el segundo agregador: no pasa por OpenRouter, tiene endpoint en Fráncfort y su catálogo dice de cada modelo dónde procesa (`region`), si guarda (`retencion`, `retencion_dias`) y si entrena (`entrena`). Su clave (`REQUESTY_API_KEY`) es opcional y lleva el registro de prompts apagado. Cuando OpenRouter falla, la consulta se repite con el mismo modelo en Hugging Face o en Requesty."
     }
   ]
 }

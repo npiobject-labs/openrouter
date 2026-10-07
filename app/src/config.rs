@@ -15,6 +15,10 @@ const BASE_OPENROUTER: &str = "https://openrouter.ai/api/v1";
 /// El router de Hugging Face habla la API de OpenAI bajo `/v1`. Una clave da
 /// acceso a todos los hosts que sirven cada modelo.
 const BASE_HF: &str = "https://router.huggingface.co/v1";
+/// Requesty en Fráncfort: procesar en la UE no cuesta más que en el global y
+/// tiene el mismo catálogo. Que la inferencia quede en la UE lo decide el id
+/// (`@eu`, `@europe-…`), no este endpoint.
+const BASE_RQ: &str = "https://router.eu.requesty.ai/v1";
 
 #[derive(Clone)]
 pub struct Config {
@@ -23,6 +27,9 @@ pub struct Config {
     /// Token del router de Hugging Face (`HF_TOKEN`). Opcional: sin él, los
     /// modelos `hf:` responden 503 y todo lo demás sigue igual.
     pub clave_hf: Option<String>,
+    /// Clave de Requesty (`REQUESTY_API_KEY`), con el registro de prompts
+    /// apagado en su panel. Opcional como la de Hugging Face.
+    pub clave_rq: Option<String>,
     /// Clave que exigimos a quien llama a /v1. Sin ella el servicio no atiende.
     pub clave_servicio: Option<String>,
     pub modelo_defecto: String,
@@ -30,6 +37,7 @@ pub struct Config {
     pub modelo_multimodal: String,
     pub base_openrouter: String,
     pub base_hf: String,
+    pub base_rq: String,
     pub build: String,
     pub puerto: u16,
     /// Fichero SQLite del histórico. Por defecto, el volumen de Fly.
@@ -44,6 +52,7 @@ impl Config {
         Self {
             clave_openrouter: variable("OPENROUTER_API_KEY"),
             clave_hf: variable("HF_TOKEN"),
+            clave_rq: variable("REQUESTY_API_KEY"),
             clave_servicio: variable("SERVICIO_CLAVE"),
             modelo_defecto: variable("MODELO_DEFECTO")
                 .unwrap_or_else(|| MODELO_DEFECTO.to_string()),
@@ -57,6 +66,10 @@ impl Config {
             // servidor falso; en producción no se define.
             base_hf: variable("HF_BASE")
                 .unwrap_or_else(|| BASE_HF.to_string())
+                .trim_end_matches('/')
+                .to_string(),
+            base_rq: variable("REQUESTY_BASE")
+                .unwrap_or_else(|| BASE_RQ.to_string())
                 .trim_end_matches('/')
                 .to_string(),
             build: variable("BUILD_ID").unwrap_or_else(|| "dev".to_string()),

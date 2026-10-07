@@ -14,6 +14,9 @@
 #   CON_HF           "1" si el despliegue tiene HF_TOKEN: entonces
 #                    /v1/models?upstream=hf tiene que responder 200; sin el,
 #                    503 con el sobre y el codigo upstream_sin_configurar.
+#   CON_RQ           Lo mismo para Requesty (REQUESTY_API_KEY, upstream=rq).
+#   CON_HG           Lo mismo para Higgsfield (HIGGSFIELD_API_KEY), en el
+#                    catalogo de video.
 #
 # Ninguna comprobacion gasta credito ni crea nada en el servicio.
 
@@ -23,6 +26,8 @@ sha="${2:?sha esperado}"
 clave="${SERVICIO_CLAVE:-}"
 con_openrouter="${CON_OPENROUTER:-0}"
 con_hf="${CON_HF:-0}"
+con_rq="${CON_RQ:-0}"
+con_hg="${CON_HG:-0}"
 tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"' EXIT
 
@@ -131,6 +136,24 @@ else
   ok "sin HF_TOKEN, hf: responde 503 upstream_sin_configurar y el resto sigue"
 fi
 
+# --- /v1/models?upstream=rq: el catalogo de Requesty ---
+# Igual que el de Hugging Face, y ademas cada modelo dice su region.
+http="$(curl -s -o "$tmp/rq.json" -w '%{http_code}' --max-time 40 "${auth[@]}" "${base}/v1/models?upstream=rq" || true)"
+echo "/v1/models?upstream=rq -> HTTP ${http}"
+if [ "${con_rq}" = "1" ]; then
+  [ "${http}" = "200" ] || { cat "$tmp/rq.json"; fallo "/v1/models?upstream=rq respondio ${http} con REQUESTY_API_KEY configurada."; }
+  n_rq="$(jq -r '.data | length' "$tmp/rq.json" 2> /dev/null || echo 0)"
+  [ "${n_rq}" -gt 0 ] || fallo "el catalogo de Requesty vino vacio o ilegible"
+  jq -e '.upstream == "rq" and (.data | all(.id | startswith("rq:"))) and (.data | any(.region == "eu"))' "$tmp/rq.json" > /dev/null \
+    || fallo "el catalogo de Requesty no viene con ids rq:, upstream=rq y modelos de la UE"
+  n_ue="$(curl -s --max-time 40 "${auth[@]}" "${base}/v1/models?upstream=rq&region=eu&sin_retencion=1" | jq -r '.data | length' 2> /dev/null || echo 0)"
+  [ "${n_ue}" -gt 0 ] || fallo "el filtro region=eu&sin_retencion=1 no deja ningun modelo"
+  ok "el catalogo de Requesty trae ${n_rq} modelos, ${n_ue} en la UE sin retencion"
+else
+  [ "${http}" = "503" ] || { cat "$tmp/rq.json"; fallo "/v1/models?upstream=rq respondio ${http} sin REQUESTY_API_KEY y se esperaba 503."; }
+  ok "sin REQUESTY_API_KEY, rq: responde 503 y el resto sigue"
+fi
+
 if [ "${con_openrouter}" != "1" ]; then
   echo "Sin clave de OpenRouter en el despliegue: no se comprueban /v1/estado ni /v1/models."
   resumen "Sin clave de OpenRouter: /v1/estado y /v1/models sin comprobar"
@@ -161,7 +184,9 @@ jq -e '.upstreams.openrouter == true and (.upstreams.hf | type == "boolean")' "$
   || fallo "/v1/estado no publica upstreams (openrouter y hf)."
 [ "$(jq -r '.upstreams.hf' "$tmp/estado.json")" = "$([ "${con_hf}" = "1" ] && echo true || echo false)" ] \
   || fallo "/v1/estado dice upstreams.hf=$(jq -r '.upstreams.hf' "$tmp/estado.json") y CON_HF=${con_hf}: el secreto HF_TOKEN no llego al despliegue."
-ok "upstreams: openrouter=true, hf=$(jq -r '.upstreams.hf' "$tmp/estado.json")"
+[ "$(jq -r '.upstreams.rq' "$tmp/estado.json")" = "$([ "${con_rq}" = "1" ] && echo true || echo false)" ] \
+  || fallo "/v1/estado dice upstreams.rq=$(jq -r '.upstreams.rq' "$tmp/estado.json") y CON_RQ=${con_rq}: el secreto de Requesty no llego al despliegue."
+ok "upstreams: openrouter=true, hf=$(jq -r '.upstreams.hf' "$tmp/estado.json"), rq=$(jq -r '.upstreams.rq' "$tmp/estado.json")"
 
 # --- /v1/models: el catalogo trae modelos de verdad ---
 http="$(curl -s -o "$tmp/modelos.json" -w '%{http_code}' --max-time 40 "${auth[@]}" "${base}/v1/models" || true)"

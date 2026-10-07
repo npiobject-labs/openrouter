@@ -119,10 +119,11 @@ impl Registro {
     }
 
     /// Coste con los precios del catálogo, que están en dólares por millón.
-    /// Solo se aplica si no hay ya un coste dado por OpenRouter. Para los
-    /// upstreams sin reconciliación (Hugging Face) es el coste definitivo.
+    /// Solo se aplica si no hay ya un coste dado por el upstream (OpenRouter o
+    /// Requesty). Para los upstreams sin reconciliación (Hugging Face) es el
+    /// coste definitivo.
     pub fn estima(&mut self, precios: Option<(f64, f64)>) {
-        if self.coste_origen == "openrouter" {
+        if matches!(self.coste_origen.as_str(), "openrouter" | "rq") {
             return;
         }
         if let Some((entrada, salida)) = precios {

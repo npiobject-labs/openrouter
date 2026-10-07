@@ -79,6 +79,16 @@ pub struct Modelo {
     pub primer_token_ms: Option<f64>,
     /// Tokens por segundo en ese host, idem.
     pub tokens_por_segundo: Option<f64>,
+    /// Dónde procesa (`eu`, `us`, `global`, `uk`, `sg`, `ap`). Solo Requesty lo
+    /// publica; en los demás es `null`, que no es lo mismo que «fuera de la UE».
+    pub region: Option<String>,
+    /// Si el proveedor guarda las peticiones, y cuántos días. Solo Requesty.
+    pub retencion: Option<bool>,
+    pub retencion_dias: Option<i64>,
+    /// Si el proveedor entrena con las peticiones. Solo Requesty.
+    pub entrena: Option<bool>,
+    /// Cuantización del modelo servido (`fp8`, `int4`...), si se publica.
+    pub cuantizacion: Option<String>,
 }
 
 impl Modelo {
@@ -174,6 +184,11 @@ impl Modelo {
             hugging_face_id: texto(bruto.get("hugging_face_id")),
             primer_token_ms: None,
             tokens_por_segundo: None,
+            region: None,
+            retencion: None,
+            retencion_dias: None,
+            entrena: None,
+            cuantizacion: None,
             object: "model",
             id,
             entrada,
@@ -230,6 +245,11 @@ impl Modelo {
             hugging_face_id: Some(id.to_string()),
             primer_token_ms: None,
             tokens_por_segundo: None,
+            region: None,
+            retencion: None,
+            retencion_dias: None,
+            entrena: None,
+            cuantizacion: None,
         };
 
         let prefijo = Upstream::HuggingFace.prefijo();
@@ -292,6 +312,101 @@ impl Modelo {
     }
 }
 
+impl Modelo {
+    /// Traduce un elemento del catálogo de Requesty. El id es el suyo, por
+    /// proveedor y región (`vertex/gemini-3.1-flash-lite@eu`), con nuestro
+    /// prefijo `rq:` delante. Los precios vienen por token y como número; el
+    /// nombre canónico (`gemini-3.1-flash-lite`) va a `canonical_slug`, que es
+    /// lo que permite encontrar el mismo modelo en otro upstream.
+    fn desde_requesty(bruto: &Value) -> Option<Self> {
+        let id = bruto.get("id")?.as_str()?;
+        let numero = |campo: &str| bruto.get(campo).and_then(Value::as_f64).unwrap_or(0.0);
+        let si = |campo: &str| bruto.get(campo).and_then(Value::as_bool).unwrap_or(false);
+        let entrada = numero("input_price") * 1_000_000.0;
+        let salida = numero("output_price") * 1_000_000.0;
+
+        let mut modalidades = vec!["text".to_string()];
+        if si("supports_vision") {
+            modalidades.push("image".into());
+        }
+        let mut modalidades_salida = vec!["text".to_string()];
+        if si("supports_image_generation") {
+            modalidades_salida.push("image".into());
+        }
+        let json = si("supports_output_json_schema") || si("supports_output_json_object");
+        let mut parametros = vec!["max_tokens".to_string(), "temperature".to_string()];
+        if si("supports_tool_calling") {
+            parametros.push("tools".into());
+        }
+        if json {
+            parametros.push("response_format".into());
+        }
+        if si("supports_output_json_schema") {
+            parametros.push("structured_outputs".into());
+        }
+        if si("supports_reasoning") {
+            parametros.push("reasoning".into());
+        }
+
+        Some(Self {
+            id: format!("{}{id}", Upstream::Requesty.prefijo()),
+            object: "model",
+            created: bruto.get("created").and_then(Value::as_i64).unwrap_or(0),
+            owned_by: texto(bruto.get("model_lab"))
+                .unwrap_or_else(|| id.split('/').next().unwrap_or("desconocido").to_string()),
+            nombre: id.to_string(),
+            contexto: bruto
+                .get("context_window")
+                .and_then(Value::as_u64)
+                .unwrap_or(0),
+            entrada,
+            salida,
+            gratis: entrada == 0.0 && salida == 0.0,
+            herramientas: si("supports_tool_calling"),
+            json,
+            modalidades,
+            descripcion: texto(bruto.get("description")).unwrap_or_default(),
+            precios: Precios {
+                cache_lectura: numero("cached_price") * 1_000_000.0,
+                cache_escritura: numero("caching_price") * 1_000_000.0,
+                ..Precios::default()
+            },
+            modalidades_salida,
+            parametros,
+            max_salida: bruto.get("max_output_tokens").and_then(Value::as_u64),
+            moderado: false,
+            upstream: Upstream::Requesty,
+            canonical_slug: texto(bruto.get("model_canonical_name")),
+            hugging_face_id: None,
+            primer_token_ms: None,
+            tokens_por_segundo: None,
+            region: texto(bruto.get("geolocation")),
+            retencion: bruto.get("data_retention").and_then(Value::as_bool),
+            retencion_dias: bruto.get("data_retention_days").and_then(Value::as_i64),
+            entrena: bruto.get("data_used_for_training").and_then(Value::as_bool),
+            cuantizacion: texto(bruto.get("quantization")),
+        })
+    }
+}
+
+/// El nombre de un modelo sin fabricante, sin variante y con puntos y guiones
+/// igualados: `openai/gpt-oss-120b:free` y `gpt-oss-120b` dan lo mismo, y
+/// `claude-sonnet-4.5` y `claude-sonnet-4-5` también. Es la llave para buscar
+/// el mismo modelo en otro upstream.
+pub fn nombre_normalizado(id: &str) -> String {
+    let sin_prefijo = id
+        .strip_prefix(Upstream::Requesty.prefijo())
+        .or_else(|| id.strip_prefix(Upstream::HuggingFace.prefijo()))
+        .unwrap_or(id);
+    let base = sin_prefijo.split(':').next().unwrap_or(sin_prefijo);
+    let base = base.split('@').next().unwrap_or(base);
+    base.rsplit('/')
+        .next()
+        .unwrap_or(base)
+        .to_lowercase()
+        .replace('.', "-")
+}
+
 fn lista(valor: Option<&Value>) -> Vec<String> {
     valor
         .and_then(Value::as_array)
@@ -336,10 +451,26 @@ pub struct Filtros {
     /// Una modalidad de salida (`text`, `image`, `video`, `speech`,
     /// `transcription`, `embeddings`): solo los modelos que la producen.
     pub salida: Option<String>,
+    /// Solo los que publican que procesan en esa región (`eu`...).
+    pub region: Option<String>,
+    /// Solo los que publican que ni guardan ni entrenan con las peticiones.
+    pub sin_retencion: bool,
 }
 
 impl Filtros {
     fn pasa(&self, m: &Modelo) -> bool {
+        if let Some(r) = &self.region {
+            if !m
+                .region
+                .as_deref()
+                .is_some_and(|mr| mr.eq_ignore_ascii_case(r))
+            {
+                return false;
+            }
+        }
+        if self.sin_retencion && !(m.retencion == Some(false) && m.entrena == Some(false)) {
+            return false;
+        }
         if self.gratis && !m.gratis {
             return false;
         }
@@ -403,7 +534,7 @@ struct Copia {
 /// Face no obliga a volver a pedir la de OpenRouter.
 #[derive(Default)]
 pub struct Catalogo {
-    copias: [RwLock<Option<Copia>>; 2],
+    copias: [RwLock<Option<Copia>>; 3],
 }
 
 impl Catalogo {
@@ -411,6 +542,7 @@ impl Catalogo {
         &self.copias[match upstream {
             Upstream::OpenRouter => 0,
             Upstream::HuggingFace => 1,
+            Upstream::Requesty => 2,
         }]
     }
 
@@ -437,6 +569,9 @@ impl Catalogo {
                 .unwrap_or_default(),
             Upstream::HuggingFace => elementos
                 .map(|a| a.iter().flat_map(Modelo::desde_hf).collect())
+                .unwrap_or_default(),
+            Upstream::Requesty => elementos
+                .map(|a| a.iter().filter_map(Modelo::desde_requesty).collect())
                 .unwrap_or_default(),
         };
 
@@ -478,6 +613,82 @@ mod pruebas {
     /// transcripción y embeddings) y cuatro del router de Hugging Face.
     const OPENROUTER_TODO: &str = include_str!("../tests/fixtures/openrouter-models-all.json");
     const HF_ROUTER: &str = include_str!("../tests/fixtures/hf-router-models.json");
+    /// Recorte real del catálogo de Requesty (endpoint UE, 07/10/2026): dos
+    /// variantes de Gemini 3.1 Flash-Lite, tres hosts de gpt-oss-120b, uno de
+    /// OpenAI y uno que retiene datos.
+    const REQUESTY: &str = include_str!("../tests/fixtures/requesty-models.json");
+
+    #[test]
+    fn el_catalogo_de_requesty_sale_con_prefijo_region_y_retencion() {
+        let catalogo = Catalogo::default();
+        let modelos =
+            catalogo.guardar(Upstream::Requesty, &serde_json::from_str(REQUESTY).unwrap());
+        assert_eq!(modelos.len(), 7);
+        let eu = modelos
+            .iter()
+            .find(|m| m.id == "rq:vertex/gemini-3.1-flash-lite@eu")
+            .unwrap();
+        assert_eq!(eu.upstream, Upstream::Requesty);
+        assert_eq!(eu.region.as_deref(), Some("eu"));
+        assert_eq!(eu.retencion, Some(false));
+        assert_eq!(eu.entrena, Some(false));
+        assert_eq!(eu.canonical_slug.as_deref(), Some("gemini-3.1-flash-lite"));
+        assert!((eu.entrada - 0.275).abs() < 1e-9, "{}", eu.entrada);
+        assert!((eu.salida - 1.65).abs() < 1e-9, "{}", eu.salida);
+        assert!(eu.json && eu.herramientas);
+        assert!(eu.modalidades.contains(&"image".to_string()));
+
+        // Los filtros nuevos: UE deja fuera el global; sin retención, el que guarda.
+        let solo_ue = filtrar(
+            modelos.clone(),
+            &Filtros {
+                region: Some("EU".into()),
+                ..Filtros::default()
+            },
+        );
+        assert!(solo_ue.iter().all(|m| m.region.as_deref() == Some("eu")));
+        assert!(solo_ue.iter().any(|m| m.id == "rq:scaleway/gpt-oss-120b"));
+        let sin_retencion = filtrar(
+            modelos.clone(),
+            &Filtros {
+                sin_retencion: true,
+                ..Filtros::default()
+            },
+        );
+        assert!(!sin_retencion
+            .iter()
+            .any(|m| m.id == "rq:vertex/claude-fable-5.1"));
+        // Los `openai/` directos guardan para vigilar abusos; los de Azure, no.
+        assert!(!sin_retencion.iter().any(|m| m.id == "rq:openai/gpt-5-mini"));
+        assert_eq!(sin_retencion.len(), 5);
+
+        // El precio de una llamada rq: se busca en su copia.
+        assert_eq!(
+            catalogo.precio("rq:vertex/gemini-3.1-flash-lite@eu"),
+            Some((eu.entrada, eu.salida))
+        );
+    }
+
+    #[test]
+    fn el_nombre_normalizado_iguala_upstreams() {
+        assert_eq!(nombre_normalizado("openai/gpt-oss-120b"), "gpt-oss-120b");
+        assert_eq!(
+            nombre_normalizado("openai/gpt-oss-120b:free"),
+            "gpt-oss-120b"
+        );
+        assert_eq!(
+            nombre_normalizado("rq:nebius/openai/gpt-oss-120b"),
+            "gpt-oss-120b"
+        );
+        assert_eq!(
+            nombre_normalizado("rq:vertex/gemini-3.1-flash-lite@eu"),
+            "gemini-3-1-flash-lite"
+        );
+        assert_eq!(
+            nombre_normalizado("google/gemini-3.1-flash-lite"),
+            nombre_normalizado("gemini-3-1-flash-lite")
+        );
+    }
 
     fn bruto_completo() -> Value {
         json!({

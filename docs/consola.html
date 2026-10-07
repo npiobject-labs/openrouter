@@ -110,9 +110,10 @@ footer{display:flex;flex-wrap:wrap;gap:.4rem 1.2rem;font-size:.8rem;color:var(--
     <h2>Modelo <span id="cat-estado" class="estado">catálogo sin cargar</span></h2>
     <div class="fila">
       <label for="f-upstream">Comprar en
-        <select id="f-upstream" title="OpenRouter es el de siempre; Hugging Face solo responde si el despliegue tiene HF_TOKEN">
+        <select id="f-upstream" title="OpenRouter es el de siempre; Hugging Face y Requesty solo responden si el despliegue tiene su clave">
           <option value="">OpenRouter</option>
           <option value="hf">Hugging Face (hf:)</option>
+          <option value="rq">Requesty (rq:)</option>
         </select>
       </label>
       <label for="f-texto">Buscar<input id="f-texto" placeholder="id o nombre" autocomplete="off"></label>
@@ -141,7 +142,7 @@ footer{display:flex;flex-wrap:wrap;gap:.4rem 1.2rem;font-size:.8rem;color:var(--
       <div><dt>Herramientas</dt><dd id="m-tools">–</dd></div>
       <div><dt>Salida JSON</dt><dd id="m-json">–</dd></div>
     </dl>
-    <p>Precios en dólares por millón de tokens, tal como los publica cada upstream. El servicio cachea cada catálogo una hora. Los modelos <code>hf:</code> van al router de Hugging Face; el sufijo <code>:host</code> elige quién sirve.</p>
+    <p>Precios en dólares por millón de tokens, tal como los publica cada upstream. El servicio cachea cada catálogo una hora. Los modelos <code>hf:</code> van al router de Hugging Face; el sufijo <code>:host</code> elige quién sirve. Los <code>rq:</code> van a Requesty, cuyo id ya dice proveedor y región (<code>@eu</code>).</p>
   </section>
 
   <section class="panel">

@@ -50,6 +50,8 @@ pub async fn modelos(
         contexto_min: parametros.get("contexto_min").and_then(|c| c.parse().ok()),
         gratis: verdadero(parametros.get("gratis")),
         salida: parametros.get("salida").filter(|s| !s.is_empty()).cloned(),
+        region: parametros.get("region").filter(|r| !r.is_empty()).cloned(),
+        sin_retencion: verdadero(parametros.get("sin_retencion")),
     };
 
     let total = lista.len();
