@@ -381,7 +381,7 @@ R0 primero, por la fecha. R1 no espera a la clave. R2 espera a
 «OK release». mercamodels empieza sus ofertas tras R1 y lanza por Requesty
 tras R2 en el VPS.
 
-## Vídeo: generación y edición (propuesta del 06/10/2026, pendiente de visto bueno)
+## Vídeo: generación y edición (propuesta del 06/10/2026, aprobada el 07/10)
 
 Petición del dueño: un catálogo de modelos para resolver problemas de vídeo,
 desde la edición hasta la generación, y lanzarlos desde mercamodels, incluida
@@ -475,6 +475,31 @@ OpenRouter que lo admitan.
 - [SUPUESTO] Los proveedores aceptan vídeos de hasta 100 MB por URL. Plan B:
   la página de mercamodels sube el vídeo a un almacén temporal; eso se decide
   en V3, no antes.
+
+## Encaje con los upstreams de la etapa 9 (07/10/2026, aprobado por el dueño)
+
+La etapa 9 (PR #36, en `main` y en el VPS desde `a22b69c`) ya resolvió parte de
+lo que R1–R3 y V1 proponían, con otras convenciones. **Mandan las suyas.**
+Donde esta sección contradiga a las de Requesty o vídeo de arriba, gana esta.
+
+| Lo planeado | Lo que ya existe | Cómo queda |
+|---|---|---|
+| Prefijo `requesty/` | `hf:` en `app/src/upstream.rs`, con `Upstream::TODOS` | Requesty es la variante `Upstream::Requesty` con prefijo **`rq:`** (`rq:vertex/gemini-3.1-flash-lite@europe-west1`) |
+| `/v1/models?agregador=requesty\|todos` | `/v1/models?upstream=hf` | **`/v1/models?upstream=rq`**. Sin parámetro sigue siendo solo OpenRouter |
+| Campo `nombre_canonico` | `canonical_slug` y `hugging_face_id` en cada modelo | Se reutiliza `canonical_slug`; en Requesty sale de `model_canonical_name`, normalizado |
+| Campos `region`, `retencion`, `entrena` | — | Se añaden, solo con valor en `rq:` (en los demás, `null`) |
+| Columna `upstream` en el uso | Existe (`openrouter`, `hf`) | Se añade `rq` |
+| `coste_origen = "requesty"` | `Medicion::Reconciliada` / `Estimada` | Nueva `Medicion::Directa`: `usage.cost` de la respuesta, sin conciliar |
+| Errores `requesty_rechaza`… | `hf_rechaza`, `hf_inalcanzable`, `hf_tardo_demasiado`, `upstream_sin_configurar` | `rq_rechaza`, `rq_inalcanzable`, `rq_tardo_demasiado`; sin clave, `503 upstream_sin_configurar` |
+| `/salud` y `/v1/estado` con «requesty configurada» | `"upstreams": {"openrouter": true, "hf": true}` | Se añade `"rq"` |
+| R3: respaldo solo hacia Requesty | El VPS ya tiene token de Hugging Face (`hf=true`) | El respaldo recorre una lista ordenada de upstreams. Hugging Face entra ya, **sin esperar a la clave de Requesty**: `gpt-oss-120b`, el modelo por defecto, lo sirven allí varios hosts |
+| V1: `GET /v1/videos/models` | `/v1/models?salida=video` ya lista los de vídeo de OpenRouter | **No hay ruta nueva**: V1 añade a esos modelos `precio_segundo` y `tareas`, y Higgsfield entra como upstream con prefijo **`higgsfield:`** (`?upstream=higgsfield`). V2 y V3 (`POST/GET /v1/videos`) siguen igual |
+
+Orden nuevo:
+
+1. **R3 con Hugging Face**: respaldo de OpenRouter → HF. Ya tiene token en el VPS.
+2. **R1 y R2 con `rq:`**: catálogo y llamadas a Requesty, cuando estén sus claves.
+3. **V1 y V2**: vídeo, cuando esté la clave de Higgsfield.
 
 ## Después (sin orden ni compromiso)
 
