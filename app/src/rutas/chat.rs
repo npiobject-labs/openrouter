@@ -468,6 +468,7 @@ mod pruebas {
         let servicio = Arc::new(Servicio {
             openrouter: Cliente::nuevo(&config),
             catalogo: Catalogo::default(),
+            catalogo_video: crate::video::CatalogoVideo::default(),
             uso: Uso::nuevo(Some("/no/existe/uso.db")),
             config,
         });

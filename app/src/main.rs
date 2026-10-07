@@ -8,6 +8,7 @@ mod openrouter;
 mod rutas;
 mod upstream;
 mod uso;
+mod video;
 
 use std::sync::Arc;
 
@@ -33,6 +34,8 @@ pub struct Servicio {
     /// también con Hugging Face.
     pub openrouter: Cliente,
     pub catalogo: Catalogo,
+    /// Los catálogos de vídeo de OpenRouter y Higgsfield (etapa 11).
+    pub catalogo_video: video::CatalogoVideo,
     pub uso: Uso,
 }
 
@@ -50,6 +53,7 @@ async fn main() {
     let servicio = Arc::new(Servicio {
         openrouter: Cliente::nuevo(&config),
         catalogo: Catalogo::default(),
+        catalogo_video: video::CatalogoVideo::default(),
         uso: Uso::nuevo(config.bd.as_deref()),
         config,
     });
@@ -68,6 +72,10 @@ async fn main() {
         .route("/apps/{id}", delete(rutas::apps::baja))
         .route("/apps/{id}/presupuesto", put(rutas::apps::limites))
         .route("/presupuesto", get(rutas::apps::presupuesto))
+        .route("/videos", post(rutas::videos::crea))
+        .route("/videos/models", get(rutas::videos::modelos))
+        .route("/videos/{id}", get(rutas::videos::uno))
+        .route("/videos/{id}/contenido", get(rutas::videos::contenido))
         .route_layer(middleware::from_fn_with_state(
             servicio.clone(),
             auth::exigir_clave,

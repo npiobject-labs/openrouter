@@ -8,6 +8,7 @@ use crate::{
     config::{Config, REFERER, TITULO},
     error::ErrorApi,
     upstream::{Conexion, Upstream},
+    video::ProveedorVideo,
 };
 
 /// Las consultas a un modelo pueden tardar; el resto de llamadas, no.
@@ -21,6 +22,9 @@ const ESPERA_CORTA: Duration = Duration::from_secs(20);
 pub struct Cliente {
     http: Client,
     conexiones: [Conexion; 3],
+    /// Higgsfield va aparte: no es un upstream de chat, solo de vídeo.
+    base_hg: String,
+    clave_hg: Option<String>,
 }
 
 impl Cliente {
@@ -48,6 +52,8 @@ impl Cliente {
                     clave: config.clave_rq.clone(),
                 },
             ],
+            base_hg: config.base_hg.clone(),
+            clave_hg: config.clave_hg.clone(),
         }
     }
 
@@ -70,6 +76,7 @@ impl Cliente {
         for c in &self.conexiones {
             mapa.insert(c.upstream.nombre().to_string(), json!(c.configurada()));
         }
+        mapa.insert("higgsfield".into(), json!(self.clave_hg.is_some()));
         Value::Object(mapa)
     }
 
@@ -228,6 +235,199 @@ impl Cliente {
     }
 }
 
+impl Cliente {
+    /// Si hay clave para generar vídeo con ese proveedor.
+    pub fn video_configurado(&self, p: ProveedorVideo) -> bool {
+        match p {
+            ProveedorVideo::OpenRouter => self.configurado(Upstream::OpenRouter),
+            ProveedorVideo::Higgsfield => self.clave_hg.is_some(),
+        }
+    }
+
+    /// La petición ya autenticada para el proveedor de vídeo: OpenRouter con
+    /// `Bearer` y Higgsfield con `Key`, como pide su documentación.
+    fn video_peticion(
+        &self,
+        p: ProveedorVideo,
+        metodo: reqwest::Method,
+        ruta: &str,
+    ) -> Result<reqwest::RequestBuilder, ErrorApi> {
+        match p {
+            ProveedorVideo::OpenRouter => {
+                let (base, clave) = self.acceso(Upstream::OpenRouter)?;
+                Ok(self
+                    .http
+                    .request(metodo, format!("{base}{ruta}"))
+                    .bearer_auth(clave)
+                    .header("HTTP-Referer", REFERER)
+                    .header("X-Title", TITULO))
+            }
+            ProveedorVideo::Higgsfield => {
+                let clave = self.clave_hg.as_deref().ok_or_else(|| {
+                    ErrorApi::nuevo(
+                        StatusCode::SERVICE_UNAVAILABLE,
+                        "upstream_sin_configurar",
+                        "El servicio no tiene clave de Higgsfield configurada (secreto \
+                         HIGGSFIELD_API_KEY); los modelos \"higgsfield:\" no responden hasta que \
+                         se defina.",
+                    )
+                })?;
+                Ok(self
+                    .http
+                    .request(metodo, format!("{}{ruta}", self.base_hg))
+                    .header("Authorization", format!("Key {clave}")))
+            }
+        }
+    }
+
+    /// Manda la petición y devuelve el JSON, o el error con el sobre de siempre.
+    async fn video_json(
+        &self,
+        p: ProveedorVideo,
+        peticion: reqwest::RequestBuilder,
+        espera: Duration,
+    ) -> Result<Value, ErrorApi> {
+        let respuesta = peticion
+            .timeout(espera)
+            .send()
+            .await
+            .map_err(|e| video_sin_alcanzar(p, e))?;
+        let estado = respuesta.status();
+        let cuerpo: Value = respuesta.json().await.unwrap_or(Value::Null);
+        if !estado.is_success() {
+            return Err(match p {
+                ProveedorVideo::OpenRouter => {
+                    ErrorApi::de_upstream(Upstream::OpenRouter, estado, cuerpo)
+                }
+                ProveedorVideo::Higgsfield => ErrorApi {
+                    estado,
+                    codigo: "higgsfield_rechaza",
+                    mensaje: cuerpo
+                        .get("detail")
+                        .map(|d| {
+                            d.as_str()
+                                .map(str::to_string)
+                                .unwrap_or_else(|| d.to_string())
+                        })
+                        .unwrap_or_else(|| format!("Higgsfield respondió {estado}.")),
+                    upstream: Some(cuerpo),
+                    uso: None,
+                },
+            });
+        }
+        Ok(cuerpo)
+    }
+
+    /// El catálogo de vídeo del proveedor, bruto. No gasta crédito.
+    pub async fn video_modelos(&self, p: ProveedorVideo) -> Result<Value, ErrorApi> {
+        let ruta = match p {
+            ProveedorVideo::OpenRouter => "/videos/models",
+            ProveedorVideo::Higgsfield => "/models",
+        };
+        let peticion = self.video_peticion(p, reqwest::Method::GET, ruta)?;
+        self.video_json(p, peticion, ESPERA_CORTA).await
+    }
+
+    /// Lo que cobrará Higgsfield por un trabajo, en dólares, sin encolarlo:
+    /// `POST /estimate/{modelo}` con el mismo cuerpo.
+    pub async fn video_estima_higgsfield(
+        &self,
+        modelo: &str,
+        cuerpo: &Value,
+    ) -> Result<f64, ErrorApi> {
+        let peticion = self
+            .video_peticion(
+                ProveedorVideo::Higgsfield,
+                reqwest::Method::POST,
+                &format!("/estimate/{modelo}"),
+            )?
+            .json(cuerpo);
+        let r = self
+            .video_json(ProveedorVideo::Higgsfield, peticion, ESPERA_CORTA)
+            .await?;
+        r.get("usd")
+            .and_then(|u| {
+                u.as_str()
+                    .and_then(|t| t.parse().ok())
+                    .or_else(|| u.as_f64())
+            })
+            .ok_or_else(|| {
+                ErrorApi::nuevo(
+                    StatusCode::BAD_GATEWAY,
+                    "respuesta_ilegible",
+                    "Higgsfield no devolvió el importe estimado (usd).",
+                )
+                .con_upstream(r.clone())
+            })
+    }
+
+    /// Encola un trabajo. OpenRouter: `POST /videos` con `model` en el
+    /// cuerpo. Higgsfield: `POST /{modelo}` con el cuerpo del modelo.
+    pub async fn video_crea(
+        &self,
+        p: ProveedorVideo,
+        modelo: &str,
+        cuerpo: &Value,
+    ) -> Result<Value, ErrorApi> {
+        let ruta = match p {
+            ProveedorVideo::OpenRouter => "/videos".to_string(),
+            ProveedorVideo::Higgsfield => format!("/{modelo}"),
+        };
+        let peticion = self
+            .video_peticion(p, reqwest::Method::POST, &ruta)?
+            .json(cuerpo);
+        self.video_json(p, peticion, ESPERA_CHAT).await
+    }
+
+    /// El estado de un trabajo en el proveedor.
+    pub async fn video_estado(&self, p: ProveedorVideo, id: &str) -> Result<Value, ErrorApi> {
+        let ruta = match p {
+            ProveedorVideo::OpenRouter => format!("/videos/{id}"),
+            ProveedorVideo::Higgsfield => format!("/requests/{id}/status"),
+        };
+        let peticion = self.video_peticion(p, reqwest::Method::GET, &ruta)?;
+        self.video_json(p, peticion, ESPERA_CORTA).await
+    }
+
+    /// El vídeo de un trabajo de OpenRouter, que solo se descarga con su clave.
+    /// Se devuelve la respuesta sin leer para pasarla al cliente en flujo.
+    pub async fn video_contenido(
+        &self,
+        id: &str,
+        indice: u32,
+    ) -> Result<reqwest::Response, ErrorApi> {
+        let p = ProveedorVideo::OpenRouter;
+        let respuesta = self
+            .video_peticion(p, reqwest::Method::GET, &format!("/videos/{id}/content"))?
+            .query(&[("index", indice)])
+            .timeout(ESPERA_CHAT)
+            .send()
+            .await
+            .map_err(|e| video_sin_alcanzar(p, e))?;
+        let estado = respuesta.status();
+        if !estado.is_success() {
+            let cuerpo: Value = respuesta.json().await.unwrap_or(Value::Null);
+            return Err(ErrorApi::de_upstream(Upstream::OpenRouter, estado, cuerpo));
+        }
+        Ok(respuesta)
+    }
+}
+
+fn video_sin_alcanzar(p: ProveedorVideo, e: reqwest::Error) -> ErrorApi {
+    match p {
+        ProveedorVideo::OpenRouter => sin_alcanzar(Upstream::OpenRouter, "vídeo", e),
+        ProveedorVideo::Higgsfield => ErrorApi::nuevo(
+            StatusCode::BAD_GATEWAY,
+            if e.is_timeout() {
+                "higgsfield_tardo_demasiado"
+            } else {
+                "higgsfield_inalcanzable"
+            },
+            format!("vídeo: {e}"),
+        ),
+    }
+}
+
 fn sin_alcanzar(upstream: Upstream, que: &str, e: reqwest::Error) -> ErrorApi {
     let codigo = if e.is_timeout() {
         upstream.codigo_tardo_demasiado()
@@ -305,12 +505,14 @@ pub(crate) mod pruebas {
             clave_openrouter: Some("sk-or-prueba".into()),
             clave_hf: clave_hf.map(str::to_string),
             clave_rq: None,
+            clave_hg: None,
             clave_servicio: None,
             modelo_defecto: "m".into(),
             modelo_multimodal: "mm".into(),
             base_openrouter: base_openrouter.into(),
             base_hf: base_hf.into(),
             base_rq: "http://127.0.0.1:1".into(),
+            base_hg: "http://127.0.0.1:1".into(),
             build: "dev".into(),
             puerto: 0,
             bd: None,
@@ -342,7 +544,7 @@ pub(crate) mod pruebas {
         assert!(!cliente.configurado(Upstream::HuggingFace));
         assert_eq!(
             cliente.configurados(),
-            json!({ "openrouter": true, "hf": false, "rq": false })
+            json!({ "openrouter": true, "hf": false, "rq": false, "higgsfield": false })
         );
 
         let fallo = cliente

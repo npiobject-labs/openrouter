@@ -19,6 +19,9 @@ const BASE_HF: &str = "https://router.huggingface.co/v1";
 /// tiene el mismo catálogo. Que la inferencia quede en la UE lo decide el id
 /// (`@eu`, `@europe-…`), no este endpoint.
 const BASE_RQ: &str = "https://router.eu.requesty.ai/v1";
+/// La API de Higgsfield (vídeo). No habla la de OpenAI: cada modelo es una
+/// ruta propia y los trabajos se consultan en `/requests/{id}/status`.
+const BASE_HG: &str = "https://api.higgsfield.ai";
 
 #[derive(Clone)]
 pub struct Config {
@@ -30,6 +33,8 @@ pub struct Config {
     /// Clave de Requesty (`REQUESTY_API_KEY`), con el registro de prompts
     /// apagado en su panel. Opcional como la de Hugging Face.
     pub clave_rq: Option<String>,
+    /// Clave de Higgsfield (`HIGGSFIELD_API_KEY`), solo para vídeo. Opcional.
+    pub clave_hg: Option<String>,
     /// Clave que exigimos a quien llama a /v1. Sin ella el servicio no atiende.
     pub clave_servicio: Option<String>,
     pub modelo_defecto: String,
@@ -38,6 +43,7 @@ pub struct Config {
     pub base_openrouter: String,
     pub base_hf: String,
     pub base_rq: String,
+    pub base_hg: String,
     pub build: String,
     pub puerto: u16,
     /// Fichero SQLite del histórico. Por defecto, el volumen de Fly.
@@ -53,6 +59,7 @@ impl Config {
             clave_openrouter: variable("OPENROUTER_API_KEY"),
             clave_hf: variable("HF_TOKEN"),
             clave_rq: variable("REQUESTY_API_KEY"),
+            clave_hg: variable("HIGGSFIELD_API_KEY"),
             clave_servicio: variable("SERVICIO_CLAVE"),
             modelo_defecto: variable("MODELO_DEFECTO")
                 .unwrap_or_else(|| MODELO_DEFECTO.to_string()),
@@ -70,6 +77,10 @@ impl Config {
                 .to_string(),
             base_rq: variable("REQUESTY_BASE")
                 .unwrap_or_else(|| BASE_RQ.to_string())
+                .trim_end_matches('/')
+                .to_string(),
+            base_hg: variable("HIGGSFIELD_BASE")
+                .unwrap_or_else(|| BASE_HG.to_string())
                 .trim_end_matches('/')
                 .to_string(),
             build: variable("BUILD_ID").unwrap_or_else(|| "dev".to_string()),

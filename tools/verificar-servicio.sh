@@ -154,6 +154,28 @@ else
   ok "sin REQUESTY_API_KEY, rq: responde 503 y el resto sigue"
 fi
 
+# --- /v1/videos/models: el catalogo de video (OpenRouter y Higgsfield) ---
+# No gasta: solo lista. Con clave de OpenRouter tiene que traer sus modelos de
+# video con precio por segundo; con la de Higgsfield, tambien los suyos.
+if [ "${con_openrouter}" = "1" ]; then
+  http="$(curl -s -o "$tmp/videos.json" -w '%{http_code}' --max-time 40 "${auth[@]}" "${base}/v1/videos/models" || true)"
+  echo "/v1/videos/models -> HTTP ${http}"
+  [ "${http}" = "200" ] || { cat "$tmp/videos.json"; fallo "/v1/videos/models respondio ${http}."; }
+  n_or_v="$(jq -r '.upstreams.openrouter // 0' "$tmp/videos.json")"
+  [ "${n_or_v}" -gt 0 ] || fallo "el catalogo de video no trae modelos de OpenRouter"
+  jq -e '[.data[] | select(.upstream == "openrouter" and .precio_segundo_desde != null)] | length > 0' "$tmp/videos.json" > /dev/null \
+    || fallo "ningun modelo de video de OpenRouter trae precio por segundo"
+  if [ "${con_hg}" = "1" ]; then
+    n_hg_v="$(jq -r '.upstreams.higgsfield // 0' "$tmp/videos.json")"
+    [ "${n_hg_v}" -gt 0 ] || fallo "con HIGGSFIELD_API_KEY el catalogo de video no trae modelos de Higgsfield"
+    jq -e '[.data[] | select(.upstream == "higgsfield")] | all(.id | startswith("higgsfield:"))' "$tmp/videos.json" > /dev/null \
+      || fallo "los modelos de Higgsfield no llevan el prefijo higgsfield:"
+  else
+    n_hg_v="sin clave"
+  fi
+  ok "video: ${n_or_v} modelos de OpenRouter, Higgsfield: ${n_hg_v}"
+fi
+
 if [ "${con_openrouter}" != "1" ]; then
   echo "Sin clave de OpenRouter en el despliegue: no se comprueban /v1/estado ni /v1/models."
   resumen "Sin clave de OpenRouter: /v1/estado y /v1/models sin comprobar"
@@ -186,7 +208,9 @@ jq -e '.upstreams.openrouter == true and (.upstreams.hf | type == "boolean")' "$
   || fallo "/v1/estado dice upstreams.hf=$(jq -r '.upstreams.hf' "$tmp/estado.json") y CON_HF=${con_hf}: el secreto HF_TOKEN no llego al despliegue."
 [ "$(jq -r '.upstreams.rq' "$tmp/estado.json")" = "$([ "${con_rq}" = "1" ] && echo true || echo false)" ] \
   || fallo "/v1/estado dice upstreams.rq=$(jq -r '.upstreams.rq' "$tmp/estado.json") y CON_RQ=${con_rq}: el secreto de Requesty no llego al despliegue."
-ok "upstreams: openrouter=true, hf=$(jq -r '.upstreams.hf' "$tmp/estado.json"), rq=$(jq -r '.upstreams.rq' "$tmp/estado.json")"
+[ "$(jq -r '.upstreams.higgsfield' "$tmp/estado.json")" = "$([ "${con_hg}" = "1" ] && echo true || echo false)" ] \
+  || fallo "/v1/estado dice upstreams.higgsfield=$(jq -r '.upstreams.higgsfield' "$tmp/estado.json") y CON_HG=${con_hg}: el secreto de Higgsfield no llego al despliegue."
+ok "upstreams: openrouter=true, hf=$(jq -r '.upstreams.hf' "$tmp/estado.json"), rq=$(jq -r '.upstreams.rq' "$tmp/estado.json"), higgsfield=$(jq -r '.upstreams.higgsfield' "$tmp/estado.json")"
 
 # --- /v1/models: el catalogo trae modelos de verdad ---
 http="$(curl -s -o "$tmp/modelos.json" -w '%{http_code}' --max-time 40 "${auth[@]}" "${base}/v1/models" || true)"

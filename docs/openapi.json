@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "openrouter · servicio",
-    "version": "0.7.0",
+    "version": "0.8.0",
     "summary": "Pasarela propia sobre OpenRouter y el router de Hugging Face, pensada para ser llamada por otras aplicaciones.",
     "description": "Esto no es una aplicación con interfaz: es un conjunto de servicios HTTP. La clave de OpenRouter vive solo en el backend y nunca sale de él. Cada aplicación consumidora tiene su propia clave, que se da de alta y se revoca sin tocar el despliegue.\n\nEl contrato sigue el de la API de OpenAI donde existe equivalente, así que cualquier cliente de OpenAI funciona cambiando la URL base. Lo propio del servicio va en rutas propias y en cabeceras `X-...`. Una ruta publicada no se rompe: lo incompatible iría a `/v2/`.\n\nLa versión de este documento acompaña a la etapa entregada: `0.6.0` es la etapa 6; `0.6.2` amplía `/v1/models` con descripción, precios completos, modalidades de salida y parámetros, sin cambiar nada de lo publicado; `0.6.4` entrega la etapa 9 (catálogo completo de OpenRouter y compra en el router de Hugging Face con el prefijo `hf:`), también sin cambiar nada: solo añade campos, parámetros y códigos. Las etapas 7 y 8 siguen pendientes.",
     "license": {
@@ -52,6 +52,10 @@
     {
       "name": "Presupuestos",
       "description": "Topes de gasto y de ritmo por aplicación, y cuánto margen queda."
+    },
+    {
+      "name": "Vídeo",
+      "description": "Generar y editar vídeo (asíncrono)."
     }
   ],
   "paths": {
@@ -1377,6 +1381,272 @@
           }
         }
       }
+    },
+    "/v1/videos/models": {
+      "get": {
+        "tags": [
+          "Vídeo"
+        ],
+        "summary": "Catálogo de vídeo",
+        "operationId": "listarModelosDeVideo",
+        "description": "Los modelos de vídeo de OpenRouter y de Higgsfield en un solo formato. Los de Higgsfield solo salen si el despliegue tiene `HIGGSFIELD_API_KEY`. No gasta crédito. Caché de una hora por proveedor.",
+        "parameters": [
+          {
+            "name": "upstream",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "openrouter",
+                "higgsfield",
+                "todos"
+              ],
+              "default": "todos"
+            }
+          },
+          {
+            "name": "tarea",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "texto_a_video",
+                "imagen_a_video",
+                "video_a_video",
+                "alargar",
+                "ampliar",
+                "avatar"
+              ]
+            }
+          },
+          {
+            "name": "texto",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "max_precio_segundo",
+            "in": "query",
+            "schema": {
+              "type": "number"
+            },
+            "example": 0.1
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "`upstreams` dice cuántos modelos trae cada proveedor (`null` si no tiene clave).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "object": {
+                      "type": "string"
+                    },
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/ModeloVideo"
+                      }
+                    },
+                    "total": {
+                      "type": "integer"
+                    },
+                    "upstreams": {
+                      "type": "object"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/PeticionInvalida"
+          },
+          "401": {
+            "$ref": "#/components/responses/NoAutorizado"
+          },
+          "502": {
+            "$ref": "#/components/responses/FalloDeProveedor"
+          },
+          "503": {
+            "$ref": "#/components/responses/SinConfigurar"
+          }
+        }
+      }
+    },
+    "/v1/videos": {
+      "post": {
+        "tags": [
+          "Vídeo"
+        ],
+        "summary": "Generar o editar un vídeo",
+        "operationId": "crearVideo",
+        "description": "Encola un vídeo y responde `202` al momento con el trabajo; se consulta después en `GET /v1/videos/{id}`. El cuerpo es el del proveedor más `model`: en OpenRouter, `prompt`, `duration`, `resolution`, `aspect_ratio`, `generate_audio`, `frame_images`, `input_references`...; en Higgsfield, el del modelo elegido (`prompt`, `image_url`, `video_url`...).\n\nAntes de encolar se estima el coste y, con clave de aplicación, se comprueba que cabe en lo que le queda de presupuesto: si no, `402 presupuesto_insuficiente` sin gastar nada. Lo estimado cuenta en el presupuesto hasta que el vídeo termina; entonces se sustituye por el coste real (o 0 si falló). Pasa también por el cortacircuitos de bucles y la cuota por minuto.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "model"
+                ],
+                "properties": {
+                  "model": {
+                    "type": "string"
+                  }
+                },
+                "additionalProperties": true
+              },
+              "example": {
+                "model": "google/veo-3.1-fast",
+                "prompt": "Un perro corriendo por la playa al atardecer",
+                "duration": 4,
+                "resolution": "720p",
+                "aspect_ratio": "16:9",
+                "generate_audio": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Encolado.",
+            "headers": {
+              "X-Uso-Id": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Presupuesto": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TrabajoVideo"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/PeticionInvalida"
+          },
+          "401": {
+            "$ref": "#/components/responses/NoAutorizado"
+          },
+          "402": {
+            "$ref": "#/components/responses/SinSaldo"
+          },
+          "429": {
+            "$ref": "#/components/responses/DemasiadasPeticiones"
+          },
+          "502": {
+            "$ref": "#/components/responses/FalloDeProveedor"
+          },
+          "503": {
+            "$ref": "#/components/responses/SinConfigurar"
+          }
+        }
+      }
+    },
+    "/v1/videos/{id}": {
+      "get": {
+        "tags": [
+          "Vídeo"
+        ],
+        "summary": "Estado de un vídeo",
+        "operationId": "consultarVideo",
+        "description": "El trabajo, con su estado. Si no ha terminado se pregunta al proveedor (como mucho cada 3 segundos). Al terminar trae `urls` y el coste definitivo. Un vídeo de otra aplicación responde `404`.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "El trabajo.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TrabajoVideo"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/NoAutorizado"
+          },
+          "404": {
+            "$ref": "#/components/responses/NoEncontrado"
+          }
+        }
+      }
+    },
+    "/v1/videos/{id}/contenido": {
+      "get": {
+        "tags": [
+          "Vídeo"
+        ],
+        "summary": "Descargar un vídeo",
+        "operationId": "descargarVideo",
+        "description": "El fichero del vídeo terminado. Los de OpenRouter se sirven a través del servicio (su URL pide la clave de OpenRouter, que nunca sale del backend); los de Higgsfield redirigen (`302`) a su URL pública. Si aún no está, `409 video_no_listo`.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "index",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "default": 0
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "El vídeo.",
+            "content": {
+              "video/mp4": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "302": {
+            "description": "Redirección a la URL pública (Higgsfield)."
+          },
+          "401": {
+            "$ref": "#/components/responses/NoAutorizado"
+          },
+          "404": {
+            "$ref": "#/components/responses/NoEncontrado"
+          },
+          "409": {
+            "description": "Aún no está terminado (`video_no_listo`)."
+          }
+        }
+      }
     }
   },
   "components": {
@@ -2096,6 +2366,177 @@
           "openrouter",
           "hf"
         ]
+      },
+      "TrabajoVideo": {
+        "type": "object",
+        "description": "Un trabajo de vídeo.",
+        "properties": {
+          "id": {
+            "type": "string",
+            "example": "vid-1791400000000-3"
+          },
+          "object": {
+            "type": "string",
+            "enum": [
+              "video"
+            ]
+          },
+          "modelo": {
+            "type": "string",
+            "example": "google/veo-3.1-fast"
+          },
+          "upstream": {
+            "type": "string",
+            "enum": [
+              "openrouter",
+              "higgsfield"
+            ]
+          },
+          "estado": {
+            "type": "string",
+            "enum": [
+              "pendiente",
+              "en_curso",
+              "completado",
+              "fallido",
+              "cancelado",
+              "caducado"
+            ]
+          },
+          "estado_upstream": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "El estado tal cual lo da el proveedor."
+          },
+          "coste_estimado": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "description": "Dólares, calculados antes de encolar con los precios del proveedor (OpenRouter) o con su estimador (Higgsfield). Es lo que cuenta en el presupuesto mientras el vídeo se hace."
+          },
+          "coste": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "description": "Dólares al terminar: el real de OpenRouter, el estimado de Higgsfield (es lo que cobra), o 0 si falló."
+          },
+          "urls": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Dónde descargar el vídeo. En OpenRouter, la ruta del servicio `/v1/videos/{id}/contenido?index=N`, que pide la misma clave; en Higgsfield, su URL pública."
+          },
+          "caduca": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Hasta cuándo se puede descargar, si se sabe (Higgsfield: 7 días)."
+          },
+          "error": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "creado": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "uso_id": {
+            "type": "string",
+            "description": "El registro de uso de este vídeo (`/v1/uso/{id}`)."
+          }
+        }
+      },
+      "ModeloVideo": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Sin prefijo, de OpenRouter; con `higgsfield:`, de Higgsfield."
+          },
+          "object": {
+            "type": "string",
+            "enum": [
+              "model"
+            ]
+          },
+          "upstream": {
+            "type": "string",
+            "enum": [
+              "openrouter",
+              "higgsfield"
+            ]
+          },
+          "nombre": {
+            "type": "string"
+          },
+          "descripcion": {
+            "type": "string"
+          },
+          "tareas": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "texto_a_video",
+                "imagen_a_video",
+                "video_a_video",
+                "alargar",
+                "ampliar",
+                "avatar"
+              ]
+            }
+          },
+          "duraciones": {
+            "type": "array",
+            "items": {
+              "type": "integer"
+            }
+          },
+          "resoluciones": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "formatos": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Relaciones de aspecto (`16:9`...)."
+          },
+          "audio": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "precios": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "description": "Los SKU de precio tal cual los publica OpenRouter (por segundo, por resolución, con o sin audio, por token de vídeo). Higgsfield no los publica: su precio se estima trabajo a trabajo."
+          },
+          "precio_segundo_desde": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "description": "Lo más barato por segundo, en dólares."
+          },
+          "creado": {
+            "type": "integer"
+          }
+        }
       }
     },
     "responses": {
@@ -2268,7 +2709,7 @@
     {
       "code": "upstream_sin_configurar",
       "http": 503,
-      "cuando": "Se pidió un modelo `hf:` o `rq:` (o `/v1/models?upstream=hf|rq`) y el despliegue no tiene `HF_TOKEN` o `REQUESTY_API_KEY`. El resto del servicio funciona."
+      "cuando": "Se pidió un modelo `hf:`, `rq:` o `higgsfield:` (o su catálogo) y el despliegue no tiene `HF_TOKEN`, `REQUESTY_API_KEY` o `HIGGSFIELD_API_KEY`. El resto del servicio funciona."
     },
     {
       "code": "upstream_desconocido",
@@ -2384,6 +2825,36 @@
       "code": "rq_tardo_demasiado",
       "http": 502,
       "cuando": "Requesty no respondió a tiempo."
+    },
+    {
+      "code": "presupuesto_insuficiente",
+      "http": 402,
+      "cuando": "El vídeo pedido costaría más de lo que le queda a la aplicación en el periodo. No se encola nada."
+    },
+    {
+      "code": "video_desconocido",
+      "http": 404,
+      "cuando": "No hay ningún vídeo con ese id para esta clave."
+    },
+    {
+      "code": "video_no_listo",
+      "http": 409,
+      "cuando": "Se pidió el contenido de un vídeo que aún no está completado."
+    },
+    {
+      "code": "higgsfield_rechaza",
+      "http": "el de Higgsfield",
+      "cuando": "Higgsfield rechazó el trabajo o su estimación (parámetros que el modelo no admite, saldo...); su cuerpo va en `error.upstream`."
+    },
+    {
+      "code": "higgsfield_inalcanzable",
+      "http": 502,
+      "cuando": "No se pudo conectar con Higgsfield."
+    },
+    {
+      "code": "higgsfield_tardo_demasiado",
+      "http": 502,
+      "cuando": "Higgsfield no respondió a tiempo."
     }
   ],
   "x-etapas": [
@@ -2556,6 +3027,30 @@
         }
       ],
       "nota": "Requesty es el segundo agregador: no pasa por OpenRouter, tiene endpoint en Fráncfort y su catálogo dice de cada modelo dónde procesa (`region`), si guarda (`retencion`, `retencion_dias`) y si entrena (`entrena`). Su clave (`REQUESTY_API_KEY`) es opcional y lleva el registro de prompts apagado. Cuando OpenRouter falla, la consulta se repite con el mismo modelo en Hugging Face o en Requesty."
+    },
+    {
+      "numero": 11,
+      "titulo": "Vídeo: OpenRouter y Higgsfield",
+      "estado": "entregada",
+      "rutas": [
+        {
+          "metodo": "GET",
+          "ruta": "/v1/videos/models"
+        },
+        {
+          "metodo": "POST",
+          "ruta": "/v1/videos"
+        },
+        {
+          "metodo": "GET",
+          "ruta": "/v1/videos/{id}"
+        },
+        {
+          "metodo": "GET",
+          "ruta": "/v1/videos/{id}/contenido"
+        }
+      ],
+      "nota": "Generar y editar vídeo con la API asíncrona de vídeo de OpenRouter (Veo, Seedance, Kling, Wan, Runway, FLUX Video Edit...) y con Higgsfield (`higgsfield:<modelo>`, clave `HIGGSFIELD_API_KEY` opcional). El coste se estima antes de encolar y se comprueba contra el presupuesto de la aplicación; al terminar se anota el real."
     }
   ]
 }

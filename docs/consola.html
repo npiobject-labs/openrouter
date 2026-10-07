@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="build" content="OP-B1-20260920-017">
+<meta name="build" content="OP-B1-20261007-018">
 <!-- App de Fly: <repo>-<owner>, el mismo nombre que deriva deploy.yml.
      Con otro nombre, cambia este content o abre la pagina con ?app=<nombre>. -->
 <meta name="fly-app" content="openrouter-npiobject-labs">
@@ -255,7 +255,7 @@ footer{display:flex;flex-wrap:wrap;gap:.4rem 1.2rem;font-size:.8rem;color:var(--
   </section>
 
   <footer>
-    <span>Build <code>OP-B1-20260920-017</code></span>
+    <span>Build <code>OP-B1-20261007-018</code></span>
     <span>Backend: <a id="url-backend" href="#">–</a></span>
     <a href="conectar.html">Conectar una aplicación</a>
     <a href="api.html">Documentación de la API</a>
@@ -263,6 +263,41 @@ footer{display:flex;flex-wrap:wrap;gap:.4rem 1.2rem;font-size:.8rem;color:var(--
     <a href="holamundo.html">Comprobación del backend</a>
     <a href="bitacora.html">Bitácora</a>
   </footer>
+  <section class="panel">
+    <h2>Vídeo <span class="estado" id="vid-estado">sin cargar</span></h2>
+    <p>Genera o edita vídeo con OpenRouter o con Higgsfield (<code>higgsfield:</code>). Un vídeo cuesta de céntimos a varios dólares: antes de lanzarlo se enseña lo que costaría, y el servicio lo vuelve a comprobar contra el presupuesto de la aplicación.</p>
+    <div class="fila">
+      <label for="vid-tarea">Tarea
+        <select id="vid-tarea">
+          <option value="">todas</option>
+          <option value="texto_a_video">texto a vídeo</option>
+          <option value="imagen_a_video">imagen a vídeo</option>
+          <option value="video_a_video">editar vídeo</option>
+          <option value="alargar">alargar</option>
+          <option value="ampliar">ampliar</option>
+          <option value="avatar">avatar</option>
+        </select>
+      </label>
+      <button id="btn-vid-cat">Cargar catálogo de vídeo</button>
+    </div>
+    <label for="vid-modelo">Modelo <select id="vid-modelo"></select></label>
+    <label for="vid-prompt">Prompt
+      <textarea id="vid-prompt" rows="3">Un perro corriendo por la playa al atardecer, plano cinematográfico</textarea>
+    </label>
+    <div class="fila">
+      <label for="vid-dur">Segundos <input id="vid-dur" type="number" value="4" min="1" max="30"></label>
+      <label for="vid-res">Resolución <input id="vid-res" value="720p" size="6"></label>
+      <label for="vid-audio"><input type="checkbox" id="vid-audio"> con audio</label>
+      <span style="flex:1"></span>
+      <button class="primario" id="btn-vid">Generar</button>
+    </div>
+    <p class="respuesta" id="vid-msg">Carga el catálogo, elige un modelo y genera.</p>
+    <video id="vid-video" controls hidden style="max-width:100%"></video>
+    <details>
+      <summary>JSON crudo</summary>
+      <pre id="vid-crudo">–</pre>
+    </details>
+  </section>
 </main>
 
 <script>
@@ -825,6 +860,86 @@ footer{display:flex;flex-wrap:wrap;gap:.4rem 1.2rem;font-size:.8rem;color:var(--
       boton.disabled = false;
       if ($('uso-estado').textContent !== 'sin cargar') setTimeout(cargarUso, 300);
     });
+  });
+
+  // --- vídeo ---------------------------------------------------------------
+  var videos = [];
+  $('btn-vid-cat').addEventListener('click', function(){
+    var t = $('vid-tarea').value;
+    pinta('vid-estado', 'cargando…', '');
+    llama('/v1/videos/models' + (t ? '?tarea=' + encodeURIComponent(t) : ''), { espera: 90000 })
+      .then(function(r){
+        videos = r.datos.data || [];
+        var sel = $('vid-modelo');
+        sel.textContent = '';
+        videos.forEach(function(m){
+          var o = document.createElement('option');
+          o.value = m.id;
+          o.textContent = m.id + ' · ' + (m.precio_segundo_desde != null ? 'desde ' + m.precio_segundo_desde.toFixed(3) + ' $/s' : 'precio por trabajo') + ' · ' + m.tareas.join(', ');
+          sel.appendChild(o);
+        });
+        var u = r.datos.upstreams || {};
+        pinta('vid-estado', videos.length + ' modelos (OpenRouter ' + (u.openrouter == null ? 'sin clave' : u.openrouter) + ', Higgsfield ' + (u.higgsfield == null ? 'sin clave' : u.higgsfield) + ')', 'ok');
+      })
+      .catch(function(e){ pinta('vid-estado', e.message, 'mal'); });
+  });
+
+  function muestraVideo(t){
+    var url = (t.urls || [])[0];
+    if (!url) return;
+    var v = $('vid-video');
+    if (url.indexOf('/v1/') === 0) {
+      // Los de OpenRouter pasan por el servicio, con la misma clave.
+      fetch(base + url, { headers: { 'Authorization': 'Bearer ' + clave.value.trim() } })
+        .then(function(r){ return r.blob(); })
+        .then(function(b){ v.src = URL.createObjectURL(b); v.hidden = false; });
+    } else {
+      v.src = url; v.hidden = false;
+    }
+  }
+
+  function sigue(id){
+    llama('/v1/videos/' + encodeURIComponent(id)).then(function(r){
+      var t = r.datos;
+      texto('vid-crudo', JSON.stringify(t, null, 2));
+      var terminado = ['completado', 'fallido', 'cancelado', 'caducado'].indexOf(t.estado) >= 0;
+      texto('vid-msg', 'Vídeo ' + t.id + ': ' + t.estado + (t.coste != null ? ' · coste ' + t.coste.toFixed(3) + ' $' : ' · estimado ' + (t.coste_estimado || 0).toFixed(3) + ' $') + (t.error ? ' · ' + t.error : ''));
+      if (!terminado) { setTimeout(function(){ sigue(id); }, 10000); return; }
+      if (t.estado === 'completado') muestraVideo(t);
+    }).catch(function(e){ texto('vid-msg', 'No se pudo consultar: ' + e.message); });
+  }
+
+  $('btn-vid').addEventListener('click', function(){
+    var id = $('vid-modelo').value;
+    if (!id) { texto('vid-msg', 'Primero carga el catálogo y elige un modelo.'); return; }
+    var m = videos.filter(function(x){ return x.id === id; })[0] || {};
+    var seg = parseInt($('vid-dur').value, 10) || 4;
+    var aviso = m.precio_segundo_desde != null
+      ? 'Costará unos ' + (m.precio_segundo_desde * seg).toFixed(2) + ' $ o algo más según resolución y audio.'
+      : 'Higgsfield calcula el precio al lanzarlo.';
+    if (!window.confirm('Generar un vídeo de ' + seg + ' s con ' + id + '. ' + aviso + ' ¿Seguir?')) return;
+    var cuerpo = { model: id, prompt: $('vid-prompt').value, duration: seg };
+    if (!id.startsWith('higgsfield:')) {
+      cuerpo.resolution = $('vid-res').value.trim() || undefined;
+      cuerpo.generate_audio = $('vid-audio').checked;
+    }
+    var boton = this;
+    boton.disabled = true;
+    $('vid-video').hidden = true;
+    texto('vid-msg', 'Encolando…');
+    llama('/v1/videos', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Operacion': 'consola-video' },
+      body: JSON.stringify(cuerpo),
+      espera: 120000
+    }).then(function(r){
+      texto('vid-crudo', JSON.stringify(r.datos, null, 2));
+      texto('vid-msg', 'Encolado: ' + r.datos.id + ' (estimado ' + (r.datos.coste_estimado || 0).toFixed(3) + ' $). Se consulta cada 10 s…');
+      sigue(r.datos.id);
+    }).catch(function(e){
+      texto('vid-msg', 'No se pudo: ' + e.message + (e.clave ? ' (' + e.clave + ')' : ''));
+      if (e.cuerpo) texto('vid-crudo', JSON.stringify(e.cuerpo, null, 2));
+    }).finally(function(){ boton.disabled = false; });
   });
 })();
 </script>

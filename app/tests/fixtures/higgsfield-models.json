@@ -1,0 +1,96 @@
+{
+ "total": 7,
+ "items": [
+  {
+   "slug": "bytedance/seedance-2.5/video-edit",
+   "title": "Seedance 2.5",
+   "description": "Generate videos from text, images, video, and audio references, with clips up to 30 seconds.\nAnimate images, edit or extend existing footage, and generate audio alongside your video.",
+   "operation_type": [
+    "video2video"
+   ],
+   "output_type": "video",
+   "base_credits": "0.0000",
+   "is_workflow": false,
+   "fnf_job_set_type": "seedance_2_5",
+   "input_schema": null
+  },
+  {
+   "slug": "bytedance/seedance-2.5/video-extend",
+   "title": "Seedance 2.5",
+   "description": "Seedance 2.5 Video Extend generates extended video content from an input video URL and text prompt, supporting up to 30 seconds duration and optional audio or image inputs. It outputs videos in 480p or 720p resolution with mp4 or mov format, allowing control over audio generation and multiple media inputs.",
+   "operation_type": [
+    "video2video"
+   ],
+   "output_type": "video",
+   "base_credits": "0.0000",
+   "is_workflow": false,
+   "fnf_job_set_type": "seedance_2_5",
+   "input_schema": null
+  },
+  {
+   "slug": "higgsfield/genjutsu/restyle/v1.0",
+   "title": "Genjutsu",
+   "description": "Restyle a video with a selected visual preset while preserving its motion and source audio.",
+   "operation_type": [
+    "video2video"
+   ],
+   "output_type": "video",
+   "base_credits": "0.0000",
+   "is_workflow": false,
+   "fnf_job_set_type": null,
+   "input_schema": null
+  },
+  {
+   "slug": "kling-video/v3.0/std/image-to-video",
+   "title": "Kling 3.0 Standard",
+   "description": "Kling 3.0 Standard converts a single image URL into a video clip with optional sound and customizable duration up to 15 seconds. Users can enhance the output with prompts, multiple shots, and control the CFG scale for creative variation.",
+   "operation_type": [
+    "image2video"
+   ],
+   "output_type": "video",
+   "base_credits": "0.0000",
+   "is_workflow": false,
+   "fnf_job_set_type": "kling3_0",
+   "input_schema": null
+  },
+  {
+   "slug": "kling-video/v3.0/std/text-to-video",
+   "title": "Kling 3.0 Standard",
+   "description": "Generates multi-shot videos from text or images, with native audio and durations up to 15 seconds.",
+   "operation_type": [
+    "text2video"
+   ],
+   "output_type": "video",
+   "base_credits": "0.0000",
+   "is_workflow": false,
+   "fnf_job_set_type": "kling3_0",
+   "input_schema": null
+  },
+  {
+   "slug": "minimax/h3/text-to-video",
+   "title": "MiniMax H3",
+   "description": "Generates 2K videos up to 15 seconds using text, image, video, and optional audio reference files.",
+   "operation_type": [
+    "text2video"
+   ],
+   "output_type": "video",
+   "base_credits": "0.0000",
+   "is_workflow": false,
+   "fnf_job_set_type": "minimax_h3",
+   "input_schema": null
+  },
+  {
+   "slug": "alibaba/qwen-image-3/edit",
+   "title": "Qwen Image 3",
+   "description": "Edit images from an instruction and one to three ordered references with Qwen Image 3.",
+   "operation_type": [
+    "image_edit"
+   ],
+   "output_type": "image",
+   "base_credits": "0.0000",
+   "is_workflow": false,
+   "fnf_job_set_type": "text2image",
+   "input_schema": null
+  }
+ ]
+}

@@ -437,6 +437,20 @@ impl Uso {
         }
     }
 
+    /// Cierra el registro de un trabajo de vídeo: su coste definitivo, de dónde
+    /// sale y cómo terminó.
+    pub fn cierra_video(&self, id: &str, coste: f64, origen: &str, estado: u16, motivo: &str) {
+        let conexion = self.conexion.lock().unwrap();
+        let hecho = conexion.execute(
+            "UPDATE uso SET coste = ?1, coste_origen = ?2, estado = ?3, motivo_fin = ?4
+             WHERE id = ?5",
+            params![coste, origen, estado, motivo, id],
+        );
+        if let Err(e) = hecho {
+            eprintln!("no se pudo cerrar el uso del vídeo {id}: {e}");
+        }
+    }
+
     /// Las llamadas de un intervalo, de la más antigua a la más reciente, que es
     /// el orden natural para exportar.
     pub fn intervalo(
@@ -531,7 +545,7 @@ pub fn hace_iso(segundos: u64) -> String {
     iso(ahora_unix().saturating_sub(segundos))
 }
 
-fn ahora_unix() -> u64 {
+pub fn ahora_unix() -> u64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map(|d| d.as_secs())
@@ -544,6 +558,7 @@ fn ahora_unix() -> u64 {
 fn prepara(conexion: &Connection) -> rusqlite::Result<()> {
     conexion.execute_batch(ESQUEMA)?;
     conexion.execute_batch(apps::ESQUEMA)?;
+    conexion.execute_batch(crate::video::ESQUEMA)?;
     for (columna, tipo) in [
         ("app_id", "TEXT"),
         ("operacion", "TEXT"),
@@ -581,6 +596,28 @@ fn asegura_columna(
     Ok(())
 }
 
+/// Una fecha ISO de las que escribe `iso` más unos días, para decir hasta
+/// cuándo se puede descargar algo. `None` si la fecha no tiene esa forma.
+pub fn mas_dias(fecha: &str, dias: u64) -> Option<String> {
+    let f = fecha.as_bytes();
+    if f.len() < 19 {
+        return None;
+    }
+    let n = |a: usize, b: usize| fecha.get(a..b)?.parse::<i64>().ok();
+    let (anio, mes, dia) = (n(0, 4)?, n(5, 7)?, n(8, 10)?);
+    let (h, m, s) = (n(11, 13)?, n(14, 16)?, n(17, 19)?);
+    // Días desde 1970 con el algoritmo inverso de Howard Hinnant.
+    let y = if mes <= 2 { anio - 1 } else { anio };
+    let era = y.div_euclid(400);
+    let yoe = y - era * 400;
+    let mp = (mes + 9) % 12;
+    let doy = (153 * mp + 2) / 5 + dia - 1;
+    let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
+    let dias_desde_1970 = era * 146_097 + doe - 719_468;
+    let segundos = dias_desde_1970 * 86_400 + h * 3600 + m * 60 + s + dias as i64 * 86_400;
+    (segundos >= 0).then(|| iso(segundos as u64))
+}
+
 /// Fecha ISO 8601 en UTC desde segundos Unix, sin dependencias: el algoritmo de
 /// días civiles de Howard Hinnant. Solo se usa para enseñar la fecha.
 fn iso(segundos: u64) -> String {
@@ -610,6 +647,19 @@ mod pruebas {
         // Una ruta que no existe fuerza el camino de memoria, que es justo lo
         // que hace el servicio cuando Fly no monta el volumen.
         Uso::nuevo(Some("/no/existe/uso.db"))
+    }
+
+    #[test]
+    fn suma_dias_a_una_fecha() {
+        assert_eq!(
+            mas_dias("2026-10-07T17:00:00Z", 7).as_deref(),
+            Some("2026-10-14T17:00:00Z")
+        );
+        assert_eq!(
+            mas_dias("2024-02-27T00:00:00Z", 3).as_deref(),
+            Some("2024-03-01T00:00:00Z")
+        );
+        assert_eq!(mas_dias("ayer", 1), None);
     }
 
     #[test]
