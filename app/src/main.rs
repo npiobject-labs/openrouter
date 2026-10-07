@@ -74,6 +74,7 @@ async fn main() {
         .route("/presupuesto", get(rutas::apps::presupuesto))
         .route("/videos", post(rutas::videos::crea))
         .route("/videos/models", get(rutas::videos::modelos))
+        .route("/videos/estimar", post(rutas::videos::estimar))
         .route("/videos/{id}", get(rutas::videos::uno))
         .route("/videos/{id}/contenido", get(rutas::videos::contenido))
         .route_layer(middleware::from_fn_with_state(

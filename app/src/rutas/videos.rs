@@ -147,20 +147,7 @@ pub async fn crea(
     let aviso = guardia::comprueba(&servicio, &quien, &huella)?;
 
     // Cuánto va a costar, antes de gastar nada.
-    let estimado = match proveedor {
-        ProveedorVideo::OpenRouter => catalogo_video_de(&servicio, proveedor)
-            .await
-            .ok()
-            .and_then(|l| l.into_iter().find(|m| m.id == modelo))
-            .and_then(|m| estima_openrouter(&m, &cuerpo))
-            .unwrap_or(ESTIMACION_PRUDENTE),
-        ProveedorVideo::Higgsfield => {
-            servicio
-                .openrouter
-                .video_estima_higgsfield(&modelo, &enviado)
-                .await?
-        }
-    };
+    let (estimado, _) = estima(&servicio, proveedor, &modelo, &cuerpo, &enviado).await?;
     if let Some(app) = &quien.app {
         let margen = guardia::margen_de(&servicio, app);
         if let Some(restante) = margen.restante {
@@ -277,6 +264,75 @@ pub async fn crea(
         salida.insert(CABECERA_AVISO, v);
     }
     Ok((StatusCode::ACCEPTED, salida, Json(trabajo)).into_response())
+}
+
+/// Lo que costaría un vídeo y de dónde sale la cifra: `precios` (los SKU de
+/// OpenRouter), `higgsfield` (su estimador) o `prudente` (sin forma de saberlo).
+async fn estima(
+    servicio: &Servicio,
+    proveedor: ProveedorVideo,
+    modelo: &str,
+    cuerpo: &Value,
+    enviado: &Value,
+) -> Result<(f64, &'static str), ErrorApi> {
+    match proveedor {
+        ProveedorVideo::OpenRouter => Ok(catalogo_video_de(servicio, proveedor)
+            .await
+            .ok()
+            .and_then(|l| l.into_iter().find(|m| m.id == modelo))
+            .and_then(|m| estima_openrouter(&m, cuerpo))
+            .map(|e| (e, "precios"))
+            .unwrap_or((ESTIMACION_PRUDENTE, "prudente"))),
+        ProveedorVideo::Higgsfield => servicio
+            .openrouter
+            .video_estima_higgsfield(modelo, enviado)
+            .await
+            .map(|e| (e, "higgsfield")),
+    }
+}
+
+/// `POST /v1/videos/estimar`: lo que costaría el mismo cuerpo de
+/// `POST /v1/videos`, sin encolar nada ni gastar. Con clave de aplicación dice
+/// además si cabe en lo que le queda de presupuesto.
+pub async fn estimar(
+    State(servicio): State<Arc<Servicio>>,
+    Extension(quien): Extension<Identidad>,
+    Json(cuerpo): Json<Value>,
+) -> Result<Json<Value>, ErrorApi> {
+    let pedido = cuerpo
+        .get("model")
+        .and_then(Value::as_str)
+        .filter(|m| !m.is_empty())
+        .ok_or_else(|| {
+            ErrorApi::nuevo(
+                StatusCode::BAD_REQUEST,
+                "cuerpo_invalido",
+                "Falta \"model\": elige uno de /v1/videos/models.",
+            )
+        })?
+        .to_string();
+    let (proveedor, modelo) = ProveedorVideo::de(&pedido);
+    if !id_valido(modelo) {
+        return Err(ErrorApi::nuevo(
+            StatusCode::BAD_REQUEST,
+            "cuerpo_invalido",
+            "El id del modelo solo puede llevar letras, números y . _ - /.",
+        ));
+    }
+    let enviado = cuerpo_para(proveedor, modelo, &cuerpo);
+    let (coste, origen) = estima(&servicio, proveedor, modelo, &cuerpo, &enviado).await?;
+    let restante = quien
+        .app
+        .as_ref()
+        .and_then(|app| guardia::margen_de(&servicio, app).restante);
+    Ok(Json(json!({
+        "modelo": pedido,
+        "upstream": proveedor,
+        "coste_estimado": coste,
+        "origen": origen,
+        "restante": restante,
+        "cabe": restante.is_none_or(|r| coste <= r),
+    })))
 }
 
 /// El trabajo de quien pregunta. Uno de otra aplicación responde como si no

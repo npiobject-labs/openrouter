@@ -1647,6 +1647,88 @@
           }
         }
       }
+    },
+    "/v1/videos/estimar": {
+      "post": {
+        "tags": [
+          "Vídeo"
+        ],
+        "summary": "Estimar un vídeo sin generarlo",
+        "operationId": "estimarVideo",
+        "description": "Lo que costaría el mismo cuerpo de `POST /v1/videos`, sin encolar nada ni gastar. `origen` dice de dónde sale: `precios` (SKU de OpenRouter), `higgsfield` (su estimador) o `prudente` (1 $, sin forma de saberlo). Con clave de aplicación, `restante` y `cabe` dicen si entra en su presupuesto.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "model"
+                ],
+                "additionalProperties": true
+              },
+              "example": {
+                "model": "google/veo-3.1-fast",
+                "duration": 4,
+                "resolution": "720p",
+                "generate_audio": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "La estimación.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "modelo": {
+                      "type": "string"
+                    },
+                    "upstream": {
+                      "type": "string"
+                    },
+                    "coste_estimado": {
+                      "type": "number"
+                    },
+                    "origen": {
+                      "type": "string",
+                      "enum": [
+                        "precios",
+                        "higgsfield",
+                        "prudente"
+                      ]
+                    },
+                    "restante": {
+                      "type": [
+                        "number",
+                        "null"
+                      ]
+                    },
+                    "cabe": {
+                      "type": "boolean"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/PeticionInvalida"
+          },
+          "401": {
+            "$ref": "#/components/responses/NoAutorizado"
+          },
+          "502": {
+            "$ref": "#/components/responses/FalloDeProveedor"
+          },
+          "503": {
+            "$ref": "#/components/responses/SinConfigurar"
+          }
+        }
+      }
     }
   },
   "components": {
@@ -3036,6 +3118,10 @@
         {
           "metodo": "GET",
           "ruta": "/v1/videos/models"
+        },
+        {
+          "metodo": "POST",
+          "ruta": "/v1/videos/estimar"
         },
         {
           "metodo": "POST",

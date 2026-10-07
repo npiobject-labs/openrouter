@@ -1,0 +1,88 @@
+name: Probar upstreams (a mano)
+
+# Prueba real, con gasto mínimo, de lo que la verificación de cada despliegue
+# no puede tocar porque no gasta: una consulta de texto a Requesty (fracciones
+# de céntimo) y la estimación de vídeo en OpenRouter y Higgsfield (gratis).
+# Con «generar», además un vídeo corto del modelo más barato que se pueda
+# (unos céntimos), que se espera y se descarga para comprobar el circuito.
+on:
+  workflow_dispatch:
+    inputs:
+      destino:
+        description: fly o vps
+        default: fly
+        type: choice
+        options: [fly, vps]
+      generar:
+        description: Generar además un vídeo corto (gasta unos céntimos)
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+jobs:
+  probar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      BASE: ${{ inputs.destino == 'vps' && format('https://{0}', vars.API_DOMINIO || 'apisor.oracle402.com') || format('https://{0}.fly.dev', vars.FLY_APP || 'openrouter-npiobject-labs') }}
+      CLAVE: ${{ inputs.destino == 'vps' && secrets.VPS_SERVICIO_CLAVE || secrets.SERVICIO_CLAVE }}
+    steps:
+      - name: Texto por Requesty (rq:)
+        run: |
+          set -euo pipefail
+          r="$(curl -sS -D /tmp/cab -o /tmp/rq.json -w '%{http_code}' --max-time 120 \
+            -H "Authorization: Bearer ${CLAVE}" -H 'Content-Type: application/json' -H 'X-Operacion: probar-upstreams' \
+            -d '{"model":"rq:nebius/openai/gpt-oss-120b","messages":[{"role":"user","content":"Responde solo con la palabra: hola"}],"max_tokens":200,"reasoning":{"effort":"low"}}' \
+            "${BASE}/v1/chat/completions")"
+          echo "HTTP ${r}"; grep -i '^x-upstream\|^x-uso-id' /tmp/cab || true
+          jq '{model, contenido: .choices[0].message.content, usage}' /tmp/rq.json
+          [ "${r}" = "200" ] || { cat /tmp/rq.json; exit 1; }
+          grep -qi '^x-upstream: rq' /tmp/cab || { echo "::error::no respondió Requesty"; exit 1; }
+          {
+            echo "### Requesty"
+            echo "- Modelo: \`$(jq -r .model /tmp/rq.json)\` · coste: $(jq -r '.usage.cost' /tmp/rq.json) \$ · tokens: $(jq -r '.usage.prompt_tokens' /tmp/rq.json)/$(jq -r '.usage.completion_tokens' /tmp/rq.json)"
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Estimar vídeo (gratis)
+        run: |
+          set -euo pipefail
+          echo "### Estimaciones de vídeo" >> "$GITHUB_STEP_SUMMARY"
+          for cuerpo in \
+            '{"model":"google/veo-3.1-fast","prompt":"x","duration":4,"resolution":"720p","generate_audio":false}' \
+            '{"model":"x-ai/grok-imagine-video-1.5-lite","prompt":"x","duration":1,"resolution":"480p"}' \
+            '{"model":"higgsfield:kling-video/v3.0/std/text-to-video","prompt":"Un perro corriendo por la playa","duration":5}' ; do
+            r="$(curl -sS -o /tmp/e.json -w '%{http_code}' --max-time 60 -H "Authorization: Bearer ${CLAVE}" -H 'Content-Type: application/json' -d "${cuerpo}" "${BASE}/v1/videos/estimar")"
+            echo "HTTP ${r}: $(cat /tmp/e.json)"
+            echo "- \`$(echo "${cuerpo}" | jq -r .model)\` → HTTP ${r}: $(jq -c '{coste_estimado, origen, error: .error.message}' /tmp/e.json)" >> "$GITHUB_STEP_SUMMARY"
+          done
+      - name: Generar un vídeo corto
+        if: inputs.generar
+        run: |
+          set -euo pipefail
+          r="$(curl -sS -o /tmp/v.json -w '%{http_code}' --max-time 120 -H "Authorization: Bearer ${CLAVE}" -H 'Content-Type: application/json' -H 'X-Operacion: probar-upstreams' \
+            -d '{"model":"x-ai/grok-imagine-video-1.5-lite","prompt":"Un faro en un acantilado al atardecer, olas suaves","duration":1,"resolution":"480p","aspect_ratio":"16:9"}' \
+            "${BASE}/v1/videos")"
+          echo "HTTP ${r}"; cat /tmp/v.json
+          [ "${r}" = "202" ] || exit 1
+          id="$(jq -r .id /tmp/v.json)"
+          for i in $(seq 1 60); do
+            sleep 10
+            curl -sS -o /tmp/s.json --max-time 30 -H "Authorization: Bearer ${CLAVE}" "${BASE}/v1/videos/${id}"
+            estado="$(jq -r .estado /tmp/s.json)"; echo "${i}: ${estado}"
+            case "${estado}" in completado|fallido|cancelado|caducado) break;; esac
+          done
+          cat /tmp/s.json
+          [ "${estado}" = "completado" ] || { echo "::error::el vídeo terminó en ${estado}"; exit 1; }
+          url="$(jq -r '.urls[0]' /tmp/s.json)"
+          case "${url}" in /v1/*) url="${BASE}${url}";; esac
+          n="$(curl -sS -L -o /tmp/video.mp4 -w '%{size_download}' --max-time 120 -H "Authorization: Bearer ${CLAVE}" "${url}")"
+          echo "Descargados ${n} bytes"
+          [ "${n}" -gt 10000 ] || { echo "::error::el vídeo descargado es demasiado pequeño"; exit 1; }
+          echo "- Vídeo \`${id}\`: ${estado}, coste $(jq -r .coste /tmp/s.json) \$ (estimado $(jq -r .coste_estimado /tmp/s.json) \$), ${n} bytes" >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        if: inputs.generar
+        with:
+          name: video-de-prueba
+          path: /tmp/video.mp4
+          if-no-files-found: ignore
