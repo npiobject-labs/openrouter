@@ -1,0 +1,37 @@
+{
+  "fecha": "2026-10-07T15:17:00+02:00",
+  "titulo": "Sustituto de gemini-2.5-flash-lite y planes del segundo agregador (Requesty) y del vídeo",
+  "objetivo": "Dejar de depender de un solo agregador y de un modelo que Vertex apaga el 20/10/2026, y planificar el vídeo de principio a fin.",
+  "prompts": [
+    { "texto": "Añade mercamodels con push y sigue con la propuesta.", "nota": "El encargo inicial llegó como tarea de sistema: Requesty como segundo agregador, primero en el gateway y después en mercamodels, proponiendo etapas antes de programar." },
+    { "texto": "Visto bueno a todo, empieza por R0 y etapa 9." },
+    { "texto": "Necesito ayuda con: crear en Requesty las claves REQUESTY_API_KEY y VPS_REQUESTY_API_KEY con el log de prompts apagado, y guardarlas como secretos del repo del gateway." },
+    { "texto": "Aconséjame tú qué modelo deberíamos elegir para sustituir al Gemini 2.5 Flash Lite." },
+    { "texto": "Admito gpt-oss-120b, y cuando hay imágenes utilizas gemini-3.1-flash-lite." },
+    { "texto": "No hemos hablado de vídeo. Y quiero tener también un catálogo de modelos para atacar problemas de vídeo, desde la edición hasta la generación. La generación de vídeo a través de herramientas como Higgsfield." },
+    { "texto": "Dime de forma muy sencilla qué es lo que tengo que hacer, nada de tecnicismos." },
+    { "texto": "Sí a la primera y sí a la segunda. A la pregunta 2, esperamos. A la pregunta 3, fusiónalos. Las preguntas 4 y 5 lo dejamos para más adelante." }
+  ],
+  "cambios": [
+    "Etapa R0: modelo por defecto openai/gpt-oss-120b para texto (reasoning.effort=low si la app no lo fija) y google/gemini-3.1-flash-lite (MODELO_MULTIMODAL) si la consulta lleva imagen, audio, vídeo o fichero.",
+    "/v1/estado publica modelo_multimodal; tools/verificar-servicio.sh lo comprueba en Fly y en el VPS; contrato 0.6.3.",
+    "Elección basada en dos comparaciones de mercamodels (runs 37444012246 y 37448505608, 0,175 $ en total): gpt-oss corta el JSON largo y tarda unos 35 s; gemini-3.1-flash-lite responde siempre, en unos 7 s.",
+    "PR #35 fusionado: análisis de Requesty, etapas R0–R4 y etapas V1–V3 de vídeo (OpenRouter y Higgsfield, 10 $/mes)."
+  ],
+  "sha": "c48426a",
+  "sha_completo": "c48426a4fa51d6e06285db46c876202bffaf3c0a",
+  "run": 37612922929,
+  "mock": null,
+  "build": null,
+  "pagina": "https://npiobject-labs.github.io/openrouter/consola.html",
+  "fly": "https://openrouter-npiobject-labs.fly.dev/salud",
+  "pendiente": [
+    "Reconciliar R1–R3 (Requesty) y V1 (vídeo) con los upstreams ya fusionados en el PR #36: prefijo hf:, columna upstream y catálogo completo en /v1/models.",
+    "Claves de Requesty y de Higgsfield: el dueño las deja para más adelante."
+  ],
+  "enlaces": [
+    { "texto": "PR #35", "url": "https://github.com/npiobject-labs/openrouter/pull/35" },
+    { "texto": "mercamodels PR #10", "url": "https://github.com/peripateticos-app/mercamodels/pull/10" }
+  ],
+  "notas": "El VPS recibió R0 con la release a22b69c que lanzó la sesión de los upstreams; el «OK release» de esta sesión quedó sin objeto. Los prompts son una transcripción aproximada y algunos se han corregido de un dictado por voz."
+}
