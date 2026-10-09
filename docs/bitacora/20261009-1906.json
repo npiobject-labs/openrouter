@@ -1,0 +1,33 @@
+{
+  "fecha": "2026-10-09T21:06:00+02:00",
+  "titulo": "Release al VPS de Requesty, respaldo y vídeo; cartera de vídeo de mercamodels",
+  "objetivo": "Llevar las etapas 10 y 11 a producción y separar el gasto de vídeo de mercamodels.",
+  "prompts": [
+    { "texto": "dame enlace para probar" },
+    { "texto": "OK release" },
+    { "texto": "separa el gasto de vídeo en su propia «cartera» de 10 $/mes." },
+    { "texto": "hecho, guardada clave de la aplicación." },
+    { "texto": "Dime paso a paso y un paso cada vez cómo puedo probar la creación de un vídeo corto. Dame una idea que no consuma muchos euros, máximo un euro.", "nota": "Dictado por voz, corregido." },
+    { "texto": "cierra la sesión" }
+  ],
+  "cambios": [
+    "release avanza por fast-forward de a22b69c a 065db3a; deploy-vps.yml en success (run 37747767060).",
+    "App mercamodels-video creada por el dueño en el VPS con 10 $/mes; su clave, solo en el secreto LLM_VIDEO_API_KEY de mercamodels.",
+    "Primer vídeo real por el VPS: Seedance 1.5 Pro, 5 s, 720p, sin audio; estimado 0,13 $, real 0,131 $, cargado a mercamodels-video."
+  ],
+  "sha": "065db3a",
+  "sha_completo": "065db3ab0077dda63e51280ca48f545bf012c623",
+  "run": 37747767060,
+  "mock": null,
+  "build": "OP-B1-20261007-018",
+  "pagina": "https://npiobject-labs.github.io/openrouter/consola.html",
+  "fly": "https://openrouter-npiobject-labs.fly.dev/salud",
+  "pendiente": [
+    "Probar la edición de vídeo por URL.",
+    "Borrar la rama remota claude/explorar-upstreams."
+  ],
+  "enlaces": [
+    { "texto": "mercamodels · Vídeo", "url": "https://peripateticos-mercamodels.fly.dev/video.html" }
+  ],
+  "notas": "Prompts aproximados, de un dictado por voz. Ninguna clave pasó por la sesión."
+}
