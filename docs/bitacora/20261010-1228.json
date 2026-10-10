@@ -1,0 +1,33 @@
+{
+  "fecha": "2026-10-10T14:28:00+02:00",
+  "titulo": "Edición de vídeo probada, guía del sistema y copia instalable",
+  "objetivo": "Probar la edición de vídeo, documentar el sistema para clientes y para el dueño, y poder instalar una copia limpia en otras cuentas.",
+  "prompts": [
+    { "texto": "ok, paso a paso, dime", "nota": "Prueba de edición de vídeo." },
+    { "texto": "Tengo un vídeo de 25 seg. Dime qué le podría hacer con nuestro programa de vídeo.", "nota": "Anuncio propio; se generó una entrada con un faro y se unió en la sesión." },
+    { "texto": "Móntame un fichero, imagen, PNG o cualquier otro formato en el que explique por bloques esta aplicación, útil para posibles clientes." },
+    { "texto": "Añádelo como artefacto con otra sección para mí: cómo se enlaza, qué partes tiene, qué claves son necesarias y las funcionalidades más importantes, con ejemplos de texto e imágenes." },
+    { "texto": "Escribe en un artefacto toda la información necesaria para instalar una copia de mercamodels en otro PC, con otro GitHub, otro usuario de Claude, otro Fly y otro Drive, sin datos." },
+    { "texto": "cierra la sesión" }
+  ],
+  "cambios": [
+    "deploy.yml: variable de repositorio FLY_ORG para crear la app en otra organización de Fly (por defecto, la de siempre).",
+    "ZIP de la pasarela sin bitácoras ni sesiones para instalar copias; guía de instalación en 14 pasos como artefacto privado.",
+    "En mercamodels: edición de vídeo arreglada y probada (0,18 $) y app creada sola en Fly con FLY_ORG."
+  ],
+  "sha": "3c4f9e5",
+  "sha_completo": "3c4f9e563a1a93459e7c81b6dba13b5b88e4f25b",
+  "run": null,
+  "mock": null,
+  "build": "OP-B1-20261007-018",
+  "pagina": "https://npiobject-labs.github.io/openrouter/consola.html",
+  "fly": "https://openrouter-npiobject-labs.fly.dev/salud",
+  "pendiente": [
+    "Probar la guía de instalación en una cuenta nueva.",
+    "Llevar a release cuando el dueño lo pida (solo documentación y deploy.yml)."
+  ],
+  "enlaces": [
+    { "texto": "mercamodels · Vídeo", "url": "https://peripateticos-mercamodels.fly.dev/video.html" }
+  ],
+  "notas": "Prompts aproximados, de un dictado por voz. Ninguna clave pasó por la sesión."
+}
