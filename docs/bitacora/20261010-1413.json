@@ -1,0 +1,28 @@
+{
+  "fecha": "2026-10-10T16:13:00+02:00",
+  "titulo": "Paquete instalable único para clientes",
+  "objetivo": "Que un cliente instale la pasarela y mercamodels como una sola app, con una sola orden, sin cambiar cómo trabajamos con las dos.",
+  "prompts": [
+    { "texto": "¿Sería bueno, factible y deseable juntar las dos aplicaciones en una sola para que el cliente final tenga menos dificultades al reinstalarla en otro entorno? Solo contesta." },
+    { "texto": "De acuerdo, hazlo con el paquete de instalación único. Para nosotros siguen siendo dos aplicaciones independientes, ¿no es así?" },
+    { "texto": "Lo importante es que reescribas el artefacto de la instalación para un nuevo cliente." },
+    { "texto": "Añade al principio un diagrama del sistema: cómo interactúan las partes." },
+    { "texto": "Añade una sección 14 de costes aproximados para un uso normal, con referencia a Requesty, Hugging Face y Higgsfield." },
+    { "texto": "cierra la sesión" }
+  ],
+  "cambios": [
+    "La pasarela no cambia en esta sesión; el paquete la incluye tal cual desde main.",
+    "El paquete y su orden de instalación viven en el repositorio de mercamodels (instalador/ y Empaquetar instalable)."
+  ],
+  "sha": "d85190b",
+  "run": null,
+  "mock": null,
+  "build": "OP-B1-20261007-018",
+  "pagina": "https://npiobject-labs.github.io/openrouter/consola.html",
+  "fly": "https://openrouter-npiobject-labs.fly.dev/salud",
+  "pendiente": [
+    "Instalación real del paquete en una cuenta de prueba."
+  ],
+  "enlaces": [],
+  "notas": "Prompts aproximados, de un dictado por voz."
+}
