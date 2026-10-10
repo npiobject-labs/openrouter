@@ -25,6 +25,9 @@ jobs:
       FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
       # Variable de repositorio opcional; si existe, manda sobre el nombre derivado.
       FLY_APP_VAR: ${{ vars.FLY_APP }}
+      # Organización de Fly donde se crea la app la primera vez. En una
+      # instalación nueva suele ser "personal"; aquí es "desdemovil".
+      FLY_ORG: ${{ vars.FLY_ORG }}
     steps:
       # Fly es opcional: sin secreto el workflow termina en verde con un aviso.
       - name: Comprobar si Fly esta configurado
@@ -77,7 +80,7 @@ jobs:
         if: steps.fly.outputs.configurado == 'true'
         env:
           FLY_APP: ${{ steps.app.outputs.app }}
-        run: flyctl apps create "${FLY_APP}" --org desdemovil || true
+        run: flyctl apps create "${FLY_APP}" --org "${FLY_ORG:-desdemovil}" || true
 
       # BUILD_ID y, si existen, los secretos del servicio. --stage los deja
       # preparados sin reiniciar: los aplica el deploy siguiente.
