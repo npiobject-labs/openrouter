@@ -1,0 +1,15 @@
+{
+  "fecha": "2026-10-10T16:17:00+02:00",
+  "titulo": "Release sin cambios de servidor",
+  "objetivo": "Poner release al día con main.",
+  "prompts": [
+    { "texto": "OK release" },
+    { "texto": "cierra la sesión" }
+  ],
+  "cambios": [
+    "release avanza de 065db3a a 7f474ea por fast-forward. Sin cambios en app/ ni vps/: el VPS no se vuelve a publicar."
+  ],
+  "sha": "7f474ea",
+  "pendiente": ["Instalación real del paquete en una cuenta de prueba."],
+  "notas": "Release de documentación."
+}
