@@ -93,6 +93,7 @@ jobs:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
           REQUESTY_API_KEY: ${{ secrets.REQUESTY_API_KEY }}
           HIGGSFIELD_API_KEY: ${{ secrets.HIGGSFIELD_API_KEY }}
+          FUENTES_CLAVE_MAESTRA: ${{ secrets.FUENTES_CLAVE_MAESTRA }}
           MODELO_DEFECTO: ${{ vars.MODELO_DEFECTO }}
           MODELO_MULTIMODAL: ${{ vars.MODELO_MULTIMODAL }}
         run: |
@@ -124,6 +125,13 @@ jobs:
             set -- "$@" "HIGGSFIELD_API_KEY=${HIGGSFIELD_API_KEY}"
           else
             echo "Sin HIGGSFIELD_API_KEY: el vídeo de Higgsfield queda sin configurar."
+          fi
+          # Etapa 12: cifra las claves de las fuentes declarativas. Sin ella
+          # solo se pueden dar de alta fuentes sin clave.
+          if [ -n "${FUENTES_CLAVE_MAESTRA}" ]; then
+            set -- "$@" "FUENTES_CLAVE_MAESTRA=${FUENTES_CLAVE_MAESTRA}"
+          else
+            echo "Sin FUENTES_CLAVE_MAESTRA: las fuentes declarativas solo pueden darse de alta sin clave."
           fi
           if [ -n "${MODELO_DEFECTO}" ]; then
             set -- "$@" "MODELO_DEFECTO=${MODELO_DEFECTO}"

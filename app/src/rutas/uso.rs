@@ -36,10 +36,10 @@ pub async fn lista(
 
     let app = filtro_de_app(&quien, &parametros);
     let operacion = filtro_de_operacion(&parametros);
-    let upstream = filtro_de_upstream(&parametros)?;
+    let upstream = filtro_de_upstream(&servicio, &parametros)?;
     Ok(Json(json!({
         "object": "list",
-        "data": servicio.uso.ultimos(n, app.as_deref(), operacion.as_deref(), upstream),
+        "data": servicio.uso.ultimos(n, app.as_deref(), operacion.as_deref(), upstream.as_deref()),
         "total": servicio.uso.total(),
     })))
 }
@@ -79,14 +79,14 @@ pub async fn resumen(
     let agrupar = Agrupacion::desde(parametros.get("agrupar").map(String::as_str));
     let app = filtro_de_app(&quien, &parametros);
     let operacion = filtro_de_operacion(&parametros);
-    let upstream = filtro_de_upstream(&parametros)?;
+    let upstream = filtro_de_upstream(&servicio, &parametros)?;
     let filas = servicio.uso.resumen(
         intervalo(&parametros, "desde").as_deref(),
         intervalo(&parametros, "hasta").as_deref(),
         &agrupar,
         app.as_deref(),
         operacion.as_deref(),
-        upstream,
+        upstream.as_deref(),
     );
 
     // Los contadores se suman como enteros: un "llamadas: 3.0" en el JSON
@@ -140,13 +140,13 @@ pub async fn exportar(
 
     let app = filtro_de_app(&quien, &parametros);
     let operacion = filtro_de_operacion(&parametros);
-    let upstream = filtro_de_upstream(&parametros)?;
+    let upstream = filtro_de_upstream(&servicio, &parametros)?;
     let registros = servicio.uso.intervalo(
         intervalo(&parametros, "desde").as_deref(),
         intervalo(&parametros, "hasta").as_deref(),
         app.as_deref(),
         operacion.as_deref(),
-        upstream,
+        upstream.as_deref(),
     );
 
     match formato {
@@ -227,8 +227,9 @@ fn filtro_de_operacion(parametros: &HashMap<String, String>) -> Option<String> {
 /// valor desconocido es un error y no "nada", para que una errata no pase por
 /// un histórico vacío.
 pub fn filtro_de_upstream(
+    servicio: &Servicio,
     parametros: &HashMap<String, String>,
-) -> Result<Option<&'static str>, ErrorApi> {
+) -> Result<Option<String>, ErrorApi> {
     let Some(valor) = parametros
         .get("upstream")
         .map(String::as_str)
@@ -236,9 +237,20 @@ pub fn filtro_de_upstream(
     else {
         return Ok(None);
     };
-    Upstream::desde_nombre(valor)
-        .map(|u| Some(u.nombre()))
-        .ok_or_else(|| upstream_desconocido(valor))
+    if let Some(u) = Upstream::desde_nombre(valor) {
+        return Ok(Some(u.nombre().to_string()));
+    }
+    // Una fuente declarativa (etapa 12), también si ya está de baja: su
+    // histórico sigue siendo consultable.
+    if crate::fuentes::id_valido(valor)
+        && servicio
+            .uso
+            .con(|c| crate::fuentes::una(c, valor))
+            .is_some()
+    {
+        return Ok(Some(valor.to_string()));
+    }
+    Err(upstream_desconocido(valor))
 }
 
 /// El 400 de un `?upstream=` que no es ninguno de los que hay.

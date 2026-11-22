@@ -33,5 +33,7 @@ pub async fn estado(
         "clave": clave,
         // Qué se puede comprar desde este despliegue. No dice ninguna clave.
         "upstreams": servicio.openrouter.configurados(),
+        // Fuentes declarativas activas (etapa 12).
+        "fuentes": servicio.uso.con(crate::fuentes::todas).iter().filter(|f| f.activa).count(),
     })))
 }

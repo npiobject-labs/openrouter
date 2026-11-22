@@ -117,6 +117,24 @@ http="$(curl -s -o "$tmp/uso.json" -w '%{http_code}' --max-time 20 "${auth[@]}" 
   || { cat "$tmp/uso.json"; fallo "/v1/uso no devolvio la lista esperada (HTTP ${http})."; }
 ok "registro de uso con $(jq -r '.total' "$tmp/uso.json") llamadas"
 
+# --- /v1/fuentes (etapa 12): los upstreams de siempre, sin claves, y alta y
+# baja de una fuente en caliente, sin desplegar. La de prueba no tiene clave y
+# apunta a un puerto cerrado del propio contenedor: no gasta nada.
+http="$(curl -s -o "$tmp/fuentes.json" -w '%{http_code}' --max-time 20 "${auth[@]}" "${base}/v1/fuentes" || true)"
+[ "${http}" = "200" ] && jq -e '[.data[] | select(.declarativa == false) | .id] | index("openrouter") != null' "$tmp/fuentes.json" > /dev/null \
+  || { cat "$tmp/fuentes.json"; fallo "/v1/fuentes no devolvio los upstreams de siempre (HTTP ${http})."; }
+jq -e '[.data[] | keys] | flatten | map(select(. == "clave")) | length == 0' "$tmp/fuentes.json" > /dev/null \
+  || fallo "/v1/fuentes devolvio claves; eso no puede salir del servicio."
+http="$(curl -s -o "$tmp/fuente.json" -w '%{http_code}' --max-time 40 "${auth[@]}" -H 'Content-Type: application/json' \
+  -d '{"id":"verificacion","nombre":"Verificacion del despliegue","tipo":"openai_compatible","base":"http://127.0.0.1:9/v1"}' \
+  "${base}/v1/fuentes" || true)"
+case "${http}" in 200|201) ;; *) cat "$tmp/fuente.json"; fallo "POST /v1/fuentes respondio ${http}.";; esac
+jq -e '.fuente.id == "verificacion" and .fuente.salud.ok == false' "$tmp/fuente.json" > /dev/null \
+  || { cat "$tmp/fuente.json"; fallo "el alta de una fuente no comprobo su salud."; }
+http="$(curl -s -o "$tmp/baja.json" -w '%{http_code}' --max-time 20 "${auth[@]}" -X DELETE "${base}/v1/fuentes/verificacion" || true)"
+[ "${http}" = "200" ] || { cat "$tmp/baja.json"; fallo "DELETE /v1/fuentes/verificacion respondio ${http}."; }
+ok "/v1/fuentes: $(jq '[.data[] | select(.declarativa)] | length' "$tmp/fuentes.json") declarativas (cifrado=$(jq -r '.cifrado' "$tmp/fuentes.json")); alta y baja en caliente"
+
 # --- /v1/models?upstream=hf: el catalogo del router de Hugging Face ---
 # Con HF_TOKEN tiene que responder; sin el, 503 con el sobre habitual y un
 # codigo propio, porque el resto del servicio sigue funcionando.

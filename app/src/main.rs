@@ -3,6 +3,7 @@ mod auth;
 mod catalogo;
 mod config;
 mod error;
+mod fuentes;
 mod guardia;
 mod openrouter;
 mod rutas;
@@ -36,6 +37,8 @@ pub struct Servicio {
     pub catalogo: Catalogo,
     /// Los catálogos de vídeo de OpenRouter y Higgsfield (etapa 11).
     pub catalogo_video: video::CatalogoVideo,
+    /// Los catálogos de las fuentes declarativas (etapa 12).
+    pub catalogo_fuentes: fuentes::CatalogoFuentes,
     pub uso: Uso,
 }
 
@@ -54,6 +57,7 @@ async fn main() {
         openrouter: Cliente::nuevo(&config),
         catalogo: Catalogo::default(),
         catalogo_video: video::CatalogoVideo::default(),
+        catalogo_fuentes: fuentes::CatalogoFuentes::default(),
         uso: Uso::nuevo(config.bd.as_deref()),
         config,
     });
@@ -77,6 +81,12 @@ async fn main() {
         .route("/videos/estimar", post(rutas::videos::estimar))
         .route("/videos/{id}", get(rutas::videos::uno))
         .route("/videos/{id}/contenido", get(rutas::videos::contenido))
+        .route(
+            "/fuentes",
+            get(rutas::fuentes::lista).post(rutas::fuentes::alta),
+        )
+        .route("/fuentes/{id}", delete(rutas::fuentes::baja))
+        .route("/fuentes/{id}/probar", post(rutas::fuentes::probar))
         .route_layer(middleware::from_fn_with_state(
             servicio.clone(),
             auth::exigir_clave,

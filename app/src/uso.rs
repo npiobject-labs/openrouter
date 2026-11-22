@@ -559,6 +559,7 @@ fn prepara(conexion: &Connection) -> rusqlite::Result<()> {
     conexion.execute_batch(ESQUEMA)?;
     conexion.execute_batch(apps::ESQUEMA)?;
     conexion.execute_batch(crate::video::ESQUEMA)?;
+    conexion.execute_batch(crate::fuentes::ESQUEMA)?;
     for (columna, tipo) in [
         ("app_id", "TEXT"),
         ("operacion", "TEXT"),
