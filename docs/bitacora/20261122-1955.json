@@ -1,0 +1,27 @@
+{
+  "fecha": "2026-11-22T19:55:00+01:00",
+  "titulo": "Release: fuentes declarativas en el VPS",
+  "objetivo": "Llevar la etapa 12 (fuentes declarativas) a producción.",
+  "prompts": [
+    { "texto": "Ok release" }
+  ],
+  "cambios": [
+    "release avanza por fast-forward de 7f474ea a 4da7c2a (etapa 12 y la anotación del release anterior).",
+    "deploy-vps.yml (run 45057428040) en success: imagen construida en el runner, contenedor recreado y sano, y tools/verificar-servicio.sh en verde, con /v1/fuentes (alta y baja en caliente) incluido."
+  ],
+  "sha": "4da7c2a",
+  "sha_completo": "4da7c2afb913d38de5a1832f5f183bf2f0cbf17b",
+  "run": "45057428040",
+  "pagina": "https://npiobject-labs.github.io/openrouter/consola.html",
+  "fly": null,
+  "pendiente": [
+    "Crear VPS_FUENTES_CLAVE_MAESTRA (el VPS responde cifrado=false: solo admite fuentes sin clave) y relanzar deploy-vps.yml sobre release.",
+    "Crear FUENTES_CLAVE_MAESTRA en el repositorio para la previsualización de Fly.",
+    "Dar de alta la primera fuente real desde la consola."
+  ],
+  "enlaces": [
+    { "texto": "Consola", "url": "https://npiobject-labs.github.io/openrouter/consola.html" },
+    { "texto": "Run del despliegue", "url": "https://github.com/npiobject-labs/openrouter/actions/runs/45057428040" }
+  ],
+  "notas": "El clon de la sesión era superficial y al principio release y main no parecían compartir historia; con la historia completa, release resultó antecesora de main y el avance fue un fast-forward normal."
+}
