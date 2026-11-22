@@ -6,7 +6,7 @@ use axum::{
     response::IntoResponse,
     Json,
 };
-use serde_json::json;
+use serde_json::{json, Value};
 
 use crate::{
     catalogo::{filtrar, Filtros, Modelo, Origen},
@@ -36,7 +36,23 @@ pub async fn modelos(
         .filter(|v| !v.is_empty())
     {
         None => Upstream::OpenRouter,
-        Some(valor) => Upstream::desde_nombre(valor).ok_or_else(|| upstream_desconocido(valor))?,
+        Some(valor) => match Upstream::desde_nombre(valor) {
+            Some(u) => u,
+            // Una fuente declarativa (etapa 12): su catálogo, con ids `<fuente>:…`.
+            None if crate::rutas::fuentes::activa(&servicio, valor).is_some() => {
+                let (lista, origen) =
+                    crate::rutas::fuentes::modelos(&servicio, valor, refrescar).await?;
+                let total = lista.len();
+                let data = crate::rutas::fuentes::filtrar(lista, &parametros);
+                let cuerpo = json!({
+                    "object": "list", "data": data, "total": total, "upstream": valor,
+                    "antiguedad_minutos": Value::Null,
+                });
+                let cabecera = HeaderValue::from_static(origen.etiqueta());
+                return Ok((StatusCode::OK, [(CABECERA_CACHE, cabecera)], Json(cuerpo)));
+            }
+            None => return Err(upstream_desconocido(valor)),
+        },
     };
 
     let (lista, origen) = catalogo_de(&servicio, upstream, refrescar).await?;

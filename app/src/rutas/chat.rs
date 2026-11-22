@@ -103,6 +103,15 @@ pub async fn chat(
         operacion,
     };
 
+    // Una fuente declarativa (etapa 12): `<fuente>:<modelo>`. Sin respaldo
+    // automático: se pidió esa fuente a propósito.
+    if let Some((fuente, modelo)) = crate::rutas::fuentes::resolver(&servicio, &pedido) {
+        let hecha = llamada
+            .intenta_fuente(&pedido, &fuente, &modelo, &cuerpo, Some(huella))
+            .await?;
+        return Ok(hecha.respuesta(aviso.as_deref(), None));
+    }
+
     // A quién se le compra lo decide el prefijo del modelo.
     let destino = Destino::de(&pedido);
     let fallo = match llamada
@@ -144,7 +153,8 @@ struct Llamada<'a> {
 struct Hecha {
     cuerpo: Value,
     id_uso: String,
-    upstream: Upstream,
+    /// `openrouter`, `hf`, `rq` o el id de una fuente declarativa.
+    upstream: String,
 }
 
 impl Hecha {
@@ -158,10 +168,9 @@ impl Hecha {
         if let Some(valor) = aviso.and_then(|a| HeaderValue::from_str(a).ok()) {
             cabeceras.insert(CABECERA_AVISO, valor);
         }
-        cabeceras.insert(
-            CABECERA_UPSTREAM,
-            HeaderValue::from_static(self.upstream.nombre()),
-        );
+        if let Ok(valor) = HeaderValue::from_str(&self.upstream) {
+            cabeceras.insert(CABECERA_UPSTREAM, valor);
+        }
         if let Some(caido) = respaldo_de {
             cabeceras.insert(CABECERA_RESPALDO, HeaderValue::from_static(caido.nombre()));
         }
@@ -170,6 +179,84 @@ impl Hecha {
 }
 
 impl Llamada<'_> {
+    /// Un intento contra una fuente declarativa: misma medición, mismo
+    /// registro; el coste es el de `usage.cost` o, si la fuente no lo da (o se
+    /// declaró `catalogo`), el estimado con sus precios.
+    async fn intenta_fuente(
+        &self,
+        pedido: &str,
+        fuente: &crate::fuentes::Fuente,
+        modelo: &str,
+        cuerpo: &Value,
+        huella: Option<String>,
+    ) -> Result<Hecha, ErrorApi> {
+        let servicio = self.servicio;
+        let mut cuerpo = cuerpo.clone();
+        if let Some(objeto) = cuerpo.as_object_mut() {
+            objeto.insert("model".to_string(), Value::String(modelo.to_string()));
+        }
+        let mut registro = servicio.uso.abre(pedido.to_string());
+        registro.app_id = self.quien.app_id();
+        registro.huella = huella;
+        registro.upstream = fuente.id.clone();
+        registro.operacion = self.operacion.clone();
+        let id_uso = registro.id.clone();
+        let clave = match crate::rutas::fuentes::clave_de(servicio, fuente) {
+            Ok(c) => c,
+            Err(fallo) => {
+                registro.estado = fallo.estado.as_u16();
+                registro.motivo_fin = Some(fallo.codigo.to_string());
+                servicio.uso.anota(registro);
+                return Err(fallo.con_uso(&id_uso));
+            }
+        };
+        let reloj = Instant::now();
+        let resultado = crate::fuentes::chat(
+            servicio.openrouter.http(),
+            fuente,
+            clave.as_deref(),
+            &cuerpo,
+        )
+        .await;
+        registro.latencia_ms = reloj.elapsed().as_millis() as i64;
+        match resultado {
+            Ok(respuesta) => {
+                registro.estado = StatusCode::OK.as_u16();
+                registro.desde_respuesta(&respuesta);
+                // No es una generación de OpenRouter: nada que reconciliar.
+                registro.id_openrouter = None;
+                if registro.coste.is_some() && fuente.coste == "usage" {
+                    registro.coste_origen = fuente.id.clone();
+                } else {
+                    registro.coste = None;
+                    registro.coste_origen = "estimado".into();
+                    let precio = |s: &Servicio| {
+                        s.catalogo_fuentes
+                            .precio(&fuente.id, pedido)
+                            .filter(|(a, b)| *a > 0.0 || *b > 0.0)
+                            .or(fuente.precio_entrada.zip(fuente.precio_salida))
+                    };
+                    if precio(servicio).is_none() {
+                        let _ = crate::rutas::fuentes::catalogo(servicio, fuente, false).await;
+                    }
+                    registro.estima(precio(servicio));
+                }
+                servicio.uso.anota(registro);
+                Ok(Hecha {
+                    cuerpo: respuesta,
+                    id_uso,
+                    upstream: fuente.id.clone(),
+                })
+            }
+            Err(fallo) => {
+                registro.estado = fallo.estado.as_u16();
+                registro.motivo_fin = Some(fallo.codigo.to_string());
+                servicio.uso.anota(registro);
+                Err(fallo.con_uso(&id_uso))
+            }
+        }
+    }
+
     /// Un intento contra un upstream, medido y anotado vaya bien o mal.
     async fn intenta(
         &self,
@@ -229,7 +316,7 @@ impl Llamada<'_> {
                 Ok(Hecha {
                     cuerpo: respuesta,
                     id_uso,
-                    upstream: destino.upstream,
+                    upstream: destino.upstream.nombre().to_string(),
                 })
             }
             Err(fallo) => {
@@ -469,6 +556,7 @@ mod pruebas {
             openrouter: Cliente::nuevo(&config),
             catalogo: Catalogo::default(),
             catalogo_video: crate::video::CatalogoVideo::default(),
+            catalogo_fuentes: crate::fuentes::CatalogoFuentes::default(),
             uso: Uso::nuevo(Some("/no/existe/uso.db")),
             config,
         });

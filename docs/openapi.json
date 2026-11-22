@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "openrouter · servicio",
-    "version": "0.8.0",
+    "version": "0.12.0",
     "summary": "Pasarela propia sobre OpenRouter y el router de Hugging Face, pensada para ser llamada por otras aplicaciones.",
     "description": "Esto no es una aplicación con interfaz: es un conjunto de servicios HTTP. La clave de OpenRouter vive solo en el backend y nunca sale de él. Cada aplicación consumidora tiene su propia clave, que se da de alta y se revoca sin tocar el despliegue.\n\nEl contrato sigue el de la API de OpenAI donde existe equivalente, así que cualquier cliente de OpenAI funciona cambiando la URL base. Lo propio del servicio va en rutas propias y en cabeceras `X-...`. Una ruta publicada no se rompe: lo incompatible iría a `/v2/`.\n\nLa versión de este documento acompaña a la etapa entregada: `0.6.0` es la etapa 6; `0.6.2` amplía `/v1/models` con descripción, precios completos, modalidades de salida y parámetros, sin cambiar nada de lo publicado; `0.6.4` entrega la etapa 9 (catálogo completo de OpenRouter y compra en el router de Hugging Face con el prefijo `hf:`), también sin cambiar nada: solo añade campos, parámetros y códigos. Las etapas 7 y 8 siguen pendientes.",
     "license": {
@@ -56,6 +56,10 @@
     {
       "name": "Vídeo",
       "description": "Generar y editar vídeo (asíncrono)."
+    },
+    {
+      "name": "Fuentes",
+      "description": "Fuentes declarativas (etapa 12): cualquier API compatible con OpenAI se da de alta en caliente y sus modelos se piden como `<fuente>:<modelo>`, con los mismos topes y la misma medición."
     }
   ],
   "paths": {
@@ -237,14 +241,9 @@
           {
             "name": "upstream",
             "in": "query",
-            "description": "De quién es el catálogo: `openrouter` (por defecto), `hf` (router de Hugging Face) o `rq` (Requesty). Sin la clave de ese upstream en el despliegue, `503 upstream_sin_configurar`. Un valor desconocido es `400 upstream_desconocido`.",
+            "description": "De quién es el catálogo: `openrouter` (por defecto), `hf` (router de Hugging Face), `rq` (Requesty) o el id de una fuente declarativa activa (etapa 12), cuyos modelos salen como `<fuente>:<id>` con precio, contexto, `region` y `retencion`. Sin la clave de ese upstream en el despliegue, `503 upstream_sin_configurar`. Un valor desconocido es `400 upstream_desconocido`.",
             "schema": {
               "type": "string",
-              "enum": [
-                "openrouter",
-                "hf",
-                "rq"
-              ],
               "default": "openrouter"
             },
             "example": "hf"
@@ -405,7 +404,7 @@
           "Consultas"
         ],
         "summary": "Consulta a un modelo",
-        "description": "Proxy fino sobre OpenRouter, y desde 0.6.4 también sobre el router de Hugging Face, con el contrato de OpenAI. A quién va lo decide el prefijo de `model`: `hf:<id>` sale hacia Hugging Face sin el prefijo (`hf:meta-llama/Llama-3.3-70B-Instruct:groq` pide `meta-llama/Llama-3.3-70B-Instruct:groq`, donde `:groq` es el host; `:cheapest` y `:fastest` dejan que elija el router); todo lo demás va a OpenRouter exactamente como siempre. Sin `HF_TOKEN` en el despliegue, `hf:` responde `503 upstream_sin_configurar`.\n\nEl cuerpo se reenvía tal cual salvo tres retoques: el prefijo, si no traes `model` se rellena con el modelo por defecto del servicio (`modelo_defecto` de `/v1/estado`), o con el multimodal (`modelo_multimodal`) si algún mensaje lleva una parte que no es texto; con el de texto, y si no mandas `reasoning`, se añade `{\"effort\":\"low\"}` para que el razonamiento no se coma el `max_tokens`; y `stream: true` se rechaza con `400` porque el streaming llega en la etapa 7.\n\nLa respuesta es la del upstream sin tocar, incluido el bloque `usage`, que es lo que permite saber qué costó la llamada. En Hugging Face el coste queda `estimado` con los precios de su catálogo (los del host pedido, o los del más barato si no se pidió ninguno) y no se reconcilia: el router no tiene `/generation`.\n\nToda llamada que llega a salir queda anotada en el registro de uso, vaya bien o mal, y su identificador vuelve en la cabecera `X-Uso-Id`. Con él se consulta después lo que costó, en `/v1/uso/{id}`.\n\nVaya a un upstream o a otro, con clave de aplicación la llamada pasa antes por los mismos tres controles: el cortacircuitos de bucles, la cuota por minuto y el presupuesto. La clave de administración no tiene ninguno.\n\nDesde 0.7.0 `model` admite también `rq:<id de Requesty>` (`rq:vertex/gemini-3.1-flash-lite@eu`), con el coste real que da Requesty en `usage.cost`. Y si OpenRouter no está (sin conexión, tiempo agotado, 5xx, 429 o 402), la consulta se repite automáticamente con el mismo modelo en Hugging Face y, si no, en Requesty (la variante de la UE que no retiene datos, la más barata). La respuesta dice quién contestó en `X-Upstream` y que hubo respaldo en `X-Respaldo`. Cada intento queda en el registro de uso. Para que una consulta nunca salga de OpenRouter, manda `X-Respaldo: no`.",
+        "description": "Proxy fino sobre OpenRouter, y desde 0.6.4 también sobre el router de Hugging Face, con el contrato de OpenAI. A quién va lo decide el prefijo de `model`: `hf:<id>` sale hacia Hugging Face sin el prefijo (`hf:meta-llama/Llama-3.3-70B-Instruct:groq` pide `meta-llama/Llama-3.3-70B-Instruct:groq`, donde `:groq` es el host; `:cheapest` y `:fastest` dejan que elija el router); todo lo demás va a OpenRouter exactamente como siempre. Sin `HF_TOKEN` en el despliegue, `hf:` responde `503 upstream_sin_configurar`.\n\nEl cuerpo se reenvía tal cual salvo tres retoques: el prefijo, si no traes `model` se rellena con el modelo por defecto del servicio (`modelo_defecto` de `/v1/estado`), o con el multimodal (`modelo_multimodal`) si algún mensaje lleva una parte que no es texto; con el de texto, y si no mandas `reasoning`, se añade `{\"effort\":\"low\"}` para que el razonamiento no se coma el `max_tokens`; y `stream: true` se rechaza con `400` porque el streaming llega en la etapa 7.\n\nLa respuesta es la del upstream sin tocar, incluido el bloque `usage`, que es lo que permite saber qué costó la llamada. En Hugging Face el coste queda `estimado` con los precios de su catálogo (los del host pedido, o los del más barato si no se pidió ninguno) y no se reconcilia: el router no tiene `/generation`.\n\nToda llamada que llega a salir queda anotada en el registro de uso, vaya bien o mal, y su identificador vuelve en la cabecera `X-Uso-Id`. Con él se consulta después lo que costó, en `/v1/uso/{id}`.\n\nVaya a un upstream o a otro, con clave de aplicación la llamada pasa antes por los mismos tres controles: el cortacircuitos de bucles, la cuota por minuto y el presupuesto. La clave de administración no tiene ninguno.\n\nDesde 0.7.0 `model` admite también `rq:<id de Requesty>` (`rq:vertex/gemini-3.1-flash-lite@eu`), con el coste real que da Requesty en `usage.cost`. Y si OpenRouter no está (sin conexión, tiempo agotado, 5xx, 429 o 402), la consulta se repite automáticamente con el mismo modelo en Hugging Face y, si no, en Requesty (la variante de la UE que no retiene datos, la más barata). La respuesta dice quién contestó en `X-Upstream` y que hubo respaldo en `X-Respaldo`. Cada intento queda en el registro de uso. Para que una consulta nunca salga de OpenRouter, manda `X-Respaldo: no`.\n\n**Fuentes declarativas (etapa 12).** `model: \"<fuente>:<modelo>\"` va a la fuente dada de alta en `/v1/fuentes`, con los mismos topes, cortacircuitos y registro de uso (`upstream` = id de la fuente). Sin respaldo: si la fuente falla, el error sale con `fuente_rechaza`, `fuente_inalcanzable` o `fuente_tardo_demasiado`. El coste es `usage.cost` si la fuente lo da (`coste: usage`) o se estima con sus precios.",
         "requestBody": {
           "required": true,
           "content": {
@@ -1729,6 +1728,366 @@
           }
         }
       }
+    },
+    "/v1/fuentes": {
+      "get": {
+        "tags": [
+          "Fuentes"
+        ],
+        "summary": "Listar las fuentes",
+        "description": "Las tres de serie (sin prefijo, `hf:` y `rq:`) y las declarativas activas. Con la clave de administración también salen las dadas de baja, la base, los precios declarados y si tienen clave; con una de aplicación, solo lo que hace falta para pedir modelos. La clave de una fuente no sale nunca. `cifrado` dice si el despliegue tiene `FUENTES_CLAVE_MAESTRA` (sin ella solo se admiten fuentes sin clave).",
+        "responses": {
+          "200": {
+            "description": "Lista.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    },
+                    "cifrado": {
+                      "type": "boolean"
+                    },
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Fuente"
+                      }
+                    }
+                  }
+                },
+                "example": {
+                  "ok": true,
+                  "cifrado": true,
+                  "data": [
+                    {
+                      "id": "openrouter",
+                      "nombre": "OpenRouter",
+                      "tipo": "agregador",
+                      "prefijo": "",
+                      "declarativa": false,
+                      "configurada": true,
+                      "medicion": "reconciliada"
+                    },
+                    {
+                      "id": "groq",
+                      "nombre": "Groq",
+                      "tipo": "proveedor",
+                      "prefijo": "groq:",
+                      "declarativa": true,
+                      "region": "us",
+                      "retencion": "no guarda",
+                      "salud": {
+                        "ok": true,
+                        "latencia_ms": 312,
+                        "modelos": 21,
+                        "comprobada": "2026-11-22T17:00:00Z"
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/NoAutorizado"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Fuentes"
+        ],
+        "summary": "Dar de alta o actualizar una fuente",
+        "description": "Solo administración. Registra una API compatible con OpenAI (`GET <base><ruta_modelos>` y `POST <base>/chat/completions`) y la comprueba al momento. Si el id ya existe se actualiza y se reactiva; sin `clave` se conserva la guardada. La clave se cifra con ChaCha20-Poly1305 y `FUENTES_CLAVE_MAESTRA`; sin esa variable, una alta con clave responde `503 sin_configurar`. Sus modelos se piden desde ese momento como `<id>:<modelo>` en `/v1/chat/completions` y se listan en `/v1/models?upstream=<id>`.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "id",
+                  "base"
+                ],
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "nombre": {
+                    "type": "string"
+                  },
+                  "tipo": {
+                    "type": "string",
+                    "enum": [
+                      "agregador",
+                      "proveedor",
+                      "local",
+                      "openai_compatible"
+                    ],
+                    "default": "openai_compatible"
+                  },
+                  "base": {
+                    "type": "string",
+                    "description": "`http(s)://…`, sin `/chat/completions`."
+                  },
+                  "clave": {
+                    "type": "string",
+                    "description": "Opcional. Se envía como `Authorization: Bearer`."
+                  },
+                  "ruta_modelos": {
+                    "type": "string",
+                    "default": "/models"
+                  },
+                  "region": {
+                    "type": "string"
+                  },
+                  "retencion": {
+                    "type": "string"
+                  },
+                  "coste": {
+                    "type": "string",
+                    "enum": [
+                      "usage",
+                      "catalogo"
+                    ],
+                    "default": "usage"
+                  },
+                  "precio_entrada": {
+                    "type": "number"
+                  },
+                  "precio_salida": {
+                    "type": "number"
+                  }
+                }
+              },
+              "example": {
+                "id": "groq",
+                "nombre": "Groq",
+                "tipo": "proveedor",
+                "base": "https://api.groq.com/openai/v1",
+                "clave": "<clave del proveedor>",
+                "region": "us",
+                "coste": "catalogo"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Creada (y comprobada: mira `fuente.salud`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    },
+                    "fuente": {
+                      "$ref": "#/components/schemas/Fuente"
+                    }
+                  }
+                },
+                "example": {
+                  "ok": true,
+                  "fuente": {
+                    "id": "groq",
+                    "nombre": "Groq",
+                    "tipo": "proveedor",
+                    "prefijo": "groq:",
+                    "declarativa": true,
+                    "region": "us",
+                    "retencion": "no guarda",
+                    "salud": {
+                      "ok": true,
+                      "latencia_ms": 312,
+                      "modelos": 21,
+                      "comprobada": "2026-11-22T17:00:00Z"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Actualizada."
+          },
+          "400": {
+            "description": "Id, base, tipo o coste no válidos.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "ok": false,
+                  "error": {
+                    "message": "El id de la fuente debe ser [a-z][a-z0-9-]{1,23} y no reservado.",
+                    "code": "cuerpo_invalido",
+                    "type": "invalid_request_error"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/NoAutorizado"
+          },
+          "403": {
+            "$ref": "#/components/responses/SinPermiso"
+          },
+          "503": {
+            "description": "Alta con clave sin `FUENTES_CLAVE_MAESTRA` en el despliegue.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "ok": false,
+                  "error": {
+                    "message": "Falta FUENTES_CLAVE_MAESTRA: no se pueden guardar claves de fuentes.",
+                    "code": "sin_configurar",
+                    "type": "api_error"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/fuentes/{id}": {
+      "delete": {
+        "tags": [
+          "Fuentes"
+        ],
+        "summary": "Dar de baja una fuente",
+        "description": "Solo administración. Sus modelos dejan de responder al momento. No se borra: el histórico de uso la sigue referenciando y `/v1/uso?upstream=<id>` sigue funcionando; un alta con el mismo id la reactiva.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "groq"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Desactivada.",
+            "content": {
+              "application/json": {
+                "example": {
+                  "ok": true,
+                  "id": "groq",
+                  "activa": false
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/NoAutorizado"
+          },
+          "403": {
+            "$ref": "#/components/responses/SinPermiso"
+          },
+          "404": {
+            "description": "No hay ninguna fuente declarativa con ese id.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "ok": false,
+                  "error": {
+                    "message": "No hay ninguna fuente con id groq.",
+                    "code": "fuente_desconocida",
+                    "type": "not_found_error"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/fuentes/{id}/probar": {
+      "post": {
+        "tags": [
+          "Fuentes"
+        ],
+        "summary": "Comprobar una fuente",
+        "description": "Solo administración. Pide su catálogo (no gasta), anota la salud y refresca la caché de modelos.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "groq"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Salud comprobada (puede ser `ok:false`).",
+            "content": {
+              "application/json": {
+                "example": {
+                  "ok": true,
+                  "fuente": {
+                    "id": "groq",
+                    "nombre": "Groq",
+                    "tipo": "proveedor",
+                    "prefijo": "groq:",
+                    "declarativa": true,
+                    "region": "us",
+                    "retencion": "no guarda",
+                    "salud": {
+                      "ok": true,
+                      "latencia_ms": 312,
+                      "modelos": 21,
+                      "comprobada": "2026-11-22T17:00:00Z"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/NoAutorizado"
+          },
+          "403": {
+            "$ref": "#/components/responses/SinPermiso"
+          },
+          "404": {
+            "description": "No hay ninguna fuente declarativa con ese id.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "ok": false,
+                  "error": {
+                    "message": "No hay ninguna fuente con id groq.",
+                    "code": "fuente_desconocida",
+                    "type": "not_found_error"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -2619,6 +2978,90 @@
             "type": "integer"
           }
         }
+      },
+      "Fuente": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Identificador y prefijo de sus modelos: `[a-z][a-z0-9-]{1,23}`; no puede ser `openrouter`, `hf`, `huggingface`, `rq`, `requesty`, `higgsfield`, `auto`, `alias` ni `todas`."
+          },
+          "nombre": {
+            "type": "string"
+          },
+          "tipo": {
+            "type": "string",
+            "enum": [
+              "agregador",
+              "proveedor",
+              "local",
+              "openai_compatible"
+            ]
+          },
+          "prefijo": {
+            "type": "string",
+            "example": "groq:"
+          },
+          "declarativa": {
+            "type": "boolean",
+            "description": "`false` en las tres de serie (OpenRouter, Hugging Face, Requesty)."
+          },
+          "region": {
+            "type": "string",
+            "nullable": true
+          },
+          "retencion": {
+            "type": "string",
+            "nullable": true
+          },
+          "salud": {
+            "type": "object",
+            "nullable": true,
+            "description": "Última comprobación: `ok`, `latencia_ms`, `modelos` o `error`/`mensaje`, y `comprobada`."
+          },
+          "base": {
+            "type": "string",
+            "description": "Solo con la clave de administración."
+          },
+          "ruta_modelos": {
+            "type": "string",
+            "description": "Solo administración. Por defecto `/models`."
+          },
+          "coste": {
+            "type": "string",
+            "enum": [
+              "usage",
+              "catalogo"
+            ],
+            "description": "Solo administración. `usage`: el coste lo da `usage.cost` de la respuesta; `catalogo`: se estima con los precios del catálogo de la fuente o los declarados."
+          },
+          "precio_entrada": {
+            "type": "number",
+            "nullable": true,
+            "description": "Solo administración. $ por millón."
+          },
+          "precio_salida": {
+            "type": "number",
+            "nullable": true,
+            "description": "Solo administración. $ por millón."
+          },
+          "activa": {
+            "type": "boolean",
+            "description": "Solo administración: las dadas de baja solo las ve ella."
+          },
+          "con_clave": {
+            "type": "boolean",
+            "description": "Solo administración. La clave nunca sale del servicio."
+          },
+          "configurada": {
+            "type": "boolean",
+            "description": "Solo en las de serie: si el despliegue tiene su clave."
+          },
+          "medicion": {
+            "type": "string",
+            "description": "Solo en las de serie: `reconciliada`, `estimada` o `directa`."
+          }
+        }
       }
     },
     "responses": {
@@ -2796,7 +3239,7 @@
     {
       "code": "upstream_desconocido",
       "http": 400,
-      "cuando": "`?upstream=` con un valor que no es `openrouter` ni `hf`."
+      "cuando": "`?upstream=` con un valor que no es `openrouter`, `hf`, `rq` ni el id de una fuente declarativa activa."
     },
     {
       "code": "ruta_desconocida",
@@ -2937,6 +3380,36 @@
       "code": "higgsfield_tardo_demasiado",
       "http": 502,
       "cuando": "Higgsfield no respondió a tiempo."
+    },
+    {
+      "code": "fuente_desconocida",
+      "http": 404,
+      "cuando": "`/v1/fuentes/{id}` con un id que no es de ninguna fuente declarativa."
+    },
+    {
+      "code": "fuente_rechaza",
+      "http": "el de la fuente",
+      "cuando": "La fuente declarativa respondió con error; se conserva su estado HTTP y su cuerpo en `error.upstream`."
+    },
+    {
+      "code": "fuente_inalcanzable",
+      "http": 502,
+      "cuando": "No se pudo conectar con la fuente declarativa."
+    },
+    {
+      "code": "fuente_tardo_demasiado",
+      "http": 504,
+      "cuando": "La fuente declarativa no respondió a tiempo."
+    },
+    {
+      "code": "fuente_clave_ilegible",
+      "http": 503,
+      "cuando": "La clave guardada de una fuente no se puede descifrar: cambió `FUENTES_CLAVE_MAESTRA`. Vuelve a darla de alta con su clave."
+    },
+    {
+      "code": "sin_guardar",
+      "http": 500,
+      "cuando": "No se pudo cifrar la clave o guardar la fuente en la base."
     }
   ],
   "x-etapas": [
@@ -3137,6 +3610,40 @@
         }
       ],
       "nota": "Generar y editar vídeo con la API asíncrona de vídeo de OpenRouter (Veo, Seedance, Kling, Wan, Runway, FLUX Video Edit...) y con Higgsfield (`higgsfield:<modelo>`, clave `HIGGSFIELD_API_KEY` opcional). El coste se estima antes de encolar y se comprueba contra el presupuesto de la aplicación; al terminar se anota el real."
+    },
+    {
+      "numero": 12,
+      "titulo": "Fuentes declarativas",
+      "estado": "entregada",
+      "rutas": [
+        {
+          "metodo": "GET",
+          "ruta": "/v1/fuentes"
+        },
+        {
+          "metodo": "POST",
+          "ruta": "/v1/fuentes"
+        },
+        {
+          "metodo": "DELETE",
+          "ruta": "/v1/fuentes/{id}"
+        },
+        {
+          "metodo": "POST",
+          "ruta": "/v1/fuentes/{id}/probar"
+        },
+        {
+          "metodo": "GET",
+          "ruta": "/v1/models",
+          "nota": "?upstream=<fuente>"
+        },
+        {
+          "metodo": "POST",
+          "ruta": "/v1/chat/completions",
+          "nota": "model: <fuente>:<modelo>"
+        }
+      ],
+      "nota": "Un proveedor más ya no es una etapa: cualquier API compatible con OpenAI (Groq, DeepInfra, Mistral, un vLLM u Ollama por túnel…) se da de alta en caliente desde la consola, con su clave cifrada en la base, salud comprobada y catálogo en caché de una hora. Mismos topes y misma medición que el resto."
     }
   ]
 }

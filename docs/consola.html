@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="build" content="OP-B1-20261007-018">
+<meta name="build" content="OP-B1-20261122-019">
 <!-- App de Fly: <repo>-<owner>, el mismo nombre que deriva deploy.yml.
      Con otro nombre, cambia este content o abre la pagina con ?app=<nombre>. -->
 <meta name="fly-app" content="openrouter-npiobject-labs">
@@ -229,6 +229,35 @@ footer{display:flex;flex-wrap:wrap;gap:.4rem 1.2rem;font-size:.8rem;color:var(--
     </div>
   </section>
 
+  <section class="panel" id="panel-fuentes" hidden>
+    <h2>Fuentes <span class="estado" id="fuentes-estado">sin cargar</span></h2>
+    <p>Cualquier API compatible con OpenAI (un proveedor directo, otro agregador o un servidor local por túnel) se da de alta aquí, sin desplegar. Sus modelos se piden como <code>&lt;id&gt;:&lt;modelo&gt;</code>, con los mismos topes y la misma medición. La clave se guarda cifrada y no vuelve a salir del servicio. Este panel solo aparece con la clave de administración.</p>
+    <div class="fila">
+      <label for="fu-id">Id (será el prefijo)<input id="fu-id" type="text" placeholder="groq" maxlength="24" autocomplete="off" data-1p-ignore data-lpignore="true" data-protonpass-ignore="true"></label>
+      <label for="fu-nombre">Nombre<input id="fu-nombre" type="text" placeholder="Groq" autocomplete="off" data-1p-ignore data-lpignore="true" data-protonpass-ignore="true"></label>
+      <label for="fu-tipo">Tipo<select id="fu-tipo"><option value="openai_compatible">Compatible con OpenAI</option><option value="proveedor">Proveedor</option><option value="agregador">Agregador</option><option value="local">Local</option></select></label>
+    </div>
+    <div class="fila">
+      <label for="fu-base">Base de la API<input id="fu-base" type="text" placeholder="https://api.groq.com/openai/v1" autocomplete="off" data-1p-ignore data-lpignore="true" data-protonpass-ignore="true"></label>
+      <label for="fu-clave">Clave<input id="fu-clave" type="password" autocomplete="new-password" placeholder="vacía: se conserva la guardada" data-1p-ignore data-lpignore="true" data-protonpass-ignore="true"></label>
+    </div>
+    <div class="fila">
+      <label for="fu-region">Región<input id="fu-region" type="text" placeholder="eu, us…" autocomplete="off"></label>
+      <label for="fu-retencion">Retención<input id="fu-retencion" type="text" placeholder="no guarda, 30 días…" autocomplete="off"></label>
+      <label for="fu-coste">Coste<select id="fu-coste"><option value="usage">Lo da la respuesta (usage.cost)</option><option value="catalogo">Estimado con precios</option></select></label>
+      <label for="fu-pe">$ entrada / M<input id="fu-pe" type="number" step="0.01" min="0"></label>
+      <label for="fu-ps">$ salida / M<input id="fu-ps" type="number" step="0.01" min="0"></label>
+    </div>
+    <div class="fila">
+      <button class="primario" id="btn-fuente-alta">Guardar y comprobar</button>
+      <button id="btn-fuentes">Actualizar</button>
+    </div>
+    <div class="tabla"><table>
+      <thead><tr><th>Fuente</th><th>Prefijo</th><th>Tipo</th><th>Salud</th><th>Modelos</th><th></th></tr></thead>
+      <tbody id="fuentes-filas"><tr><td colspan="6" class="texto">Pulsa «Actualizar» para ver las fuentes.</td></tr></tbody>
+    </table></div>
+  </section>
+
   <section class="panel">
     <h2>Resumen <span class="estado" id="res-estado">sin cargar</span></h2>
     <p>Totales del histórico, por día o por modelo. Sin fechas, todo lo que haya guardado.</p>
@@ -255,7 +284,7 @@ footer{display:flex;flex-wrap:wrap;gap:.4rem 1.2rem;font-size:.8rem;color:var(--
   </section>
 
   <footer>
-    <span>Build <code>OP-B1-20261007-018</code></span>
+    <span>Build <code>OP-B1-20261122-019</code></span>
     <span>Backend: <a id="url-backend" href="#">–</a></span>
     <a href="conectar.html">Conectar una aplicación</a>
     <a href="api.html">Documentación de la API</a>
@@ -405,6 +434,8 @@ footer{display:flex;flex-wrap:wrap;gap:.4rem 1.2rem;font-size:.8rem;color:var(--
       texto('k-quien', quien.nombre || '–');
       // El panel de aplicaciones solo tiene sentido con la clave que manda.
       $('panel-apps').hidden = !quien.administracion;
+      $('panel-fuentes').hidden = !quien.administracion;
+      if (quien.administracion) cargarFuentes();
       $('ficha-clave').hidden = false;
       margenPropio();
       cargarCatalogo(false);
@@ -733,6 +764,106 @@ footer{display:flex;flex-wrap:wrap;gap:.4rem 1.2rem;font-size:.8rem;color:var(--
   $('btn-limites').addEventListener('click', guardaLimites);
   $('btn-apps').addEventListener('click', cargarApps);
   $('btn-app-alta').addEventListener('click', altaApp);
+
+  // --- fuentes (etapa 12) ---------------------------------------------------
+  function cargarFuentes(){
+    var boton = $('btn-fuentes');
+    boton.disabled = true;
+    pinta('fuentes-estado', 'cargando…', '');
+    return llama('/v1/fuentes').then(function(res){
+      var cuerpo = $('fuentes-filas');
+      cuerpo.textContent = '';
+      var selector = $('f-upstream');
+      Array.prototype.slice.call(selector.querySelectorAll('option[data-fuente]')).forEach(function(o){ o.remove(); });
+      res.datos.data.forEach(function(f){
+        var s = f.salud || {};
+        var activa = f.activa !== false;
+        var salud = !f.declarativa ? (f.configurada ? 'con clave' : 'sin clave')
+          : !activa ? 'dada de baja'
+          : s.ok ? 'bien · ' + miles(s.latencia_ms) + ' ms'
+          : s.comprobada ? 'falla: ' + (s.mensaje || s.error || '') : 'sin comprobar';
+        var tr = fila([
+          { v: f.nombre, clase: 'texto' },
+          { v: f.prefijo || '(sin prefijo)' },
+          { v: f.tipo + (f.declarativa ? '' : ' · de serie') },
+          { v: salud, clase: !activa ? 'baja' : (f.declarativa && s.comprobada && !s.ok ? 'fallo' : '') },
+          { v: s.modelos != null ? miles(s.modelos) : '–' },
+          { v: '' }
+        ]);
+        if (f.declarativa && activa){
+          [['Probar', function(){ probarFuente(f.id); }], ['Editar', function(){ editaFuente(f); }], ['Dar de baja', function(){ bajaFuente(f); }]]
+            .forEach(function(b){
+              var boton = document.createElement('button');
+              boton.textContent = b[0];
+              boton.addEventListener('click', b[1]);
+              tr.lastChild.appendChild(boton);
+            });
+          var opcion = document.createElement('option');
+          opcion.value = f.id;
+          opcion.dataset.fuente = '1';
+          opcion.textContent = f.nombre + ' (' + f.prefijo + ')';
+          selector.appendChild(opcion);
+        }
+        cuerpo.appendChild(tr);
+      });
+      var n = res.datos.data.filter(function(f){ return f.declarativa && f.activa !== false; }).length;
+      pinta('fuentes-estado', n + ' declarativas' + (res.datos.cifrado ? '' : ' · sin FUENTES_CLAVE_MAESTRA: solo sin clave'), res.datos.cifrado ? 'ok' : '');
+    }).catch(function(e){
+      pinta('fuentes-estado', e.message, 'mal');
+    }).finally(function(){ boton.disabled = false; });
+  }
+
+  function editaFuente(f){
+    $('fu-id').value = f.id;
+    $('fu-nombre').value = f.nombre || '';
+    $('fu-tipo').value = f.tipo || 'openai_compatible';
+    $('fu-base').value = f.base || '';
+    $('fu-clave').value = '';
+    $('fu-region').value = f.region || '';
+    $('fu-retencion').value = f.retencion || '';
+    $('fu-coste').value = f.coste || 'usage';
+    $('fu-pe').value = f.precio_entrada != null ? f.precio_entrada : '';
+    $('fu-ps').value = f.precio_salida != null ? f.precio_salida : '';
+    $('fu-base').focus();
+  }
+
+  function altaFuente(){
+    var cuerpo = {
+      id: $('fu-id').value.trim(), nombre: $('fu-nombre').value.trim(), tipo: $('fu-tipo').value,
+      base: $('fu-base').value.trim(), region: $('fu-region').value.trim(),
+      retencion: $('fu-retencion').value.trim(), coste: $('fu-coste').value
+    };
+    if ($('fu-clave').value.trim()) cuerpo.clave = $('fu-clave').value.trim();
+    if ($('fu-pe').value !== '') cuerpo.precio_entrada = Number($('fu-pe').value);
+    if ($('fu-ps').value !== '') cuerpo.precio_salida = Number($('fu-ps').value);
+    var boton = $('btn-fuente-alta');
+    boton.disabled = true;
+    pinta('fuentes-estado', 'guardando y comprobando…', '');
+    llama('/v1/fuentes', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(cuerpo) }).then(function(res){
+      $('fu-clave').value = '';
+      var s = res.datos.fuente.salud || {};
+      return cargarFuentes().then(function(){ pinta('fuentes-estado', s.ok ? 'guardada: ' + miles(s.modelos) + ' modelos en ' + miles(s.latencia_ms) + ' ms' : 'guardada, pero no responde: ' + (s.mensaje || s.error || ''), s.ok ? 'ok' : 'mal'); });
+    }).catch(function(e){
+      pinta('fuentes-estado', e.message, 'mal');
+    }).finally(function(){ boton.disabled = false; });
+  }
+
+  function probarFuente(id){
+    pinta('fuentes-estado', 'comprobando ' + id + '…', '');
+    llama('/v1/fuentes/' + encodeURIComponent(id) + '/probar', { method: 'POST' })
+      .then(function(){ cargarFuentes(); })
+      .catch(function(e){ pinta('fuentes-estado', e.message, 'mal'); });
+  }
+
+  function bajaFuente(f){
+    if (!confirm('¿Dar de baja la fuente «' + f.nombre + '»? Sus modelos dejan de responder; el histórico se conserva.')) return;
+    llama('/v1/fuentes/' + encodeURIComponent(f.id), { method: 'DELETE' })
+      .then(function(){ cargarFuentes(); })
+      .catch(function(e){ pinta('fuentes-estado', e.message, 'mal'); });
+  }
+
+  $('btn-fuentes').addEventListener('click', cargarFuentes);
+  $('btn-fuente-alta').addEventListener('click', altaFuente);
 
   // --- resumen --------------------------------------------------------------
   function fechas(){

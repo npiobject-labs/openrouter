@@ -51,6 +51,10 @@ pub struct Config {
     /// Orígenes admitidos por el CORS. Vacío es "cualquiera", que es lo que la
     /// consola de Pages necesitaba hasta ahora; en el VPS se acota.
     pub cors_origenes: Vec<String>,
+    /// Clave maestra con la que se cifran las claves de las fuentes
+    /// declarativas (`FUENTES_CLAVE_MAESTRA`). Sin ella solo se dan de alta
+    /// fuentes sin clave.
+    pub clave_maestra_fuentes: Option<String>,
 }
 
 impl Config {
@@ -90,6 +94,7 @@ impl Config {
                 .unwrap_or(8080),
             bd: variable("BD_RUTA"),
             cors_origenes: origenes(variable("CORS_ORIGENES")),
+            clave_maestra_fuentes: variable("FUENTES_CLAVE_MAESTRA"),
         }
     }
 }

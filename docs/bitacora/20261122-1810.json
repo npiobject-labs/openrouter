@@ -1,0 +1,29 @@
+{
+  "fecha": "2026-11-22T18:10:00+01:00",
+  "titulo": "Etapa 12: fuentes declarativas",
+  "objetivo": "Que un proveedor más (directo, otro agregador o un servidor local) se pueda añadir desde la consola sin tocar código ni desplegar, para la fase B de la plataforma de modelos.",
+  "prompts": [
+    { "texto": "Empieza frase B y siguientes fases hasta el final", "nota": "Pedido en la sesión de la plataforma de modelos; la etapa B1 vive en este repo." },
+    { "texto": "Fusiono en main (Recomendado)", "nota": "Respuesta a cómo publicar: PR a main, previsualización en Fly; nada al VPS hasta «OK release»." }
+  ],
+  "cambios": [
+    "app/src/fuentes.rs: tabla fuentes, cifrado ChaCha20-Poly1305 de la clave con FUENTES_CLAVE_MAESTRA, catálogo normalizado con caché de una hora, chat y salud contra cualquier API compatible con OpenAI.",
+    "app/src/rutas/fuentes.rs: GET/POST /v1/fuentes, DELETE /v1/fuentes/{id} (desactiva), POST /v1/fuentes/{id}/probar; pruebas de extremo a extremo con una fuente falsa.",
+    "/v1/chat/completions enruta <fuente>:<modelo> con los mismos controles y registro de uso (upstream = id de la fuente); /v1/models?upstream=<fuente>; /v1/uso?upstream=<fuente>; /v1/estado cuenta las fuentes.",
+    "deploy.yml y deploy-vps.yml vuelcan FUENTES_CLAVE_MAESTRA / VPS_FUENTES_CLAVE_MAESTRA si existen.",
+    "tools/verificar-servicio.sh: /v1/fuentes sin claves y alta y baja en caliente de una fuente de prueba.",
+    "docs/consola.html: panel «Fuentes» (alta, editar, probar, baja) y fuentes en el selector del catálogo.",
+    "docs/openapi.json 0.12.0: rutas, esquema Fuente, códigos fuente_* y etapa 12 entregada."
+  ],
+  "sha": "",
+  "pendiente": [
+    "Crear los secretos FUENTES_CLAVE_MAESTRA (Fly) y VPS_FUENTES_CLAVE_MAESTRA (VPS).",
+    "Dar de alta la primera fuente real desde la consola.",
+    "«OK release» para llevarlo al VPS."
+  ],
+  "enlaces": [
+    { "texto": "Consola", "url": "https://npiobject-labs.github.io/openrouter/consola.html" },
+    { "texto": "API", "url": "https://npiobject-labs.github.io/openrouter/api.html" }
+  ],
+  "notas": "El SHA se conoce tras el merge; queda en el resumen de la sesión de la plataforma."
+}

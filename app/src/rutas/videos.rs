@@ -497,6 +497,7 @@ mod pruebas {
             openrouter: Cliente::nuevo(&config),
             catalogo: Catalogo::default(),
             catalogo_video: CatalogoVideo::default(),
+            catalogo_fuentes: crate::fuentes::CatalogoFuentes::default(),
             uso: Uso::nuevo(Some("/no/existe/uso.db")),
             config,
         });

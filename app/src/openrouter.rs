@@ -57,6 +57,11 @@ impl Cliente {
         }
     }
 
+    /// El cliente HTTP compartido (lo usan también las fuentes declarativas).
+    pub fn http(&self) -> &Client {
+        &self.http
+    }
+
     fn conexion(&self, upstream: Upstream) -> &Conexion {
         self.conexiones
             .iter()
@@ -517,6 +522,7 @@ pub(crate) mod pruebas {
             puerto: 0,
             bd: None,
             cors_origenes: Vec::new(),
+            clave_maestra_fuentes: None,
         }
     }
 
